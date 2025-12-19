@@ -26,6 +26,6 @@ Value cg_expr(IrCtx *ir, VarEnv *env, Node *expr);
 int cg_stmt(IrCtx *ir, VarEnv *env, Node *stmt, TypeRef *ret_type, Value *out_last);
 
 /* Compile top-level forms (program/module) to LLVM IR. */
-void compile_to_llvm_ir(Node *top, StrBuf *out);
+void compile_to_llvm_ir(Node *top, StrBuf *out, int generate_tests_mode, StrList *selected_test_names, StrList *selected_tags);
 
 #endif
