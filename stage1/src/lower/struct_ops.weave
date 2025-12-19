@@ -1,0 +1,223 @@
+  ;; ============================================================
+  ;; Lower get-field: (get-field ptr fname) -> (get-field (struct T) idx ptr)
+  ;; ============================================================
+
+  (fn lower-get-field
+    (doc "Lower (get-field ptr field-name) to (get-field (struct T) idx ptr).")
+    (params
+      (a (ptr Arena))
+      (node Int32)
+      (env-names ArrayString)
+      (env-types ArrayString)
+      (struct-names ArrayString)
+      (struct-fields ArrayString)
+    )
+    (returns Int32)
+    (body (do
+      ;; Current form: (get-field ptr-expr field-name)
+      ;; We have: head="get-field", child1=ptr-expr, child2=field-name
+      (let head Int32 (arena-first-child a node))
+      (let ptr-expr Int32 (arena-next-sibling a head))
+      (let field-node Int32 (arena-next-sibling a ptr-expr))
+      
+      ;; Get pointer expression - could be variable or (addr x)
+      (let ptr-kind Int32 (arena-kind a ptr-expr))
+      (let ptr-type String "")
+      
+      (if-stmt (== ptr-kind (node-kind-atom))
+        (do
+          ;; Simple variable - look up its type
+          (let var-name String (arena-value a ptr-expr))
+          (set ptr-type (type-env-lookup env-names env-types var-name))
+        )
+        (do 0) ;; TODO: handle complex expressions
+      )
+      
+      ;; Extract struct name from pointer type
+      (let struct-name String (extract-struct-type ptr-type))
+      (if-stmt (== (string-length struct-name) 0)
+        (do
+          ;; Can't determine struct type - leave unchanged
+          (return 0)
+        )
+        (do 0)
+      )
+      
+      ;; Get field name and look up index
+      (let field-name String (arena-value a field-node))
+      (let field-idx Int32 (struct-field-index struct-names struct-fields struct-name field-name))
+      (if-stmt (== field-idx (- 0 1))
+        (do
+          ;; Unknown field - leave unchanged for error reporting
+          (return 0)
+        )
+        (do 0)
+      )
+      
+      ;; Build new lowered form: (get-field (struct T) idx ptr-expr)
+      ;; We'll rewrite the existing node's children
+      
+      ;; Create new nodes
+      (let struct-type-node Int32 (build-struct-type-node a struct-name))
+      (let idx-atom Int32 (make-atom a (int-to-string field-idx)))
+      
+      ;; Relink: head -> struct-type-node -> idx-atom -> ptr-expr (copy) -> nil
+      ;; We need to copy ptr-expr since it might have children
+      ;; For now, just relink existing nodes
+      
+      ;; Update links: head's next = struct-type-node
+      (link-siblings a head struct-type-node)
+      ;; struct-type-node's next = idx-atom
+      (link-siblings a struct-type-node idx-atom)
+      ;; idx-atom's next = ptr-expr (original)
+      (link-siblings a idx-atom ptr-expr)
+      ;; ptr-expr's next = nil (remove field-name)
+      (arena-set-next-sibling a ptr-expr (- 0 1))
+      
+      (return 1)
+    ))
+  )
+
+  ;; ============================================================
+  ;; Lower set-field: (set-field ptr fname val) -> (set-field (struct T) idx ptr val)
+  ;; ============================================================
+
+  (fn lower-set-field
+    (doc "Lower (set-field ptr field-name val) to (set-field (struct T) idx ptr val).")
+    (params
+      (a (ptr Arena))
+      (node Int32)
+      (env-names ArrayString)
+      (env-types ArrayString)
+      (struct-names ArrayString)
+      (struct-fields ArrayString)
+    )
+    (returns Int32)
+    (body (do
+      ;; Current form: (set-field ptr-expr field-name val-expr)
+      (let head Int32 (arena-first-child a node))
+      (let ptr-expr Int32 (arena-next-sibling a head))
+      (let field-node Int32 (arena-next-sibling a ptr-expr))
+      (let val-expr Int32 (arena-next-sibling a field-node))
+      
+      ;; Get pointer type
+      (let ptr-kind Int32 (arena-kind a ptr-expr))
+      (let ptr-type String "")
+      
+      (if-stmt (== ptr-kind (node-kind-atom))
+        (do
+          (let var-name String (arena-value a ptr-expr))
+          (set ptr-type (type-env-lookup env-names env-types var-name))
+        )
+        (do 0)
+      )
+      
+      (let struct-name String (extract-struct-type ptr-type))
+      (if-stmt (== (string-length struct-name) 0)
+        (return 0)
+        (do 0)
+      )
+      
+      (let field-name String (arena-value a field-node))
+      (let field-idx Int32 (struct-field-index struct-names struct-fields struct-name field-name))
+      (if-stmt (== field-idx (- 0 1))
+        (return 0)
+        (do 0)
+      )
+      
+      ;; Build: (set-field (struct T) idx ptr-expr val-expr)
+      (let struct-type-node Int32 (build-struct-type-node a struct-name))
+      (let idx-atom Int32 (make-atom a (int-to-string field-idx)))
+      
+      ;; Relink
+      (link-siblings a head struct-type-node)
+      (link-siblings a struct-type-node idx-atom)
+      (link-siblings a idx-atom ptr-expr)
+      (link-siblings a ptr-expr val-expr)
+      (arena-set-next-sibling a val-expr (- 0 1))
+      
+      (return 1)
+    ))
+  )
+
+  ;; ============================================================
+  ;; Lower make: (make Type (f1 v1) ...) -> (make (struct T) v1 v2 ...)
+  ;; ============================================================
+
+  (fn lower-make
+    (doc "Lower (make Type (f1 v1) ...) to (make (struct T) v1 v2 ...).")
+    (params
+      (a (ptr Arena))
+      (node Int32)
+      (struct-names ArrayString)
+      (struct-fields ArrayString)
+    )
+    (returns Int32)
+    (body (do
+      ;; Current form: (make TypeName (field1 val1) (field2 val2) ...)
+      (let head Int32 (arena-first-child a node))
+      (let type-node Int32 (arena-next-sibling a head))
+      
+      ;; Check if type-node is already (struct Name) form
+      (if-stmt (== (arena-kind a type-node) (node-kind-list))
+        (do
+          ;; Already lowered or complex type - skip
+          (return 0)
+        )
+        (do 0)
+      )
+      
+      ;; Get struct name
+      (let struct-name String (arena-value a type-node))
+      
+      ;; Check if this is a known struct
+      (let struct-idx Int32 (struct-find struct-names struct-name))
+      (if-stmt (== struct-idx (- 0 1))
+        (return 0)
+        (do 0)
+      )
+      
+      ;; Build (struct Name) type node
+      (let struct-type-node Int32 (build-struct-type-node a struct-name))
+      
+      ;; Now we need to extract just the values from (field val) pairs
+      ;; and link them directly: (make (struct T) v1 v2 ...)
+      (let first-pair Int32 (arena-next-sibling a type-node))
+      
+      ;; Collect values from field pairs
+      (let first-val Int32 (- 0 1))
+      (let prev-val Int32 (- 0 1))
+      (let pair Int32 first-pair)
+      
+      (while (!= pair (- 0 1))
+        (do
+          ;; Each pair is (fieldname value) - extract the value (second child)
+          (let pair-head Int32 (arena-first-child a pair))
+          (let val-node Int32 (arena-next-sibling a pair-head))
+          
+          (if-stmt (== first-val (- 0 1))
+            (set first-val val-node)
+            (link-siblings a prev-val val-node)
+          )
+          (set prev-val val-node)
+          
+          (set pair (arena-next-sibling a pair))
+        )
+      )
+      
+      ;; Terminate the value chain
+      (if-stmt (!= prev-val (- 0 1))
+        (arena-set-next-sibling a prev-val (- 0 1))
+        (do 0)
+      )
+      
+      ;; Relink: head -> struct-type-node -> values...
+      (link-siblings a head struct-type-node)
+      (if-stmt (!= first-val (- 0 1))
+        (link-siblings a struct-type-node first-val)
+        (arena-set-next-sibling a struct-type-node (- 0 1))
+      )
+      
+      (return 1)
+    ))
+  )

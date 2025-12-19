@@ -1,0 +1,92 @@
+  ;; ============================================================
+  ;; Type environment tracking
+  ;; ============================================================
+
+  (fn type-env-add
+    (doc "Add name->type binding to environment.")
+    (params
+      (env-names ArrayString)
+      (env-types ArrayString)
+      (name String)
+      (ty String)
+    )
+    (returns Int32)
+    (body (do
+      (array-str-append env-names name)
+      (array-str-append env-types ty)
+      (return 0)
+    ))
+  )
+
+  (fn type-env-lookup
+    (doc "Look up type of name in environment; returns empty string on miss.")
+    (params
+      (env-names ArrayString)
+      (env-types ArrayString)
+      (name String)
+    )
+    (returns String)
+    (body (do
+      (let i Int32 (- (array-str-len env-names) 1))
+      (while (>= i 0)
+        (do
+          (if-stmt (string-eq (array-str-get env-names i) name)
+            (return (array-str-get env-types i))
+            (set i (- i 1))
+          )
+        )
+      )
+      (return "")
+    ))
+  )
+
+  ;; ============================================================
+  ;; Extract base struct type from pointer type
+  ;; ============================================================
+
+  (fn extract-struct-type
+    (doc "Extract struct name from (ptr StructName) or return empty.")
+    (params (ty String))
+    (returns String)
+    (body (do
+      ;; Type string looks like "(ptr Arena)" or "Arena" etc.
+      ;; We need to check if it starts with "(ptr " and extract the inner type
+      (if-stmt (string-starts-with ty "(ptr ")
+        (do
+          ;; Extract the struct name between "(ptr " and ")"
+          (let len Int32 (string-length ty))
+          ;; Skip "(ptr " which is 5 chars, and remove trailing ")"
+          (return (string-slice ty 5 (- (- len 5) 1)))
+        )
+        (return "")
+      )
+    ))
+  )
+
+  ;; ============================================================
+  ;; Stringify type node for environment
+  ;; ============================================================
+
+  (fn stringify-type-node
+    (doc "Convert a type AST node to string representation.")
+    (params (a (ptr Arena)) (node Int32))
+    (returns String)
+    (body (do
+      (if-stmt (== (arena-kind a node) (node-kind-atom))
+        (return (arena-value a node))
+        (do
+          ;; List like (ptr T) - build string
+          (let head Int32 (arena-first-child a node))
+          (let head-val String (arena-value a head))
+          (if-stmt (string-eq head-val "ptr")
+            (do
+              (let inner Int32 (arena-next-sibling a head))
+              (let inner-str String (stringify-type-node a inner))
+              (return (string-concat "(ptr " (string-concat inner-str ")")))
+            )
+            (return "")
+          )
+        )
+      )
+    ))
+  )

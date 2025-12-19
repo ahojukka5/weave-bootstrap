@@ -1,0 +1,43 @@
+  ;; ============================================================
+  ;; Build AST nodes for lowered forms
+  ;; ============================================================
+
+  (fn make-atom
+    (doc "Create an atom node.")
+    (params (a (ptr Arena)) (val String))
+    (returns Int32)
+    (body (arena-add-node a (node-kind-atom) val))
+  )
+
+  (fn make-list
+    (doc "Create a list node with first child, return the list node id.")
+    (params (a (ptr Arena)) (first-child Int32))
+    (returns Int32)
+    (body (do
+      (let id Int32 (arena-add-node a (node-kind-list) ""))
+      (arena-set-first-child a id first-child)
+      (return id)
+    ))
+  )
+
+  (fn link-siblings
+    (doc "Link two nodes as siblings.")
+    (params (a (ptr Arena)) (prev Int32) (next Int32))
+    (returns Int32)
+    (body (do
+      (arena-set-next-sibling a prev next)
+      (return 0)
+    ))
+  )
+
+  (fn build-struct-type-node
+    (doc "Build (struct Name) list node.")
+    (params (a (ptr Arena)) (struct-name String))
+    (returns Int32)
+    (body (do
+      (let struct-atom Int32 (make-atom a "struct"))
+      (let name-atom Int32 (make-atom a struct-name))
+      (link-siblings a struct-atom name-atom)
+      (return (make-list a struct-atom))
+    ))
+  )
