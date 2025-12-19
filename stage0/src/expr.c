@@ -285,6 +285,7 @@ static Value cg_call(IrCtx *ir, VarEnv *env, Node *list) {
         Node *returns_form = list_nth(list, 2);
         Node *args_form = list_nth(list, 3);
         const char *sym = atom_text(sym_node);
+        int is_printf = (sym && strcmp(sym, "printf") == 0);
         TypeRef *ret_ty;
         TypeEnv *tenv = (TypeEnv *)ir->type_env;
         int nargs = 0;
@@ -318,20 +319,28 @@ static Value cg_call(IrCtx *ir, VarEnv *env, Node *list) {
         /* Emit declare only if not already declared */
         if (!sl_contains(&ir->declared_ccalls, sym)) {
             sl_push(&ir->declared_ccalls, sym);
-            sb_append(&ir->decls, "declare ");
-            emit_llvm_type(&ir->decls, ret_ty);
-            sb_append(&ir->decls, " @");
-            sb_append(&ir->decls, sym);
-            sb_append(&ir->decls, "(");
-
-            for (i = 0; i < nargs; i++) {
-                if (i != 0) sb_append(&ir->decls, ", ");
-                emit_llvm_type(&ir->decls, arg_types[i]);
+            if (is_printf) {
+                sb_append(&ir->decls, "declare i32 @printf(i8*, ...)\n");
+            } else {
+                sb_append(&ir->decls, "declare ");
+                emit_llvm_type(&ir->decls, ret_ty);
+                sb_append(&ir->decls, " @");
+                sb_append(&ir->decls, sym);
+                sb_append(&ir->decls, "(");
+                for (i = 0; i < nargs; i++) {
+                    if (i != 0) sb_append(&ir->decls, ", ");
+                    emit_llvm_type(&ir->decls, arg_types[i]);
+                }
+                sb_append(&ir->decls, ")\n");
             }
-            sb_append(&ir->decls, ")\n");
         }
 
-        if (ret_ty->kind == TY_VOID) {
+        if (is_printf) {
+            t = ir_fresh_temp(ir);
+            sb_append(ir->out, "  ");
+            ir_emit_temp(ir->out, t);
+            sb_append(ir->out, " = call i32 (i8*, ...) @printf(");
+        } else if (ret_ty->kind == TY_VOID) {
             sb_append(ir->out, "  call void @");
             sb_append(ir->out, sym);
             sb_append(ir->out, "(");
