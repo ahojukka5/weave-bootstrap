@@ -1,0 +1,361 @@
+;; Function compilation
+
+  (fn compile-fn-body
+    (doc "Compile the body of a function, given params already in env.")
+    (params
+      (a (ptr Arena))
+      (body-form Int32)
+      (ret-type-node Int32)
+      (env-names ArrayString)
+      (env-safe ArrayString)
+      (env-types ArrayInt32)
+      (declared ArrayString)
+      (struct-names ArrayString)
+      (struct-fields ArrayString)
+      (decls Buffer)
+      (str-counter (ptr Int32))
+      (out Buffer)
+      (temp (ptr Int32))
+      (label-counter (ptr Int32))
+      (fn-sig-names ArrayString)
+      (fn-sig-ret-types ArrayInt32)
+    )
+    (returns Int32)
+    (body
+      ;; Iterate all items in the body and compile them in sequence.
+      ;; Stop early if a statement emits a function return.
+      (let item Int32 (arena-first-child a body-form))
+      (set item (arena-next-sibling a item))
+      (while (!= item (- 0 1))
+        (do
+          (if-stmt (== (arena-kind a item) (node-kind-list))
+            (do
+              (let head Int32 (arena-first-child a item))
+              (if-stmt (!= head (- 0 1))
+                (do
+                  (let head-val String (arena-value a head))
+                  (if-stmt (|| (|| (|| (|| (|| (string-eq head-val "do") (string-eq head-val "let")) (string-eq head-val "if-stmt")) (string-eq head-val "while")) (string-eq head-val "return")) (|| (string-eq head-val "store") (string-eq head-val "set")))
+                    (do
+                      (let ret Int32 (compile-stmt a item ret-type-node env-names env-safe env-types declared struct-names struct-fields decls str-counter out temp label-counter fn-sig-names fn-sig-ret-types))
+                      (if-stmt (== ret 1)
+                        (return 1)
+                        (do (set item (arena-next-sibling a item)))
+                      )
+                    )
+                    ;; Non-statement list: treat as expression and auto-return
+                    (do
+                      (let _ Int32 (compile-expr a item env-names env-safe env-types declared struct-names struct-fields decls str-counter out temp fn-sig-names fn-sig-ret-types))
+                      (let reg Int32 (- (load Int32 temp) 1))
+                      (buffer-append-string out "  ret ")
+                      (emit-type-node out a ret-type-node)
+                      (buffer-append-string out " ")
+                      (emit-temp out reg)
+                      (buffer-append-string out "\n")
+                      (return 1)
+                    )
+                  )
+                )
+                (do (set item (arena-next-sibling a item)))
+              )
+            )
+            (do
+              ;; Atom in function body: treat as expression and auto-return
+              (let _ Int32 (compile-expr a item env-names env-safe env-types declared struct-names struct-fields decls str-counter out temp fn-sig-names fn-sig-ret-types))
+              (let reg Int32 (- (load Int32 temp) 1))
+              (buffer-append-string out "  ret ")
+              (emit-type-node out a ret-type-node)
+              (buffer-append-string out " ")
+              (emit-temp out reg)
+              (buffer-append-string out "\n")
+              (return 1)
+            )
+          )
+        )
+      )
+      (return 0)
+    )
+  )
+
+  (fn emit-fn-params
+    (doc "Emit function parameter declarations and add to env.")
+    (params
+      (a (ptr Arena))
+      (params-form Int32)
+      (env-names ArrayString)
+      (env-safe ArrayString)
+      (env-types ArrayInt32)
+      (out Buffer)
+      (is-first (ptr Int32))
+    )
+    (returns Int32)
+    (body (do
+      (let param Int32 (second-child a params-form))
+      (while (!= param (- 0 1))
+        (do
+          (if-stmt (== (arena-kind a param) (node-kind-list))
+            (do
+              (let pname-node Int32 (arena-first-child a param))
+              (let ptype-node Int32 (arena-next-sibling a pname-node))
+              (if-stmt (&& (!= pname-node (- 0 1)) (!= ptype-node (- 0 1)))
+                (do
+                  (let pname String (arena-value a pname-node))
+                  (let safe-name String (sanitize-name pname))
+                  (env-add env-names env-safe env-types pname safe-name ptype-node)
+                  (if-stmt (== (load Int32 is-first) 0)
+                    (buffer-append-string out ", ")
+                    (store Int32 is-first 0)
+                  )
+                  (emit-type-node out a ptype-node)
+                  (buffer-append-string out " %p_v_")
+                  (buffer-append-string out safe-name)
+                )
+                (do 0)
+              )
+            )
+            (do 0)
+          )
+          (set param (arena-next-sibling a param))
+        )
+      )
+      (return 0)
+    ))
+  )
+
+  (fn emit-param-allocas
+    (doc "Emit alloca + store for each parameter.")
+    (params
+      (a (ptr Arena))
+      (params-form Int32)
+      (env-names ArrayString)
+      (env-safe ArrayString)
+      (out Buffer)
+    )
+    (returns Int32)
+    (body (do
+      (let param Int32 (second-child a params-form))
+      (while (!= param (- 0 1))
+        (do
+          (if-stmt (== (arena-kind a param) (node-kind-list))
+            (do
+              (let pname-node Int32 (arena-first-child a param))
+              (let ptype-node Int32 (arena-next-sibling a pname-node))
+              (if-stmt (&& (!= pname-node (- 0 1)) (!= ptype-node (- 0 1)))
+                (do
+                  (let pname String (arena-value a pname-node))
+                  (let safe-name String (sanitize-name pname))
+                  ;; Alloca for local copy
+                  (buffer-append-string out "  %")
+                  (buffer-append-string out safe-name)
+                  (buffer-append-string out " = alloca ")
+                  (emit-type-node out a ptype-node)
+                  (buffer-append-string out "\n")
+                  ;; Store param into local
+                  (buffer-append-string out "  store ")
+                  (emit-type-node out a ptype-node)
+                  (buffer-append-string out " %p_v_")
+                  (buffer-append-string out safe-name)
+                  (buffer-append-string out ", ")
+                  (emit-pointer-type-node out a ptype-node)
+                  (buffer-append-string out " %")
+                  (buffer-append-string out safe-name)
+                  (buffer-append-string out "\n")
+                )
+                (do 0)
+              )
+            )
+            (do 0)
+          )
+          (set param (arena-next-sibling a param))
+        )
+      )
+      (return 0)
+    ))
+  )
+
+  (fn compile-fn
+    (doc "Compile a single fn definition.")
+    (params
+      (a (ptr Arena))
+      (fn-form Int32)
+      (fn-name String)
+      (declared ArrayString)
+      (struct-names ArrayString)
+      (struct-fields ArrayString)
+      (decls Buffer)
+      (str-counter (ptr Int32))
+      (out Buffer)
+      (fn-sig-names ArrayString)
+      (fn-sig-ret-types ArrayInt32)
+    )
+    (returns Int32)
+    (body (do
+      ;; Deduplicate function emission by name
+      (let fn_key Buffer (buffer-new))
+      (buffer-append-string fn_key "fn:")
+      (buffer-append-string fn_key fn-name)
+      (if-stmt (== (array-str-contains declared (buffer-to-string fn_key)) 1)
+        (return 0)
+        (array-str-append declared (buffer-to-string fn_key))
+      )
+
+      (let env-names ArrayString (array-str-new))
+      (let env-safe ArrayString (array-str-new))
+      (let env-types ArrayInt32 (array-i32-new))
+      (let temp Int32 0)
+      (let label-counter Int32 0)
+
+      ;; Skip (fn name) or (entry name), find doc/params/returns/body
+      (let idx Int32 2)
+      (let child Int32 (arena-first-child a fn-form))
+      ;; Skip head (fn/entry)
+      (set child (arena-next-sibling a child))
+      ;; Skip name
+      (set child (arena-next-sibling a child))
+
+      ;; Skip doc (optional - check if present)
+      (if-stmt (is-list-with-head a child "doc")
+        (set child (arena-next-sibling a child))
+        (do 0)
+      )
+
+      ;; Check for params (optional - entry main may have none)
+      (let params-form Int32 (- 0 1))
+      (if-stmt (is-list-with-head a child "params")
+        (do
+          (set params-form child)
+          (set child (arena-next-sibling a child))
+        )
+        (do 0)
+      )
+
+      ;; child is returns
+      (let returns-form Int32 child)
+      (set child (arena-next-sibling a child))
+      ;; child is body
+      (let body-form Int32 child)
+
+      ;; Get return type
+      (let ret-type-node Int32 (second-child a returns-form))
+
+      ;; Emit function header
+      (buffer-append-string out "define ")
+      (emit-type-node out a ret-type-node)
+      (buffer-append-string out " @")
+      (buffer-append-string out fn-name)
+      (buffer-append-string out "(")
+      (let is-first Int32 1)
+      (if-stmt (!= params-form (- 0 1))
+        (emit-fn-params a params-form env-names env-safe env-types out (addr is-first))
+        (do 0)
+      )
+      (buffer-append-string out ") {\n")
+      (buffer-append-string out "fn_entry:\n")
+
+      ;; Emit param allocas
+      (if-stmt (!= params-form (- 0 1))
+        (emit-param-allocas a params-form env-names env-safe out)
+        (do 0)
+      )
+
+      ;; Compile body
+      (let did-ret Int32 (compile-fn-body a body-form ret-type-node env-names env-safe env-types declared struct-names struct-fields decls str-counter out (addr temp) (addr label-counter) fn-sig-names fn-sig-ret-types))
+
+      (if-stmt (== did-ret 1)
+        (buffer-append-string out "}\n\n")
+        (do
+          ;; Add default return based on return type
+          (let ty String (map-type-node a ret-type-node))
+          (if-stmt (string-eq ty "void")
+            (do
+              (buffer-append-string out "  ret void\n}\n\n")
+            )
+            (do
+              (buffer-append-string out "  ret ")
+              (buffer-append-string out ty)
+              (buffer-append-string out " ")
+              ;; Pointer types end with '*'
+              (let tylen Int32 (string-length ty))
+              (if-stmt (== (string-char-at ty (- tylen 1)) 42)
+                (buffer-append-string out "null")
+                (do
+                  ;; Struct types start with '%'
+                  (if-stmt (== (string-char-at ty 0) 37)
+                    (buffer-append-string out "zeroinitializer")
+                    ;; Integer and other simple types default to 0
+                    (buffer-append-string out "0")
+                  )
+                )
+              )
+              (buffer-append-string out "\n}\n\n")
+            )
+          )
+        )
+      )
+      (return 0)
+    ))
+  )
+
+  (fn compile-all-fns
+    (doc "Walk AST and compile all fn and entry definitions.")
+    (params
+      (a (ptr Arena))
+      (root Int32)
+      (declared ArrayString)
+      (struct-names ArrayString)
+      (struct-fields ArrayString)
+      (decls Buffer)
+      (str-counter (ptr Int32))
+      (out Buffer)
+      (fn-sig-names ArrayString)
+      (fn-sig-ret-types ArrayInt32)
+    )
+    (returns Int32)
+    (body (do
+      (buffer-append-string out "; debug: begin compile-all-fns\n")
+      (let child Int32 (arena-first-child a root))
+      (while (!= child (- 0 1))
+        (do
+          ;; Debug: emit the head value for each top-level list node
+          (if-stmt (== (arena-kind a child) (node-kind-list))
+            (do
+              (let h Int32 (arena-first-child a child))
+              (if-stmt (!= h (- 0 1))
+                (do
+                  (if-stmt (== (arena-kind a h) (node-kind-atom))
+                    (do
+                      (buffer-append-string out "; head: ")
+                      (buffer-append-string out (arena-value a h))
+                      (buffer-append-string out "\n")
+                    )
+                    (do 0)
+                  )
+                )
+                (do 0)
+              )
+            )
+            (do 0)
+          )
+          (if-stmt (is-list-with-head a child "fn")
+            (do
+              (let name-node Int32 (second-child a child))
+              (let fn-name String (arena-value a name-node))
+              (buffer-append-string out "; debug: fn ")
+              (buffer-append-string out fn-name)
+              (buffer-append-string out "\n")
+              (compile-fn a child fn-name declared struct-names struct-fields decls str-counter out fn-sig-names fn-sig-ret-types)
+            )
+            (do 0)
+          )
+          (if-stmt (is-list-with-head a child "entry")
+            (do
+              (buffer-append-string out "; debug: entry found\n")
+              (compile-fn a child "weave_main" declared struct-names struct-fields decls str-counter out fn-sig-names fn-sig-ret-types)
+            )
+            (do 0)
+          )
+          (set child (arena-next-sibling a child))
+        )
+      )
+      (return 0)
+    ))
+  )

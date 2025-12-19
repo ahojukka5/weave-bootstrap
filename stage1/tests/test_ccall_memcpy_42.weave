@@ -1,0 +1,24 @@
+(program
+  (name "test-ccall-memcpy-42")
+  (doc "Use malloc + memcpy to copy an Int32 value and return 42.")
+
+  (entry main
+    (doc "Write 42 to src, memcpy to dst, free both, return loaded dst.")
+    (params)
+    (returns Int32)
+    (body
+      (do
+        (let raw-src (ptr Int8) (ccall "malloc" (returns (ptr Int8)) (args (Int32 4))))
+        (let raw-dst (ptr Int8) (ccall "malloc" (returns (ptr Int8)) (args (Int32 4))))
+        (let src (ptr Int32) (bitcast (ptr Int32) raw-src))
+        (let dst (ptr Int32) (bitcast (ptr Int32) raw-dst))
+        (store Int32 42 src)
+        (let _ (ptr Int8) (ccall "memcpy" (returns (ptr Int8)) (args ((ptr Int8) raw-dst) ((ptr Int8) raw-src) (Int32 4))))
+        (let out Int32 (load Int32 dst))
+        (ccall "free" (returns Void) (args ((ptr Int8) raw-src)))
+        (ccall "free" (returns Void) (args ((ptr Int8) raw-dst)))
+        (return out)
+      ) ;; do
+    ) ;; body
+  ) ;; entry
+) ;; program

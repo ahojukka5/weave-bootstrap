@@ -1,0 +1,33 @@
+(program
+  (name "test-struct-set-field-return42")
+  (doc "Mutate struct fields via set-field and read them back.")
+  (version "0.1")
+
+  (type Pair
+    (struct
+      (a Int32)
+      (b Int32)
+    ) ;; struct
+  ) ;; type Pair
+
+  (type ExitCode
+    (alias Int32)
+  ) ;; type ExitCode
+
+  (entry main
+    (doc "Initialize Pair then set fields to 40 and 2; return sum.")
+    (params ())
+    (returns ExitCode)
+    (body
+      (let p Pair
+        (make Pair
+          (a 0)
+          (b 0)
+        ) ;; make
+      ) ;; let
+      (set-field (addr p) a 40)
+      (set-field (addr p) b 2)
+      (return (+ (get-field (addr p) a) (get-field (addr p) b)))
+    ) ;; body
+  ) ;; entry main
+) ;; program

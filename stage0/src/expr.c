@@ -1,0 +1,597 @@
+#include "codegen.h"
+
+#include "fn_table.h"
+#include "type_env.h"
+
+#include <stdlib.h>
+#include <string.h>
+#include <stdio.h>
+
+static int is_number_atom(Node *n) {
+    const char *s;
+    char *endp;
+    if (!n || n->kind != N_ATOM) return 0;
+    s = n->text;
+    if (!s || !*s) return 0;
+    (void)strtol(s, &endp, 10);
+    return endp && *endp == '\0';
+}
+
+static void emit_value_i32(StrBuf *out, Value v) {
+    if (v.kind == 0) {
+        sb_printf_i32(out, v.const_i32);
+    } else if (v.kind == 1) {
+        ir_emit_temp(out, v.temp);
+    } else {
+        sb_append(out, "%");
+        sb_append(out, v.ssa_name ? v.ssa_name : "");
+    }
+}
+
+static void emit_value(StrBuf *out, Value v) {
+    if (v.kind == 0) {
+        sb_printf_i32(out, v.const_i32);
+    } else if (v.kind == 1) {
+        ir_emit_temp(out, v.temp);
+    } else {
+        sb_append(out, "%");
+        sb_append(out, v.ssa_name ? v.ssa_name : "");
+    }
+}
+
+static void emit_typed_value(StrBuf *out, TypeRef *t, Value v) {
+    emit_llvm_type(out, t);
+    sb_append(out, " ");
+    emit_value(out, v);
+}
+
+static const char *type_debug_name(TypeRef *t, char *buf, size_t n) {
+    if (!t) return "<null>";
+    switch (t->kind) {
+    case TY_I32: return "i32";
+    case TY_I8PTR: return "i8*";
+    case TY_VOID: return "void";
+    case TY_STRUCT:
+        if (t->name) {
+            snprintf(buf, n, "struct %s", t->name);
+            return buf;
+        }
+        return "struct";
+    case TY_PTR:
+        if (t->pointee) {
+            const char *inner = type_debug_name(t->pointee, buf, n);
+            snprintf(buf, n, "ptr(%s)", inner);
+            return buf;
+        }
+        return "ptr";
+    default:
+        return "<unknown>";
+    }
+}
+
+Value ensure_type_ctx(IrCtx *ir, Value v, TypeRef *target, const char *ctx) {
+    char expected_buf[64];
+    char got_buf[64];
+    if (type_eq(v.type, target)) return v;
+    /* Minimal conversions:
+     * - allow i32 const 0 as null i8*
+     * - allow ptr -> i32 via ptrtoint (for bootstrap flexibility)
+     */
+    if (target && target->kind == TY_I8PTR && v.type && v.type->kind == TY_I32 && v.kind == 0 && v.const_i32 == 0) {
+        int t = ir_fresh_temp(ir);
+        sb_append(ir->out, "  ");
+        ir_emit_temp(ir->out, t);
+        sb_append(ir->out, " = inttoptr i32 0 to i8*\n");
+        return value_temp(type_i8ptr(), t);
+    }
+    if (target && target->kind == TY_I32 && v.type && v.type->kind == TY_PTR) {
+        int t = ir_fresh_temp(ir);
+        sb_append(ir->out, "  ");
+        ir_emit_temp(ir->out, t);
+        sb_append(ir->out, " = ptrtoint ");
+        emit_llvm_type(ir->out, v.type);
+        sb_append(ir->out, " ");
+        emit_value(ir->out, v);
+        sb_append(ir->out, " to i32\n");
+        return value_temp(type_i32(), t);
+    }
+    fprintf(stderr, "type mismatch in %s (ctx=%s): wanted %s, got %s\n",
+            ir->current_fn ? ir->current_fn : "<none>",
+            ctx ? ctx : "-",
+            type_debug_name(target, expected_buf, sizeof(expected_buf)),
+            type_debug_name(v.type, got_buf, sizeof(got_buf)));
+    die("type mismatch in expression");
+    return value_const_i32(0);
+}
+
+static Value cg_addr(IrCtx *ir, VarEnv *env, Node *n) {
+    (void)ir;
+    if (!n || n->kind != N_ATOM) return value_const_i32(0);
+    if (!env_has(env, n->text)) return value_const_i32(0);
+    return value_ssa(type_ptr(env_type(env, n->text)), env_ssa_name(env, n->text));
+}
+
+static Value cg_load(IrCtx *ir, VarEnv *env, Node *list) {
+    TypeEnv *tenv = (TypeEnv *)ir->type_env;
+    TypeRef *ty = parse_type_node(tenv, list_nth(list, 1));
+    Value ptrv = cg_expr(ir, env, list_nth(list, 2));
+    int t;
+    if (!ptrv.type || ptrv.type->kind != TY_PTR) die("load expects ptr");
+    t = ir_fresh_temp(ir);
+    sb_append(ir->out, "  ");
+    ir_emit_temp(ir->out, t);
+    sb_append(ir->out, " = load ");
+    emit_llvm_type(ir->out, ty);
+    sb_append(ir->out, ", ");
+    emit_llvm_type(ir->out, ptrv.type);
+    sb_append(ir->out, " ");
+    emit_value(ir->out, ptrv);
+    sb_append(ir->out, "\n");
+    return value_temp(ty, t);
+}
+
+static Value cg_make_struct(IrCtx *ir, VarEnv *env, Node *list) {
+    TypeEnv *tenv = (TypeEnv *)ir->type_env;
+    TypeRef *ty = parse_type_node(tenv, list_nth(list, 1));
+    StructDef *sd = NULL;
+    int i;
+    int ptr = ir_fresh_temp(ir);
+    int val = ir_fresh_temp(ir);
+    if (!ty || ty->kind != TY_STRUCT) die("make expects struct type");
+    sd = type_env_find_struct(tenv, ty->name);
+    sb_append(ir->out, "  ");
+    ir_emit_temp(ir->out, ptr);
+    sb_append(ir->out, " = alloca ");
+    emit_llvm_type(ir->out, ty);
+    sb_append(ir->out, "\n");
+    for (i = 2; i < list->count; i++) {
+        Node *field = list_nth(list, i);
+        const char *fname = atom_text(list_nth(field, 0));
+        int fi = struct_field_index(sd, fname);
+        TypeRef *fty = (fi >= 0 && sd) ? sd->field_types[fi] : type_i32();
+        Value fv = cg_expr(ir, env, list_nth(field, 1));
+        int pfi = ir_fresh_temp(ir);
+        sb_append(ir->out, "  ");
+        ir_emit_temp(ir->out, pfi);
+        sb_append(ir->out, " = getelementptr inbounds ");
+        emit_llvm_type(ir->out, ty);
+        sb_append(ir->out, ", ");
+        emit_llvm_type(ir->out, ty);
+        sb_append(ir->out, "* ");
+        ir_emit_temp(ir->out, ptr);
+        sb_append(ir->out, ", i32 0, i32 ");
+        sb_printf_i32(ir->out, fi >= 0 ? fi : 0);
+        sb_append(ir->out, "\n");
+        sb_append(ir->out, "  store ");
+        emit_llvm_type(ir->out, fty);
+        sb_append(ir->out, " ");
+        emit_value(ir->out, fv);
+        sb_append(ir->out, ", ");
+        emit_llvm_type(ir->out, fty);
+        sb_append(ir->out, "* ");
+        ir_emit_temp(ir->out, pfi);
+        sb_append(ir->out, "\n");
+    }
+    sb_append(ir->out, "  ");
+    ir_emit_temp(ir->out, val);
+    sb_append(ir->out, " = load ");
+    emit_llvm_type(ir->out, ty);
+    sb_append(ir->out, ", ");
+    emit_llvm_type(ir->out, ty);
+    sb_append(ir->out, "* ");
+    ir_emit_temp(ir->out, ptr);
+    sb_append(ir->out, "\n");
+    return value_temp(ty, val);
+}
+
+static Value cg_get_field(IrCtx *ir, VarEnv *env, Node *list) {
+    Value base = cg_expr(ir, env, list_nth(list, 1));
+    const char *fname = atom_text(list_nth(list, 2));
+    TypeEnv *tenv = (TypeEnv *)ir->type_env;
+    StructDef *sd = NULL;
+    int fi;
+    TypeRef *sty;
+    int pfield, loadt;
+    if (!base.type) return value_const_i32(0);
+    if (base.type->kind == TY_STRUCT) sty = base.type;
+    else if (base.type->kind == TY_PTR) sty = base.type->pointee;
+    else return value_const_i32(0);
+    sd = type_env_find_struct(tenv, sty->name);
+    fi = struct_field_index(sd, fname);
+    if (fi < 0) return value_const_i32(0);
+    pfield = ir_fresh_temp(ir);
+    sb_append(ir->out, "  ");
+    ir_emit_temp(ir->out, pfield);
+    sb_append(ir->out, " = getelementptr inbounds ");
+    emit_llvm_type(ir->out, sty);
+    sb_append(ir->out, ", ");
+    emit_llvm_type(ir->out, sty);
+    sb_append(ir->out, "* ");
+    emit_value(ir->out, base);
+    sb_append(ir->out, ", i32 0, i32 ");
+    sb_printf_i32(ir->out, fi);
+    sb_append(ir->out, "\n");
+    loadt = ir_fresh_temp(ir);
+    sb_append(ir->out, "  ");
+    ir_emit_temp(ir->out, loadt);
+    sb_append(ir->out, " = load ");
+    emit_llvm_type(ir->out, sd->field_types[fi]);
+    sb_append(ir->out, ", ");
+    emit_llvm_type(ir->out, sd->field_types[fi]);
+    sb_append(ir->out, "* ");
+    ir_emit_temp(ir->out, pfield);
+    sb_append(ir->out, "\n");
+    return value_temp(sd->field_types[fi], loadt);
+}
+
+
+static void emit_escaped_c_string(StrBuf *out, const char *s) {
+    const unsigned char *p = (const unsigned char *)s;
+    while (*p) {
+        unsigned char ch = *p++;
+        if (ch == '\\') sb_append(out, "\\5C");
+        else if (ch == '"') sb_append(out, "\\22");
+        else if (ch == '\n') sb_append(out, "\\0A");
+        else if (ch == '\r') sb_append(out, "\\0D");
+        else if (ch == '\t') sb_append(out, "\\09");
+        else if (ch < 32 || ch >= 127) {
+            const char hex[] = "0123456789ABCDEF";
+            sb_append_ch(out, '\\');
+            sb_append_ch(out, hex[(ch >> 4) & 0xF]);
+            sb_append_ch(out, hex[ch & 0xF]);
+        } else {
+            sb_append_ch(out, (char)ch);
+        }
+    }
+}
+
+static Value cg_string_lit(IrCtx *ir, Node *str_node) {
+    static int str_id = 0;
+    int id = str_id++;
+    const char *s = atom_text(str_node);
+    int n = (int)strlen(s) + 1;
+    int t = ir_fresh_temp(ir);
+
+    sb_append(&ir->globals, "@.str");
+    sb_printf_i32(&ir->globals, id);
+    sb_append(&ir->globals, " = private constant [");
+    sb_printf_i32(&ir->globals, n);
+    sb_append(&ir->globals, " x i8] c\"");
+    emit_escaped_c_string(&ir->globals, s);
+    sb_append(&ir->globals, "\\00\"\n");
+
+    sb_append(ir->out, "  ");
+    ir_emit_temp(ir->out, t);
+    sb_append(ir->out, " = getelementptr inbounds [");
+    sb_printf_i32(ir->out, n);
+    sb_append(ir->out, " x i8], [");
+    sb_printf_i32(ir->out, n);
+    sb_append(ir->out, " x i8]* @.str");
+    sb_printf_i32(ir->out, id);
+    sb_append(ir->out, ", i32 0, i32 0\n");
+
+    return value_temp(type_i8ptr(), t);
+}
+
+static Value cg_call(IrCtx *ir, VarEnv *env, Node *list) {
+    Node *head = list_nth(list, 0);
+    int argc = list->count - 1;
+    int i;
+    int t;
+
+    /* ccall special form */
+    if (is_atom(head, "ccall")) {
+        Node *sym_node = list_nth(list, 1);
+        Node *returns_form = list_nth(list, 2);
+        Node *args_form = list_nth(list, 3);
+        const char *sym = atom_text(sym_node);
+        TypeRef *ret_ty;
+        TypeEnv *tenv = (TypeEnv *)ir->type_env;
+        int nargs = 0;
+        TypeRef **arg_types = NULL;
+        Value *arg_vals = NULL;
+
+        if (!returns_form || returns_form->kind != N_LIST || !is_atom(list_nth(returns_form, 0), "returns")) {
+            die("ccall missing (returns ...)");
+        }
+        ret_ty = parse_type_node(tenv, list_nth(returns_form, 1));
+
+        /* Evaluate args first so we don't interleave instructions into the call line. */
+        if (args_form && args_form->kind == N_LIST && is_atom(list_nth(args_form, 0), "args")) {
+            nargs = args_form->count - 1;
+            if (nargs < 0) nargs = 0;
+            arg_types = (TypeRef **)xmalloc((size_t)nargs * sizeof(TypeRef *));
+            arg_vals = (Value *)xmalloc((size_t)nargs * sizeof(Value));
+            for (i = 0; i < nargs; i++) {
+                Node *arg = list_nth(args_form, i + 1);
+                TypeRef *aty = type_i32();
+                Node *expr = NULL;
+                if (arg && arg->kind == N_LIST) {
+                    aty = parse_type_node(tenv, list_nth(arg, 0));
+                    expr = list_nth(arg, 1);
+                }
+                arg_types[i] = aty;
+                arg_vals[i] = ensure_type_ctx(ir, cg_expr(ir, env, expr), aty, "ccall-arg");
+            }
+        }
+
+        /* Emit declare only if not already declared */
+        if (!sl_contains(&ir->declared_ccalls, sym)) {
+            sl_push(&ir->declared_ccalls, sym);
+            sb_append(&ir->decls, "declare ");
+            emit_llvm_type(&ir->decls, ret_ty);
+            sb_append(&ir->decls, " @");
+            sb_append(&ir->decls, sym);
+            sb_append(&ir->decls, "(");
+
+            for (i = 0; i < nargs; i++) {
+                if (i != 0) sb_append(&ir->decls, ", ");
+                emit_llvm_type(&ir->decls, arg_types[i]);
+            }
+            sb_append(&ir->decls, ")\n");
+        }
+
+        if (ret_ty->kind == TY_VOID) {
+            sb_append(ir->out, "  call void @");
+            sb_append(ir->out, sym);
+            sb_append(ir->out, "(");
+        } else {
+            t = ir_fresh_temp(ir);
+            sb_append(ir->out, "  ");
+            ir_emit_temp(ir->out, t);
+            sb_append(ir->out, " = call ");
+            emit_llvm_type(ir->out, ret_ty);
+            sb_append(ir->out, " @");
+            sb_append(ir->out, sym);
+            sb_append(ir->out, "(");
+        }
+
+        for (i = 0; i < nargs; i++) {
+            if (i != 0) sb_append(ir->out, ", ");
+            emit_typed_value(ir->out, arg_types[i], arg_vals[i]);
+        }
+        sb_append(ir->out, ")\n");
+
+        if (arg_types) free(arg_types);
+        if (arg_vals) free(arg_vals);
+
+        if (ret_ty->kind == TY_VOID) return value_const_i32(0);
+        return value_temp(ret_ty, t);
+    }
+
+    {
+        FnTable *fns = (FnTable *)ir->fn_table;
+        TypeEnv *tenv = (TypeEnv *)ir->type_env;
+        const char *fn_name = atom_text(head);
+        int fn_idx = fns ? fn_table_find(fns, fn_name) : -1;
+        const char *dbg_calls = getenv("WEAVEC0_DEBUG_CALLS");
+        TypeRef *ret_ty = fns ? fn_table_ret_type(fns, fn_name, type_i32()) : type_i32();
+        Value *arg_vals = NULL;
+        TypeRef **arg_types = NULL;
+
+        if (dbg_calls && fn_idx < 0) {
+            fprintf(stderr, "[dbg] unknown fn: %s\n", fn_name);
+        }
+
+        if (argc > 0) {
+            arg_vals = (Value *)xmalloc((size_t)argc * sizeof(Value));
+            arg_types = (TypeRef **)xmalloc((size_t)argc * sizeof(TypeRef *));
+            for (i = 0; i < argc; i++) {
+                Node *arg_expr = list_nth(list, i + 1);
+                TypeRef *expected = type_i32();
+                if (fns) expected = fn_table_param_type(fns, fn_name, i, type_i32());
+                arg_types[i] = expected;
+                arg_vals[i] = ensure_type_ctx(ir, cg_expr(ir, env, arg_expr), expected, "fn-arg");
+            }
+        }
+
+        if (ret_ty->kind == TY_VOID) {
+            sb_append(ir->out, "  call void @");
+            sb_append(ir->out, fn_name);
+            sb_append(ir->out, "(");
+        } else {
+            t = ir_fresh_temp(ir);
+            sb_append(ir->out, "  ");
+            ir_emit_temp(ir->out, t);
+            sb_append(ir->out, " = call ");
+            emit_llvm_type(ir->out, ret_ty);
+            sb_append(ir->out, " @");
+            sb_append(ir->out, fn_name);
+            sb_append(ir->out, "(");
+        }
+        for (i = 0; i < argc; i++) {
+            if (i != 0) sb_append(ir->out, ", ");
+            emit_typed_value(ir->out, arg_types ? arg_types[i] : type_i32(), arg_vals[i]);
+        }
+        sb_append(ir->out, ")\n");
+
+        if (arg_vals) free(arg_vals);
+        if (arg_types) free(arg_types);
+        if (ret_ty->kind == TY_VOID) return value_const_i32(0);
+        return value_temp(ret_ty, t);
+    }
+}
+
+Value cg_expr(IrCtx *ir, VarEnv *env, Node *expr) {
+    if (!expr) return value_const_i32(0);
+
+    if (expr->kind == N_ATOM) {
+        if (is_number_atom(expr)) return value_const_i32(atoi(expr->text));
+
+        /* variable reference */
+        if (env_has(env, expr->text)) {
+            int kind = env_kind(env, expr->text);
+            TypeRef *ty = env_type(env, expr->text);
+            const char *ssa = env_ssa_name(env, expr->text);
+            /* Both locals (kind==0) and parameters (kind==1) are in allocas now */
+            if (kind == 0 || kind == 1) {
+                int t = ir_fresh_temp(ir);
+                sb_append(ir->out, "  ");
+                ir_emit_temp(ir->out, t);
+                sb_append(ir->out, " = load ");
+                emit_llvm_type(ir->out, ty);
+                sb_append(ir->out, ", ");
+                emit_llvm_type(ir->out, ty);
+                sb_append(ir->out, "* %");
+                sb_append(ir->out, ssa);
+                sb_append(ir->out, "\n");
+                return value_temp(ty, t);
+            }
+        }
+
+        /* Unknown atom: treat as 0 */
+        return value_const_i32(0);
+    }
+
+    if (expr->kind == N_STRING) {
+        return cg_string_lit(ir, expr);
+    }
+
+    if (expr->kind == N_LIST) {
+        Node *head = list_nth(expr, 0);
+        Value lhs;
+        Value rhs;
+        int t;
+
+        if (!head || head->kind != N_ATOM) return value_const_i32(0);
+
+        if (is_atom(head, "doc")) {
+            return value_const_i32(0);
+        }
+
+        if (is_atom(head, "block")) {
+            Value last = {0};
+            int i;
+            int has_last = 0;
+            for (i = 1; i < expr->count; i++) {
+                Node *item = list_nth(expr, i);
+                Node *ih = list_nth(item, 0);
+                if (item && item->kind == N_LIST && ih && ih->kind == N_ATOM &&
+                    (is_atom(ih, "let") || is_atom(ih, "set") || is_atom(ih, "store") ||
+                     is_atom(ih, "set-field") || is_atom(ih, "do") || is_atom(ih, "if-stmt") ||
+                     is_atom(ih, "while"))) {
+                    Value tmp = {0};
+                    if (cg_stmt(ir, env, item, type_i32(), &tmp)) return value_const_i32(0);
+                    if (tmp.type) {
+                        last = tmp;
+                        has_last = 1;
+                    }
+                    continue;
+                }
+                last = cg_expr(ir, env, item);
+                has_last = 1;
+            }
+            if (has_last) return last;
+            return value_const_i32(0);
+        }
+
+        if (is_atom(head, "addr")) {
+            return cg_addr(ir, env, list_nth(expr, 1));
+        }
+
+        if (is_atom(head, "load")) {
+            return cg_load(ir, env, expr);
+        }
+
+        if (is_atom(head, "make")) {
+            return cg_make_struct(ir, env, expr);
+        }
+
+        if (is_atom(head, "get-field")) {
+            return cg_get_field(ir, env, expr);
+        }
+
+        if (is_atom(head, "+") || is_atom(head, "-") || is_atom(head, "*") || is_atom(head, "/")) {
+            lhs = ensure_type_ctx(ir, cg_expr(ir, env, list_nth(expr, 1)), type_i32(), "arith");
+            rhs = ensure_type_ctx(ir, cg_expr(ir, env, list_nth(expr, 2)), type_i32(), "arith");
+            t = ir_fresh_temp(ir);
+            sb_append(ir->out, "  ");
+            ir_emit_temp(ir->out, t);
+            sb_append(ir->out, " = ");
+            if (is_atom(head, "+")) sb_append(ir->out, "add");
+            else if (is_atom(head, "-")) sb_append(ir->out, "sub");
+            else if (is_atom(head, "*")) sb_append(ir->out, "mul");
+            else sb_append(ir->out, "sdiv");
+            sb_append(ir->out, " i32 ");
+            emit_value_i32(ir->out, lhs);
+            sb_append(ir->out, ", ");
+            emit_value_i32(ir->out, rhs);
+            sb_append(ir->out, "\n");
+            return value_temp(type_i32(), t);
+        }
+
+        /* Comparisons return i32 0/1 */
+        if (is_atom(head, "==") || is_atom(head, "!=") || is_atom(head, "<") ||
+            is_atom(head, "<=") || is_atom(head, ">") || is_atom(head, ">=")) {
+            const char *pred = "eq";
+            int tcmp, tout;
+            lhs = ensure_type_ctx(ir, cg_expr(ir, env, list_nth(expr, 1)), type_i32(), "cmp");
+            rhs = ensure_type_ctx(ir, cg_expr(ir, env, list_nth(expr, 2)), type_i32(), "cmp");
+
+            if (is_atom(head, "==")) pred = "eq";
+            else if (is_atom(head, "!=")) pred = "ne";
+            else if (is_atom(head, "<")) pred = "slt";
+            else if (is_atom(head, "<=")) pred = "sle";
+            else if (is_atom(head, ">")) pred = "sgt";
+            else pred = "sge";
+
+            tcmp = ir_fresh_temp(ir);
+            tout = ir_fresh_temp(ir);
+            sb_append(ir->out, "  ");
+            ir_emit_temp(ir->out, tcmp);
+            sb_append(ir->out, " = icmp ");
+            sb_append(ir->out, pred);
+            sb_append(ir->out, " i32 ");
+            emit_value_i32(ir->out, lhs);
+            sb_append(ir->out, ", ");
+            emit_value_i32(ir->out, rhs);
+            sb_append(ir->out, "\n");
+            sb_append(ir->out, "  ");
+            ir_emit_temp(ir->out, tout);
+            sb_append(ir->out, " = zext i1 ");
+            ir_emit_temp(ir->out, tcmp);
+            sb_append(ir->out, " to i32\n");
+            return value_temp(type_i32(), tout);
+        }
+
+        if (is_atom(head, "&&") || is_atom(head, "||")) {
+            int tb1, tb2, tb3, tout;
+            lhs = ensure_type_ctx(ir, cg_expr(ir, env, list_nth(expr, 1)), type_i32(), "logic");
+            rhs = ensure_type_ctx(ir, cg_expr(ir, env, list_nth(expr, 2)), type_i32(), "logic");
+            tb1 = ir_fresh_temp(ir);
+            tb2 = ir_fresh_temp(ir);
+            tb3 = ir_fresh_temp(ir);
+            tout = ir_fresh_temp(ir);
+            sb_append(ir->out, "  ");
+            ir_emit_temp(ir->out, tb1);
+            sb_append(ir->out, " = icmp ne i32 ");
+            emit_value_i32(ir->out, lhs);
+            sb_append(ir->out, ", 0\n");
+            sb_append(ir->out, "  ");
+            ir_emit_temp(ir->out, tb2);
+            sb_append(ir->out, " = icmp ne i32 ");
+            emit_value_i32(ir->out, rhs);
+            sb_append(ir->out, ", 0\n");
+            sb_append(ir->out, "  ");
+            ir_emit_temp(ir->out, tb3);
+            sb_append(ir->out, " = ");
+            if (is_atom(head, "&&")) sb_append(ir->out, "and");
+            else sb_append(ir->out, "or");
+            sb_append(ir->out, " i1 ");
+            ir_emit_temp(ir->out, tb1);
+            sb_append(ir->out, ", ");
+            ir_emit_temp(ir->out, tb2);
+            sb_append(ir->out, "\n");
+            sb_append(ir->out, "  ");
+            ir_emit_temp(ir->out, tout);
+            sb_append(ir->out, " = zext i1 ");
+            ir_emit_temp(ir->out, tb3);
+            sb_append(ir->out, " to i32\n");
+            return value_temp(type_i32(), tout);
+        }
+
+        return cg_call(ir, env, expr);
+    }
+
+    return value_const_i32(0);
+}

@@ -1,0 +1,18 @@
+;; Runtime declarations
+
+  (fn emit-runtime-decl
+    (doc "Emit a declare line for a runtime symbol once.")
+    (params (sym String) (proto String) (decls Buffer) (declared ArrayString))
+    (returns Int32)
+    (body
+      (if-stmt (== (array-str-contains declared sym) 1)
+        (return 0)
+        (do
+          (array-str-append declared sym)
+          (buffer-append-string decls proto)
+          (buffer-append-string decls "\n")
+          (return 0)
+        )
+      )
+    )
+  )

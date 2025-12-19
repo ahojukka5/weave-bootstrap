@@ -1,0 +1,15 @@
+(module
+  (name "stage1-ir-expr")
+  (doc "Expression lowering to LLVM IR temps and instructions.")
+
+  (include "../prelude.weave")
+  (include "../arena.weave")
+  (include "./emit.weave")
+  (include "./util.weave")
+  (include "./types.weave")
+  (include "./ops.weave")
+  (include "./pointers.weave")
+
+  (include "./expr_ccall.weave")
+  (include "./expr_core.weave")
+) ;; module

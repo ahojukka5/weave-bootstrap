@@ -1,0 +1,37 @@
+(program
+  (name "test-fn-multiple-42")
+  (doc "Test multiple function definitions.")
+  (version "0.1")
+
+  (type ExitCode
+    (alias Int32)
+  )
+
+  (fn double
+    (doc "Double the input.")
+    (params (x Int32))
+    (returns Int32)
+    (body (* x 2))
+  )
+
+  (fn add-one
+    (doc "Add one to the input.")
+    (params (x Int32))
+    (returns Int32)
+    (body (+ x 1))
+  )
+
+  (fn compute
+    (doc "Compute double(x) + 1.")
+    (params (x Int32))
+    (returns Int32)
+    (body (add-one (double x)))
+  )
+
+  (entry main
+    (doc "Call compute with 20 to get 41, then add 1.")
+    (params ())
+    (returns ExitCode)
+    (body (+ (compute 20) 1))
+  )
+)

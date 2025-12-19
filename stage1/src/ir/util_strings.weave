@@ -1,0 +1,208 @@
+(fn sanitize-name
+  (doc "Replace '-' with '_' and default empty to v0.")
+  (params
+    (name String)
+  ) ;; params
+  (returns String)
+  (body (do
+    (if-stmt (== (string-length name) 0)
+      (return "v0")
+      (do 0)
+    ) ;; if-stmt
+    ;; Replace '-' with '_'; keep the rest as-is for now.
+    (let b Buffer (buffer-new))
+    (let i Int32 0)
+    (while (< i (string-length name))
+      (do
+        (let ch Int32 (string-char-at name i))
+        (if-stmt (== ch 45) ;; '-'
+          (buffer-append-byte b 95) ;; '_'
+          (buffer-append-byte b ch)
+        ) ;; if-stmt
+        (set i (+ i 1))
+      ) ;; do
+    ) ;; while
+    (return (buffer-to-string b))
+  )) ;; body
+) ;; fn sanitize-name
+
+(fn array-str-contains
+  (doc "Return 1 if value exists in items.")
+  (params
+    (items ArrayString)
+    (value String)
+  ) ;; params
+  (returns Int32)
+  (body (do
+    (let i Int32 0)
+    (while (< i (array-str-len items))
+      (do
+        (if-stmt (string-eq (array-str-get items i) value)
+          (return 1)
+          (set i (+ i 1))
+        ) ;; if-stmt
+      ) ;; do
+    ) ;; while
+    (return 0)
+  )) ;; body
+) ;; fn array-str-contains
+
+(fn string-starts-with
+  (doc "Return 1 if s starts with prefix.")
+  (params
+    (s String)
+    (prefix String)
+  ) ;; params
+  (returns Int32)
+  (body (do
+    (let len Int32 (string-length s))
+    (let plen Int32 (string-length prefix))
+    (if-stmt (< len plen)
+      (return 0)
+      (do
+        (return (string-eq (string-slice s 0 plen) prefix))
+      ) ;; do
+    ) ;; if-stmt
+  )) ;; body
+) ;; fn string-starts-with
+
+(fn string-ends-with
+  (doc "Return 1 if s ends with suffix.")
+  (params
+    (s String)
+    (suffix String)
+  ) ;; params
+  (returns Int32)
+  (body (do
+    (let len Int32 (string-length s))
+    (let slen Int32 (string-length suffix))
+    (if-stmt (< len slen)
+      (return 0)
+      (do
+        (return (string-eq (string-slice s (- len slen) slen) suffix))
+      ) ;; do
+    ) ;; if-stmt
+  )) ;; body
+) ;; fn string-ends-with
+
+(fn is-string-literal
+  (doc "Return 1 if s is encoded as a string literal (strlit: prefix).")
+  (params
+    (s String)
+  ) ;; params
+  (returns Int32)
+  (body (return (string-starts-with s "strlit:")))
+) ;; fn is-string-literal
+
+(fn string-literal-value
+  (doc "Strip the strlit: prefix from a literal value.")
+  (params
+    (s String)
+  ) ;; params
+  (returns String)
+  (body
+    (return (string-slice s 7 (- (string-length s) 7)))
+  ) ;; body
+) ;; fn string-literal-value
+
+(fn is-number-string
+  (doc "Return 1 if s is an optional sign followed by digits.")
+  (params
+    (s String)
+  ) ;; params
+  (returns Int32)
+  (body (do
+    (let len Int32 (string-length s))
+    (if-stmt (== len 0)
+      (return 0)
+      (do 0)
+    )
+    (let i Int32 0)
+    ;; Optional leading sign
+    (let first Int32 (string-char-at s 0))
+    (if-stmt (|| (== first 45) (== first 43))
+      (set i 1)
+      (do 0)
+    )
+    (if-stmt (>= i len)
+      (return 0)
+      (do 0)
+    )
+    (let ok Int32 1)
+    (while (< i len)
+      (do
+        (let ch Int32 (string-char-at s i))
+        (if-stmt (&& (>= ch 48) (<= ch 57))
+          (do 0)
+          (set ok 0)
+        )
+        (set i (+ i 1))
+      )
+    )
+    (return ok)
+  )) ;; body
+) ;; fn is-number-string
+
+(fn escape-llvm-string
+  (doc "Escape a string for LLVM IR string literals. Returns escaped string and byte count.")
+  (params
+    (s String)
+    (out-len (ptr Int32))
+  ) ;; params
+  (returns String)
+  (body
+    (let buf Buffer (buffer-new))
+    (let len Int32 (string-length s))
+    (let byte-count Int32 0)
+    (let i Int32 0)
+    (while (< i len)
+      (do
+        (let ch Int32 (string-char-at s i))
+        (if-stmt (== ch 92) ;; backslash
+          (do
+            (buffer-append-string buf "\\5C")
+            (set byte-count (+ byte-count 1))
+          )
+          (if-stmt (== ch 34) ;; double quote
+            (do
+              (buffer-append-string buf "\\22")
+              (set byte-count (+ byte-count 1))
+            )
+            (if-stmt (== ch 10) ;; newline
+              (do
+                (buffer-append-string buf "\\0A")
+                (set byte-count (+ byte-count 1))
+              )
+              (if-stmt (== ch 13) ;; carriage return
+                (do
+                  (buffer-append-string buf "\\0D")
+                  (set byte-count (+ byte-count 1))
+                )
+                (if-stmt (|| (< ch 32) (> ch 126)) ;; non-printable
+                  (do
+                    ;; Convert to hex escape
+                    (let hex-chars String "0123456789ABCDEF")
+                    (let hi Int32 (/ ch 16))
+                    (let lo Int32 (- ch (* hi 16)))
+                    (buffer-append-string buf "\\")
+                    (buffer-append-byte buf (string-char-at hex-chars hi))
+                    (buffer-append-byte buf (string-char-at hex-chars lo))
+                    (set byte-count (+ byte-count 1))
+                  )
+                  (do
+                    ;; Regular printable character
+                    (buffer-append-byte buf ch)
+                    (set byte-count (+ byte-count 1))
+                  )
+                )
+              )
+            )
+          )
+        )
+        (set i (+ i 1))
+      )
+    )
+    (store Int32 out-len byte-count)
+    (return (buffer-to-string buf))
+  ) ;; body
+) ;; fn escape-llvm-string

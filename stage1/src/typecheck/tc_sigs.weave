@@ -1,0 +1,93 @@
+;; Signature collection functions for type checking
+
+  (fn collect-sigs
+    (doc "Collect function/entry signatures into arrays.")
+    (params
+      (a (ptr Arena))
+      (root Int32)
+      (names ArrayString)
+      (param-counts ArrayInt32)
+    )
+    (returns Int32)
+    (body
+      (let top Int32 (arena-first-child a root))
+      (while (!= top (- 0 1))
+        (do
+          (if-stmt (== (arena-kind a top) (node-kind-list))
+            (do
+              (let head Int32 (arena-first-child a top))
+              (if-stmt (== head (- 0 1))
+                (do 0)
+                (do
+                  (let head-val String (arena-value a head))
+                  (if-stmt (|| (string-eq head-val "fn") (string-eq head-val "entry"))
+                    (do
+                      (let name-node Int32 (arena-next-sibling a head))
+                      (let fname String "weave_main")
+                      (if-stmt (string-eq head-val "entry")
+                        (set fname "weave_main")
+                        (set fname (arena-value a name-node))
+                      )
+                      (let params-node Int32 (arena-next-sibling a name-node))
+                      ;; skip doc if present
+                      (if-stmt
+                        (&& (== (arena-kind a params-node) (node-kind-list))
+                          (string-eq (arena-value a (arena-first-child a params-node)) "doc")
+                        )
+                        (set params-node (arena-next-sibling a params-node))
+                        (set params-node params-node)
+                      )
+                      (let pc Int32 0)
+                      (if-stmt (== (arena-kind a params-node) (node-kind-list))
+                        (do
+                          (let p Int32 (second-child a params-node))
+                          (while (!= p (- 0 1))
+                            (do
+                              (let phead Int32 (arena-first-child a p))
+                              (if-stmt (== phead (- 0 1))
+                                (do 0)
+                                (set pc (+ pc 1))
+                              )
+                              (set p (arena-next-sibling a p))
+                            )
+                          )
+                        )
+                        (do 0)
+                      )
+                      (array-str-append names fname)
+                      (array-i32-append param-counts pc)
+                    )
+                    (do 0)
+                  )
+                )
+              )
+            )
+            (do 0)
+          )
+          (set top (arena-next-sibling a top))
+        )
+      )
+      (return 0)
+    )
+  )
+
+  (fn sig-find
+    (doc "Return index of name in signature arrays or -1.")
+    (params
+      (names ArrayString)
+      (name String)
+    )
+    (returns Int32)
+    (body
+      (let i Int32 0)
+      (while (< i (array-str-len names))
+        (do
+          (if-stmt (string-eq (array-str-get names i) name)
+            (return i)
+            (set i (+ i 1))
+          )
+        )
+      )
+      (return (- 0 1))
+    )
+  )

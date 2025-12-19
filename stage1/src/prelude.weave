@@ -1,0 +1,332 @@
+(module
+  (name "stage1-prelude")
+  (doc "Stage1 bindings that wrap the C runtime helpers provided by stage0.")
+
+  ;; Minimal type aliases needed by stage1 runtime bindings
+  (type Int8 (alias Int32))
+  (type Buffer (alias Int32))
+  (type ArrayString (alias Int32))
+  (type ArrayInt32 (alias Int32))
+
+  (fn string-length
+    (doc "Return length of null-terminated string.")
+    (params (s String)) (returns Int32)
+    (body
+      (return
+        (ccall "weave_string_length"
+          (returns Int32)
+          (args (String s))
+        )
+      )
+    )
+  ) ;; fn string-length
+
+  (fn string-concat
+    (doc "Concatenate two strings and return a new string.")
+    (params (a String) (b String)) (returns String)
+    (body
+      (return
+        (ccall "weave_string_concat"
+          (returns String)
+          (args (String a) (String b))
+        )
+      )
+    )
+  ) ;; fn string-concat
+
+  (fn string-to-int
+    (doc "Parse a decimal string to Int32; returns 0 on failure.")
+    (params (s String)) (returns Int32)
+    (body
+      (return
+        (ccall "weave_string_to_int"
+          (returns Int32)
+          (args (String s))
+        )
+      )
+    )
+  ) ;; fn string-to-int
+
+  (fn string-char-at
+    (doc "Return byte value at index or 0 if out of bounds.")
+    (params (s String) (idx Int32)) (returns Int32)
+    (body
+      (return
+        (ccall "weave_string_char_at"
+          (returns Int32)
+          (args (String s) (Int32 idx))
+        )
+      )
+    )
+  ) ;; fn string-char-at
+
+  (fn string-slice
+    (doc "Return substring of length len starting at start.")
+    (params (s String) (start Int32) (len Int32)) (returns String)
+    (body
+      (return
+        (ccall "weave_string_slice"
+          (returns String)
+          (args (String s) (Int32 start) (Int32 len))
+        )
+      )
+    )
+  ) ;; fn string-slice
+
+  (fn string-eq
+    (doc "Return 1 if two strings are equal.")
+    (params (a String) (b String)) (returns Int32)
+    (body
+      (return
+        (ccall "weave_string_eq"
+          (returns Int32)
+          (args (String a) (String b))
+        )
+      )
+    )
+  ) ;; fn string-eq
+
+  (fn int-to-string
+    (doc "Convert Int32 to decimal string.")
+    (params (v Int32)) (returns String)
+    (body
+      (return
+        (ccall "weave_int_to_string"
+          (returns String)
+          (args (Int32 v))
+        )
+      )
+    )
+  ) ;; fn int-to-string
+
+  (fn buffer-new
+    (doc "Allocate a new growable byte buffer.")
+    (params ()) (returns Buffer)
+    (body
+      (return
+        (ccall "weave_buffer_new"
+          (returns Buffer)
+          (args)
+        )
+      )
+    )
+  ) ;; fn buffer-new
+
+  (fn buffer-clear
+    (doc "Reset buffer length to zero, preserving capacity.")
+    (params (b Buffer)) (returns Int32)
+    (body
+      (return
+        (ccall "weave_buffer_clear"
+          (returns Int32)
+          (args (Buffer b))
+        )
+      )
+    )
+  ) ;; fn buffer-clear
+
+  (fn buffer-append-byte
+    (doc "Append a single byte to the buffer.")
+    (params (b Buffer) (byte Int32)) (returns Int32)
+    (body
+      (return
+        (ccall "weave_buffer_append_byte"
+          (returns Int32)
+          (args (Buffer b) (Int32 byte))
+        )
+      )
+    )
+  ) ;; fn buffer-append-byte
+
+  (fn buffer-append-string
+    (doc "Append a null-terminated string to the buffer.")
+    (params (b Buffer) (s String)) (returns Int32)
+    (body
+      (return
+        (ccall "weave_buffer_append_string"
+          (returns Int32)
+          (args (Buffer b) (String s))
+        )
+      )
+    )
+  ) ;; fn buffer-append-string
+
+  (fn buffer-to-string
+    (doc "Return the current contents of the buffer as a String view.")
+    (params (b Buffer)) (returns String)
+    (body
+      (return
+        (ccall "weave_buffer_to_string"
+          (returns String)
+          (args (Buffer b))
+        )
+      )
+    )
+  ) ;; fn buffer-to-string
+
+  (fn array-str-new
+    (doc "Create a new dynamic array of strings.")
+    (params ()) ;; params
+    (returns ArrayString)
+    (body
+      (return
+        (ccall "weave_array_str_new"
+          (returns ArrayString)
+          (args)
+        ) ;; ccall
+      ) ;; return
+    ) ;; body
+  ) ;; fn array-str-new
+
+  (fn array-str-len
+    (doc "Return the element count of a string array.")
+    (params
+      (a ArrayString)
+    ) ;; params
+    (returns Int32)
+    (body
+      (return
+        (ccall "weave_array_str_len"
+          (returns Int32)
+          (args
+            (ArrayString a)
+          ) ;; args
+        ) ;; ccall
+      ) ;; return
+    ) ;; body
+  ) ;; fn array-str-len
+
+  (fn array-str-append
+    (doc "Append a string to the end of the array.")
+    (params
+      (a ArrayString)
+      (v String)
+    ) ;; params
+    (returns Int32)
+    (body
+      (return
+        (ccall "weave_array_str_append"
+          (returns Int32)
+          (args
+            (ArrayString a)
+            (String v)
+          ) ;; args
+        ) ;; ccall
+      ) ;; return
+    ) ;; body
+  ) ;; fn array-str-append
+
+  (fn array-str-get
+    (doc "Get the string at idx.")
+    (params
+      (a ArrayString)
+      (idx Int32)
+    ) ;; params
+    (returns String)
+    (body
+      (return
+        (ccall "weave_array_str_get"
+          (returns String)
+          (args
+            (ArrayString a)
+            (Int32 idx)
+          ) ;; args
+        ) ;; ccall
+      ) ;; return
+    ) ;; body
+  ) ;; fn array-str-get
+
+  (fn array-i32-new
+    (doc "Create a new dynamic array of 32-bit integers.")
+    (params ()) ;; params
+    (returns ArrayInt32)
+    (body
+      (return
+        (ccall "weave_array_i32_new"
+          (returns ArrayInt32)
+          (args)
+        ) ;; ccall
+      ) ;; return
+    ) ;; body
+  ) ;; fn array-i32-new
+
+  (fn array-i32-len
+    (doc "Return the element count of an int array.")
+    (params
+      (a ArrayInt32)
+    ) ;; params
+    (returns Int32)
+    (body
+      (return
+        (ccall "weave_array_i32_len"
+          (returns Int32)
+          (args
+            (ArrayInt32 a)
+          ) ;; args
+        ) ;; ccall
+      ) ;; return
+    ) ;; body
+  ) ;; fn array-i32-len
+
+  (fn array-i32-append
+    (doc "Append an Int32 to the end of the array.")
+    (params
+      (a ArrayInt32)
+      (v Int32)
+    ) ;; params
+    (returns Int32)
+    (body
+      (return
+        (ccall "weave_array_i32_append"
+          (returns Int32)
+          (args
+            (ArrayInt32 a)
+            (Int32 v)
+          ) ;; args
+        ) ;; ccall
+      ) ;; return
+    ) ;; body
+  ) ;; fn array-i32-append
+
+  (fn array-i32-get
+    (doc "Get the Int32 at idx.")
+    (params
+      (a ArrayInt32)
+      (idx Int32)
+    ) ;; params
+    (returns Int32)
+    (body
+      (return
+        (ccall "weave_array_i32_get"
+          (returns Int32)
+          (args
+            (ArrayInt32 a)
+            (Int32 idx)
+          ) ;; args
+        ) ;; ccall
+      ) ;; return
+    ) ;; body
+  ) ;; fn array-i32-get
+
+  (fn array-i32-set
+    (doc "Set the Int32 at idx to v.")
+    (params
+      (a ArrayInt32)
+      (idx Int32)
+      (v Int32)
+    ) ;; params
+    (returns Int32)
+    (body
+      (return
+        (ccall "weave_array_i32_set"
+          (returns Int32)
+          (args
+            (ArrayInt32 a)
+            (Int32 idx)
+            (Int32 v)
+          ) ;; args
+        ) ;; ccall
+      ) ;; return
+    ) ;; body
+  ) ;; fn array-i32-set
+) ;; module

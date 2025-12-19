@@ -1,0 +1,107 @@
+(module
+  (name "stage1-debug")
+  (doc "Arena inspection helpers for debugging and tests.")
+
+  (include "prelude.weave")
+  (include "arena.weave")
+
+  ;; Simple tree dump for debugging the arena contents.
+  (fn dump-indent
+    (doc "Indent the buffer by n two-space groups.")
+    (params
+      (out Buffer)
+      (n Int32)
+    ) ;; params
+    (returns Int32)
+    (body (do
+      (let i Int32 0)
+      (while (< i n)
+        (do
+          (buffer-append-string out "  ")
+          (set i (+ i 1))
+        ) ;; do
+      ) ;; while
+      (return 0)
+    )) ;; body
+  ) ;; fn dump-indent
+
+  (fn dump-node
+    (doc "Recursively pretty-print a node and its children into out.")
+    (params
+      (a (ptr Arena))
+      (node Int32)
+      (out Buffer)
+      (depth Int32)
+    ) ;; params
+    (returns Int32)
+    (body (do
+      (dump-indent out depth)
+      (if-stmt (== (arena-kind a node) (node-kind-atom))
+        (do
+          (buffer-append-string out "(atom#")
+          (buffer-append-string out (int-to-string node))
+          (buffer-append-string out " ")
+          (buffer-append-string out (arena-value a node))
+          (buffer-append-string out ")\n")
+        ) ;; do
+        (do
+          (buffer-append-string out "(list#")
+          (buffer-append-string out (int-to-string node))
+          (buffer-append-string out "\n")
+          (let child Int32 (arena-first-child a node))
+          (while (!= child (- 0 1))
+            (do
+              (dump-node a child out (+ depth 1))
+              (set child (arena-next-sibling a child))
+            ) ;; do
+          ) ;; while
+          (dump-indent out depth)
+          (buffer-append-string out ")\n")
+        ) ;; do
+      ) ;; if-stmt
+      (return 0)
+    )) ;; body
+  ) ;; fn dump-node
+
+  (fn dump-tree
+    (doc "Return a full tree dump rooted at root.")
+    (params
+      (a (ptr Arena))
+      (root Int32)
+    ) ;; params
+    (returns String)
+    (body (do
+      (let b Buffer (buffer-new))
+      (dump-node a root b 0)
+      (return (buffer-to-string b))
+    )) ;; body
+  ) ;; fn dump-tree
+
+  ;; Dump a linked sibling chain starting at `start` using next-sibling.
+  (fn dump-sibling-chain
+    (doc "Render the sibling chain as id:value -> id:value ...")
+    (params
+      (a (ptr Arena))
+      (start Int32)
+    ) ;; params
+    (returns String)
+    (body (do
+      (let b Buffer (buffer-new))
+      (let n Int32 start)
+      (while (!= n (- 0 1))
+        (do
+          (buffer-append-string b (int-to-string n))
+          (buffer-append-string b ":")
+          (buffer-append-string b (arena-value a n))
+          (let next Int32 (arena-next-sibling a n))
+          (if-stmt (!= next (- 0 1))
+            (do (buffer-append-string b " -> "))
+            (do (buffer-append-string b ""))
+          ) ;; if-stmt
+          (set n next)
+        ) ;; do
+      ) ;; while
+      (return (buffer-to-string b))
+    )) ;; body
+  ) ;; fn dump-sibling-chain
+) ;; module

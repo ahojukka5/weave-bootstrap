@@ -1,0 +1,37 @@
+(program
+  (name "test-typed-fn-param-string-return42")
+  (doc "Typed function taking a String parameter and returning 42.")
+  (version "0.1")
+
+  (type ExitCode
+    (alias Int32)
+  ) ;; type ExitCode
+
+  (fn echo
+    (doc "Return the provided string unchanged.")
+    (params
+      (s String)
+    ) ;; params
+    (returns String)
+    (body
+      (return s)
+    ) ;; body
+  ) ;; fn echo
+
+  (entry main
+    (doc "Call echo, pass to puts, return 42.")
+    (params ())
+    (returns ExitCode)
+    (body
+      (do
+        (ccall "puts"
+          (returns Int32)
+          (args
+            (String (echo "hi"))
+          ) ;; args
+        ) ;; ccall
+        (return 42)
+      ) ;; do
+    ) ;; body
+  ) ;; entry main
+) ;; program

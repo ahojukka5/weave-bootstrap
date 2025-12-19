@@ -1,0 +1,6 @@
+#ifndef WEAVE_BOOTSTRAP_STAGE0C_COMPILER_H
+#define WEAVE_BOOTSTRAP_STAGE0C_COMPILER_H
+
+#include "codegen.h"
+
+#endif

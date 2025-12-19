@@ -1,0 +1,118 @@
+(module
+  (name "stage1-ir-ops")
+  (doc "Arithmetic and comparison helpers for IR emission.")
+
+  (include "../prelude.weave")
+  (include "./emit.weave")
+
+  (fn compile-binary-arith
+    (doc "Emit i32 add/sub/mul/div based on the op string.")
+    (params (op String) (lhs-t Int32) (rhs-t Int32) (out Buffer) (temp (ptr Int32)))
+    (returns Int32)
+    (body
+      (let t Int32 (load Int32 temp)
+        (do
+          (buffer-append-string out "  ")
+          (emit-temp out t)
+          (buffer-append-string out " = ")
+          (if-stmt (string-eq op "+")
+            (do (buffer-append-string out "add"))
+            (if-stmt (string-eq op "-")
+              (do (buffer-append-string out "sub"))
+              (if-stmt (string-eq op "*")
+                (do (buffer-append-string out "mul"))
+                (do (buffer-append-string out "sdiv"))
+              ) ;; if-stmt
+            ) ;; if-stmt
+          ) ;; if-stmt
+          (buffer-append-string out " i32 ")
+          (emit-temp out lhs-t)
+          (buffer-append-string out ", ")
+          (emit-temp out rhs-t)
+          (buffer-append-string out "\n")
+          (store Int32 temp (+ t 1))
+          (return t)
+        ) ;; do
+      ) ;; let
+    ) ;; body
+  ) ;; fn compile-binary-arith
+
+  (fn compile-icmp
+    (doc "Emit an icmp returning i32 0/1 for predicate pred.")
+    (params (pred String) (lhs-t Int32) (rhs-t Int32) (out Buffer) (temp (ptr Int32)))
+    (returns Int32)
+    (body
+      (let tcmp Int32 (load Int32 temp)
+        (let t Int32 (+ tcmp 1)
+          (do
+            (buffer-append-string out "  ")
+            (emit-temp out tcmp)
+            (buffer-append-string out " = icmp ")
+            (buffer-append-string out pred)
+            (buffer-append-string out " i32 ")
+            (emit-temp out lhs-t)
+            (buffer-append-string out ", ")
+            (emit-temp out rhs-t)
+            (buffer-append-string out "\n")
+            (buffer-append-string out "  ")
+            (emit-temp out t)
+            (buffer-append-string out " = zext i1 ")
+            (emit-temp out tcmp)
+            (buffer-append-string out " to i32\n")
+            (store Int32 temp (+ t 1))
+            (return t)
+          ) ;; do
+        ) ;; let
+      ) ;; let
+    ) ;; body
+  ) ;; fn compile-icmp
+
+  (fn compile-logical
+    (doc "Emit logical &&/|| using icmp + and/or + zext.")
+    (params (op String) (lhs-t Int32) (rhs-t Int32) (out Buffer) (temp (ptr Int32)))
+    (returns Int32)
+    (body
+      (let tb1 Int32 (load Int32 temp)
+        (let tb2 Int32 (+ tb1 1))
+        (let tb3 Int32 (+ tb2 1))
+        (let t Int32 (+ tb3 1)
+          (do
+            (buffer-append-string out "  ")
+            (emit-temp out tb1)
+            (buffer-append-string out " = icmp ne i32 ")
+            (emit-temp out lhs-t)
+            (buffer-append-string out ", 0\n")
+
+            (buffer-append-string out "  ")
+            (emit-temp out tb2)
+            (buffer-append-string out " = icmp ne i32 ")
+            (emit-temp out rhs-t)
+            (buffer-append-string out ", 0\n")
+
+            (buffer-append-string out "  ")
+            (emit-temp out tb3)
+            (buffer-append-string out " = ")
+            (if-stmt (string-eq op "&&")
+              (do (buffer-append-string out "and"))
+              (do (buffer-append-string out "or"))
+            ) ;; if-stmt
+            (buffer-append-string out " i1 ")
+            (emit-temp out tb1)
+            (buffer-append-string out ", ")
+            (emit-temp out tb2)
+            (buffer-append-string out "\n")
+
+            (buffer-append-string out "  ")
+            (emit-temp out t)
+            (buffer-append-string out " = zext i1 ")
+            (emit-temp out tb3)
+            (buffer-append-string out " to i32\n")
+
+            (store Int32 temp (+ t 1))
+            (return t)
+          ) ;; do
+        ) ;; let
+      ) ;; let
+    ) ;; body
+  ) ;; fn compile-logical
+) ;; module

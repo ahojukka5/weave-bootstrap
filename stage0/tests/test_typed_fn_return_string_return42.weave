@@ -1,0 +1,35 @@
+(program
+  (name "test-typed-fn-return-string-return42")
+  (doc "Typed function returning String; ensure call works.")
+  (version "0.1")
+
+  (type ExitCode
+    (alias Int32)
+  ) ;; type ExitCode
+
+  (fn hello
+    (doc "Return a static string.")
+    (params ())
+    (returns String)
+    (body
+      (return "hello typed call")
+    ) ;; body
+  ) ;; fn hello
+
+  (entry main
+    (doc "Call hello, print it, return 42.")
+    (params ())
+    (returns ExitCode)
+    (body
+      (do
+        (ccall "puts"
+          (returns Int32)
+          (args
+            (String (hello))
+          ) ;; args
+        ) ;; ccall
+        (return 42)
+      ) ;; do
+    ) ;; body
+  ) ;; entry main
+) ;; program

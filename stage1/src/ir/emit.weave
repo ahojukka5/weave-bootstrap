@@ -1,0 +1,71 @@
+(module
+  (name "stage1-ir-emit")
+  (doc "Tiny helpers to append common LLVM IR fragments.")
+
+  (include "../prelude.weave")
+
+  (fn emit-line
+    (doc "Append a full line with newline to the buffer.")
+    (params
+      (out Buffer)
+      (s String)
+    ) ;; params
+    (returns Int32)
+    (body
+      (do
+        (buffer-append-string out s)
+        (buffer-append-string out "\n")
+        (return 0)
+      ) ;; do
+    ) ;; body
+  ) ;; fn emit-line
+
+  (fn emit-temp
+    (doc "Append a temp register name %tN.")
+    (params
+      (out Buffer)
+      (t Int32)
+    ) ;; params
+    (returns Int32)
+    (body
+      (do
+        (buffer-append-string out "%t")
+        (buffer-append-string out (int-to-string t))
+        (return 0)
+      ) ;; do
+    ) ;; body
+  ) ;; fn emit-temp
+
+  (fn emit-label-ref
+    (doc "Append a label reference %LN.")
+    (params
+      (out Buffer)
+      (n Int32)
+    ) ;; params
+    (returns Int32)
+    (body
+      (do
+        (buffer-append-string out "%L")
+        (buffer-append-string out (int-to-string n))
+        (return 0)
+      ) ;; do
+    ) ;; body
+  ) ;; fn emit-label-ref
+
+  (fn emit-label-def
+    (doc "Append a label definition LN:.")
+    (params
+      (out Buffer)
+      (n Int32)
+    ) ;; params
+    (returns Int32)
+    (body
+      (do
+        (buffer-append-string out "L")
+        (buffer-append-string out (int-to-string n))
+        (buffer-append-string out ":\n")
+        (return 0)
+      ) ;; do
+    ) ;; body
+  ) ;; fn emit-label-def
+) ;; module

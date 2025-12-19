@@ -1,0 +1,305 @@
+(module
+  (name "stage1-tokenizer")
+  (doc "Tokenize source text into a flat list of atoms/strings/parens.")
+
+  (include "prelude.weave")
+
+  (fn is-whitespace
+    (doc "Return 1 if ch is ASCII whitespace.")
+    (params
+      (ch Int32)
+    ) ;; params
+    (returns Int32)
+    (body
+      (return
+        (|| (== ch 32)
+          (|| (== ch 9)
+            (|| (== ch 10)
+              (== ch 13)
+            ) ;; ||
+          ) ;; ||
+        ) ;; ||
+      )
+    ) ;; body
+  ) ;; fn is-whitespace
+
+  (fn is-digit
+    (doc "Return 1 if ch is an ASCII digit.")
+    (params
+      (ch Int32)
+    ) ;; params
+    (returns Int32)
+    (body
+      (return (&& (>= ch 48) (<= ch 57)))
+    ) ;; body
+  ) ;; fn is-digit
+
+  (fn is-symbol-start
+    (doc "Return 1 if ch can start a symbol.")
+    (params
+      (ch Int32)
+    ) ;; params
+    (returns Int32)
+    (body
+      (return
+        (||
+          (&& (>= ch 65) (<= ch 90))
+          (||
+            (&& (>= ch 97) (<= ch 122))
+            (||
+              (== ch 95) ;; _
+              (||
+                (== ch 46) ;; .
+                (||
+                  (== ch 43) ;; +
+                  (||
+                    (== ch 45) ;; -
+                    (||
+                      (== ch 42) ;; *
+                      (||
+                        (== ch 47) ;; /
+                        (||
+                          (== ch 60) ;; <
+                          (||
+                            (== ch 62) ;; >
+                            (||
+                              (== ch 61) ;; =
+                              (||
+                                (== ch 33) ;; !
+                                (||
+                                  (== ch 38) ;; &
+                                  (== ch 124) ;; |
+                                ) ;; ||
+                              ) ;; ||
+                            ) ;; ||
+                          ) ;; ||
+                        ) ;; ||
+                      ) ;; ||
+                    ) ;; ||
+                  ) ;; ||
+                ) ;; ||
+              ) ;; ||
+            ) ;; ||
+          ) ;; ||
+        ) ;; ||
+      )
+    ) ;; body
+  ) ;; fn is-symbol-start
+
+  (fn is-symbol-char
+    (doc "Return 1 if ch can appear after the first char of a symbol.")
+    (params
+      (ch Int32)
+    ) ;; params
+    (returns Int32)
+    (body
+      (return (|| (is-digit ch) (is-symbol-start ch)))
+    ) ;; body
+  ) ;; fn is-symbol-char
+
+  (fn skip-ws-and-comments
+    (doc "Skip whitespace and ';' comments starting at idx; return next index.")
+    (params
+      (src String)
+      (idx Int32)
+    ) ;; params
+    (returns Int32)
+    (body
+      (let len Int32
+        (string-length src)
+        (let i Int32
+          idx
+          (do
+            (while (< i len)
+              (do
+                (let ch Int32
+                  (string-char-at src i)
+                  (if-stmt (is-whitespace ch)
+                    (set i (+ i 1))
+                    (if-stmt (== ch 59)
+                      (do
+                        (while (&& (< i len) (!= (string-char-at src i) 10))
+                          (set i (+ i 1))
+                        ) ;; while
+                        (if-stmt (< i len)
+                          (set i (+ i 1))
+                          (set i i)
+                        ) ;; if-stmt
+                      ) ;; do
+                      (return i)
+                    ) ;; if-stmt
+                  ) ;; if-stmt
+                ) ;; let ch
+              ) ;; do
+            ) ;; while
+            (return i)
+          ) ;; do
+        ) ;; let i
+      ) ;; let len
+    ) ;; body
+  ) ;; fn skip-ws-and-comments
+
+  (fn read-while
+    (doc "Read digits or symbol chars (mode 0/1) into out; return next index.")
+    (params
+      (src String)
+      (idx Int32)
+      (out Buffer)
+      (mode Int32)
+    ) ;; params
+    (returns Int32)
+    (body
+      (let len Int32
+        (string-length src)
+        (let i Int32
+          idx
+          (do
+            (buffer-clear out)
+            (while (< i len)
+              (do
+                (let ch Int32
+                  (string-char-at src i)
+                  (if-stmt (== mode 0)
+                    (if-stmt (is-digit ch)
+                      (do
+                        (buffer-append-byte out ch)
+                        (set i (+ i 1))
+                      ) ;; do
+                      (return i)
+                    ) ;; if-stmt
+                    (if-stmt (is-symbol-char ch)
+                      (do
+                        (buffer-append-byte out ch)
+                        (set i (+ i 1))
+                      ) ;; do
+                      (return i)
+                    ) ;; if-stmt
+                  ) ;; if-stmt
+                ) ;; let ch
+              ) ;; do
+            ) ;; while
+            (return i)
+          ) ;; do
+        ) ;; let i
+      ) ;; let len
+    ) ;; body
+  ) ;; fn read-while
+
+  (fn read-string
+    (doc "Read a quoted string starting at idx; writes contents into out.")
+    (params
+      (src String)
+      (idx Int32)
+      (out Buffer)
+    ) ;; params
+    (returns Int32)
+    (body
+      (let len Int32
+        (string-length src)
+        (let i Int32
+          (+ idx 1)
+          (do
+            (buffer-clear out)
+            (while (< i len)
+              (do
+                (let ch Int32
+                  (string-char-at src i)
+                  (if-stmt (== ch 34)
+                    (return (+ i 1))
+                    (do
+                      (buffer-append-byte out ch)
+                      (set i (+ i 1))
+                    ) ;; do
+                  ) ;; if-stmt
+                ) ;; let ch
+              ) ;; do
+            ) ;; while
+            (return i)
+          ) ;; do
+        ) ;; let i
+      ) ;; let len
+    ) ;; body
+  ) ;; fn read-string
+
+  (fn tokenize
+    (doc "Convert the source text into token strings; appends to tokens.")
+    (params
+      (src String)
+      (tokens ArrayString)
+    ) ;; params
+    (returns Int32)
+    (body
+      (let len Int32
+        (string-length src)
+        (let i Int32
+          0
+          (let tmp Buffer
+            (buffer-new)
+            (do
+              (set i (skip-ws-and-comments src i))
+              (while (< i len)
+                (do
+                  (let ch Int32
+                    (string-char-at src i)
+                    (if-stmt (== ch 40)
+                      (do
+                        (array-str-append tokens "LPAREN")
+                        (set i (+ i 1))
+                      ) ;; do
+                      (if-stmt (== ch 41)
+                        (do
+                          (array-str-append tokens "RPAREN")
+                          (set i (+ i 1))
+                        ) ;; do
+                        (if-stmt (== ch 34)
+                          (do
+                            (set i (read-string src i tmp))
+                            (array-str-append
+                              tokens
+                              (string-concat
+                                "STRING:"
+                                (buffer-to-string tmp)
+                              ) ;; string-concat
+                            ) ;; array-str-append
+                          ) ;; do
+                          (if-stmt (is-digit ch)
+                            (do
+                              (set i (read-while src i tmp 0))
+                              (array-str-append
+                                tokens
+                                (string-concat
+                                  "NUMBER:"
+                                  (buffer-to-string tmp)
+                                ) ;; string-concat
+                              ) ;; array-str-append
+                            ) ;; do
+                            (if-stmt (is-symbol-start ch)
+                              (do
+                                (set i (read-while src i tmp 1))
+                                (array-str-append
+                                  tokens
+                                  (string-concat
+                                    "SYMBOL:"
+                                    (buffer-to-string tmp)
+                                  ) ;; string-concat
+                                ) ;; array-str-append
+                              ) ;; do
+                              (set i (+ i 1))
+                            ) ;; if-stmt
+                          ) ;; if-stmt
+                        ) ;; if-stmt
+                      ) ;; if-stmt
+                    ) ;; if-stmt
+                  ) ;; let ch
+                  (set i (skip-ws-and-comments src i))
+                ) ;; do
+              ) ;; while
+              (array-str-append tokens "EOF")
+              (return 0)
+            ) ;; do
+          ) ;; let tmp
+        ) ;; let i
+      ) ;; let len
+    ) ;; body
+  ) ;; fn tokenize
+) ;; module

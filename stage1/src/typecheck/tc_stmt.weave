@@ -1,0 +1,231 @@
+;; Statement type checking
+
+  (fn tc-stmt
+    (doc "Check a statement list; returns 0 or 1 on error.")
+    (params
+      (a (ptr Arena))
+      (node Int32)
+      (names ArrayString)
+      (param-counts ArrayInt32)
+      (struct-names ArrayString)
+      (struct-fields ArrayString)
+      (ret-type String)
+    )
+    (returns Int32)
+    (body
+      (if-stmt (!= (arena-kind a node) (node-kind-list))
+        (return 0)
+        (do
+          (let head Int32 (arena-first-child a node))
+          (if-stmt (== head (- 0 1)) (return 0) (do 0))
+          (let head-val String (arena-value a head))
+          (if-stmt (string-eq head-val "doc") (return 0) (do 0))
+
+          (if-stmt (string-eq head-val "body")
+            (do
+              (let stmt Int32 (second-child a node))
+              (while (!= stmt (- 0 1))
+                (do
+                  (let rc Int32 (tc-stmt a stmt names param-counts struct-names struct-fields ret-type))
+                  (if-stmt (!= rc 0) (return rc) (do 0))
+                  (set stmt (arena-next-sibling a stmt))
+                )
+              )
+              (return 0)
+            )
+            (do 0)
+          )
+
+          (if-stmt (string-eq head-val "return")
+            (do
+              (if-stmt (string-starts-with ret-type "Void")
+                (do
+                  (let expr Int32 (second-child a node))
+                  (if-stmt (!= expr (- 0 1)) (return (tc-error "Return value in void function")) (return 0))
+                )
+                (do
+                  (let expr Int32 (second-child a node))
+                  (if-stmt (== expr (- 0 1))
+                    (return (tc-error "Non-void return missing value"))
+                    (return (tc-expr a expr names param-counts struct-names struct-fields))
+                  )
+                )
+              )
+            )
+            (do 0)
+          )
+
+          (if-stmt (string-eq head-val "let")
+            (do
+              (let init Int32 (fourth-child a node))
+              (if-stmt (!= init (- 0 1))
+                (return (tc-expr a init names param-counts struct-names struct-fields))
+                (return 0)
+              )
+            )
+            (do 0)
+          )
+
+          (if-stmt (string-eq head-val "set")
+            (do
+              (let expr Int32 (third-child a node))
+              (if-stmt (!= expr (- 0 1))
+                (return (tc-expr a expr names param-counts struct-names struct-fields))
+                (return 0)
+              )
+            )
+            (do 0)
+          )
+
+          (if-stmt (string-eq head-val "do")
+            (do
+              (let stmt Int32 (second-child a node))
+              (while (!= stmt (- 0 1))
+                (do
+                  (let rc Int32 (tc-stmt a stmt names param-counts struct-names struct-fields ret-type))
+                  (if-stmt (!= rc 0) (return rc) (do 0))
+                  (set stmt (arena-next-sibling a stmt))
+                )
+              )
+              (return 0)
+            )
+            (do 0)
+          )
+
+          ;; (block stmt... expr) - sequence with implicit return
+          (if-stmt (string-eq head-val "block")
+            (do
+              (let stmt Int32 (second-child a node))
+              (while (!= stmt (- 0 1))
+                (do
+                  (let rc Int32 (tc-stmt a stmt names param-counts struct-names struct-fields ret-type))
+                  (if-stmt (!= rc 0) (return rc) (do 0))
+                  (set stmt (arena-next-sibling a stmt))
+                )
+              )
+              (return 0)
+            )
+            (do 0)
+          )
+
+          (if-stmt (string-eq head-val "if-stmt")
+            (do
+              (let cond Int32 (second-child a node))
+              (let then Int32 (third-child a node))
+              (let els Int32 (fourth-child a node))
+              (let rc Int32 (tc-expr a cond names param-counts struct-names struct-fields))
+              (if-stmt (!= rc 0) (return rc) (do 0))
+              (let rc2 Int32 (tc-stmt a then names param-counts struct-names struct-fields ret-type))
+              (if-stmt (!= rc2 0) (return rc2) (do 0))
+              (let rc3 Int32 (tc-stmt a els names param-counts struct-names struct-fields ret-type))
+              (return rc3)
+            )
+            (do 0)
+          )
+
+          (if-stmt (string-eq head-val "while")
+            (do
+              (let cond Int32 (second-child a node))
+              (let body Int32 (third-child a node))
+              (let rc Int32 (tc-expr a cond names param-counts struct-names struct-fields))
+              (if-stmt (!= rc 0) (return rc) (do 0))
+              (return (tc-stmt a body names param-counts struct-names struct-fields ret-type))
+            )
+            (do 0)
+          )
+
+          (return (tc-expr a node names param-counts struct-names struct-fields))
+        )
+      )
+    )
+  )
+
+  (fn is-implicit-return-expr
+    (doc "Return 1 if node is an expression that can be implicit return.")
+    (params (a (ptr Arena)) (node Int32))
+    (returns Int32)
+    (body
+      (if-stmt (== (arena-kind a node) (node-kind-atom))
+        (return 1)
+        (do
+          (let head Int32 (arena-first-child a node))
+          (if-stmt (== head (- 0 1)) (return 0) (do 0))
+          (let head-val String (arena-value a head))
+          ;; These are statements that don't produce values
+          ;; 5-child let (let name type init body) IS an expression - recurse into body
+          (if-stmt (string-eq head-val "let")
+            (do
+              (let n-children Int32 (count-children a node))
+              (if-stmt (== n-children 5)
+                (do
+                  ;; 5-child let: check if body (5th child) is implicit return
+                  (let body Int32 (fifth-child a node))
+                  (return (is-implicit-return-expr a body))
+                )
+                ;; 4-child let without body is a statement, not expr
+                (return 0)
+              )
+            )
+            (do 0)
+          )
+          (if-stmt (string-eq head-val "set") (return 0) (do 0))
+          (if-stmt (string-eq head-val "while") (return 0) (do 0))
+          (if-stmt (string-eq head-val "do") (return 0) (do 0))
+          ;; if-stmt CAN be an expression if both branches return values
+          ;; Everything else (make, function calls, if-stmt, etc.) is an expression
+          (return 1)
+        )
+      )
+    )
+  )
+
+  (fn has-return
+    (doc "Return 1 if any return exists under node.")
+    (params (a (ptr Arena)) (node Int32))
+    (returns Int32)
+    (body
+      (if-stmt (== (arena-kind a node) (node-kind-atom))
+        (return 0)
+        (do
+          (let head Int32 (arena-first-child a node))
+          (if-stmt (== head (- 0 1)) (return 0) (do 0))
+          (let head-val String (arena-value a head))
+          (if-stmt (string-eq head-val "return") (return 1) (do 0))
+          (if-stmt (string-eq head-val "doc")
+            (return 0)
+            (do 0)
+          )
+          ;; For body forms, check if last statement is an implicit return expr
+          (if-stmt (string-eq head-val "body")
+            (do
+              (let last-child Int32 (- 0 1))
+              (let child Int32 (arena-next-sibling a head))
+              (while (!= child (- 0 1))
+                (do
+                  (set last-child child)
+                  (set child (arena-next-sibling a child))
+                )
+              )
+              (if-stmt (!= last-child (- 0 1))
+                (if-stmt (== (is-implicit-return-expr a last-child) 1)
+                  (return 1)
+                  (do 0)
+                )
+                (do 0)
+              )
+            )
+            (do 0)
+          )
+          ;; Recurse into children
+          (let child2 Int32 (arena-first-child a node))
+          (while (!= child2 (- 0 1))
+            (do
+              (if-stmt (== (has-return a child2) 1) (return 1) (do 0))
+              (set child2 (arena-next-sibling a child2))
+            )
+          )
+          (return 0)
+        )
+      )
+    )
+  )

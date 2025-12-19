@@ -1,0 +1,18 @@
+(program
+  (name "test-ccall-abs-42")
+  (doc "Call the C abs function and return its result.")
+
+  (entry main
+    (doc "Invoke abs(-42) and return 42.")
+    (params)
+    (returns Int32)
+    (body
+      (return
+        (ccall "abs"
+          (returns Int32)
+          (args (Int32 -42))
+        ) ;; ccall
+      ) ;; return
+    ) ;; body
+  ) ;; entry
+) ;; program

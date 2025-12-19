@@ -1,0 +1,27 @@
+(program
+  (name "test-fn-call-return42")
+  (doc "Call a user-defined function returning 42.")
+  (version "0.1")
+
+  (type ExitCode
+    (alias Int32)
+  ) ;; type ExitCode
+
+  (fn get42
+    (doc "Helper that returns 42.")
+    (params ())
+    (returns Int32)
+    (body
+      (return 42)
+    ) ;; body
+  ) ;; fn get42
+
+  (entry main
+    (doc "Call get42 and return its value.")
+    (params ())
+    (returns ExitCode)
+    (body
+      (return (get42))
+    ) ;; body
+  ) ;; entry main
+) ;; program

@@ -1,0 +1,76 @@
+;; Literal and variable compilation helpers
+
+  (fn get-struct-name-from-type-node
+    (doc "Extract struct name from a type node (atom 'Arena' or list '(struct Arena)').")
+    (params (a (ptr Arena)) (ty-node Int32))
+    (returns String)
+    (body
+      (if-stmt (== (arena-kind a ty-node) (node-kind-atom))
+        (return (arena-value a ty-node))
+        (do
+          (let head Int32 (arena-first-child a ty-node))
+          (if-stmt (== head (- 0 1)) (return "") (do 0))
+          (let head-val String (arena-value a head))
+          (if-stmt (string-eq head-val "struct")
+            (do
+              (let name-node Int32 (arena-next-sibling a head))
+              (if-stmt (== name-node (- 0 1)) (return "") (do 0))
+              (return (arena-value a name-node))
+            )
+            (return "")
+          )
+        )
+      )
+    )
+  )
+
+  (fn compile-int-lit
+    (doc "Emit an add that materializes the integer literal into temp.")
+    (params
+      (out Buffer)
+      (value String)
+      (temp Int32)
+    )
+    (returns Int32)
+    (body
+      (do
+        (buffer-append-string out "  ")
+        (emit-temp out temp)
+        (buffer-append-string out " = add i32 0, ")
+        (buffer-append-string out value)
+        (buffer-append-string out "\n")
+        (return temp)
+      )
+    )
+  )
+
+  (fn compile-var
+    (doc "Load a variable of type ty-node into temp (assumes an alloca exists).")
+    (params
+      (a (ptr Arena))
+      (out Buffer)
+      (name String)
+      (ty-node Int32)
+      (temp Int32)
+    )
+    (returns Int32)
+    (body
+      (do
+        (let nm String name)
+        (if-stmt (== (string-length nm) 0)
+          (set nm "tmp")
+          (set nm nm)
+        )
+        (buffer-append-string out "  ")
+        (emit-temp out temp)
+        (buffer-append-string out " = load ")
+        (emit-type-node out a ty-node)
+        (buffer-append-string out ", ")
+        (emit-pointer-type-node out a ty-node)
+        (buffer-append-string out " %")
+        (buffer-append-string out nm)
+        (buffer-append-string out "\n")
+        (return temp)
+      )
+    )
+  )

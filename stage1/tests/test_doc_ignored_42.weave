@@ -1,0 +1,12 @@
+(program
+  (name "doc-test")
+  (doc "Module-level documentation should be ignored by codegen.")
+  (entry main
+    (doc "Function-level doc also ignored; still returns 42.")
+    (params)
+    (returns Int32)
+    (body
+      (return 42)
+    ) ;; body
+  ) ;; entry
+) ;; program

@@ -1,0 +1,124 @@
+;; Utility functions for IR generation
+
+  (fn dedupe-lines
+    (doc "Remove duplicate lines from a buffer, preserving first occurrences.")
+    (params (buf Buffer))
+    (returns Buffer)
+    (body
+      (let src String (buffer-to-string buf))
+      (let out Buffer (buffer-new))
+      (let seen ArrayString (array-str-new))
+      (let start Int32 0)
+      (let i Int32 0)
+      (let len Int32 (string-length src))
+      (while (<= i len)
+        (do
+          (if-stmt (|| (== i len) (== (string-char-at src i) 10))
+            (do
+              (let line String (string-slice src start (- i start)))
+              (if-stmt (&& (> (string-length line) 0) (== (array-str-contains seen line) 0))
+                (do
+                  (array-str-append seen line)
+                  (buffer-append-string out line)
+                  (buffer-append-string out "\n")
+                )
+                (do 0)
+              )
+              (set start (+ i 1))
+            )
+            (do 0)
+          )
+          (set i (+ i 1))
+        )
+      )
+      (return out)
+    )
+  )
+
+  (fn collect-fn-sigs
+    (doc "Collect function signatures: names -> return type nodes.")
+    (params
+      (a (ptr Arena))
+      (root Int32)
+      (fn-sig-names ArrayString)
+      (fn-sig-ret-types ArrayInt32)
+    )
+    (returns Int32)
+    (body (do
+      (let child Int32 (arena-first-child a root))
+      (while (!= child (- 0 1))
+        (do
+          (if-stmt (is-list-with-head a child "fn")
+            (do
+              (let name-node Int32 (second-child a child))
+              (let fn-name String (arena-value a name-node))
+              ;; Find returns form
+              (let sib Int32 (arena-next-sibling a name-node))
+              ;; Skip doc if present
+              (if-stmt (is-list-with-head a sib "doc")
+                (set sib (arena-next-sibling a sib))
+                (do 0)
+              )
+              ;; Skip params if present
+              (if-stmt (is-list-with-head a sib "params")
+                (set sib (arena-next-sibling a sib))
+                (do 0)
+              )
+              ;; sib should now be returns
+              (if-stmt (is-list-with-head a sib "returns")
+                (do
+                  (let ret-type Int32 (second-child a sib))
+                  (array-str-append fn-sig-names fn-name)
+                  (array-i32-append fn-sig-ret-types ret-type)
+                )
+                (do 0)
+              )
+            )
+            (do 0)
+          )
+          (if-stmt (is-list-with-head a child "entry")
+            (do
+              ;; entry always returns ExitCode -> Int32
+              (array-str-append fn-sig-names "weave_main")
+              (array-i32-append fn-sig-ret-types (- 0 1)) ;; -1 means Int32
+            )
+            (do 0)
+          )
+          (set child (arena-next-sibling a child))
+        )
+      )
+      (return 0)
+    ))
+  )
+
+  (fn lookup-fn-ret-type
+    (doc "Look up function return type. Returns -1 if not found (defaults to i32).")
+    (params
+      (a (ptr Arena))
+      (fn-name String)
+      (fn-sig-names ArrayString)
+      (fn-sig-ret-types ArrayInt32)
+    )
+    (returns String)
+    (body (do
+      (let i Int32 0)
+      (let len Int32 (array-str-len fn-sig-names))
+      (while (< i len)
+        (do
+          (if-stmt (string-eq (array-str-get fn-sig-names i) fn-name)
+            (do
+              (let ret-node Int32 (array-i32-get fn-sig-ret-types i))
+              (if-stmt (== ret-node (- 0 1))
+                (return "i32")
+                (return (type-node-to-llvm-str a ret-node))
+              )
+            )
+            (do 0)
+          )
+          (set i (+ i 1))
+        )
+      )
+      ;; Not found - default to i32
+      (return "i32")
+    ))
+  )

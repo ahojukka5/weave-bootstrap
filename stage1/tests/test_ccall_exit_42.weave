@@ -1,0 +1,16 @@
+(program
+  (name "test-ccall-exit-42")
+  (doc "Call exit(42) via ccall to ensure exit is available.")
+
+  (entry main
+    (doc "Invoke C exit(42); process should exit with 42.")
+    (params)
+    (returns Int32)
+    (body
+      (do
+        (ccall "exit" (returns Void) (args (Int32 42)))
+        (return 0) ;; unreachable if exit works
+      ) ;; do
+    ) ;; body
+  ) ;; entry
+) ;; program

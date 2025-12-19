@@ -1,0 +1,12 @@
+(module
+  (name "tc-return-void")
+  (doc "Negative: returning a value from a void function.")
+  (entry main
+    (doc "Typechecker should reject returning a value in void function.")
+    (params ())
+    (returns Void)
+    (body
+      (return 1)
+    ) ;; body
+  ) ;; entry
+) ;; module

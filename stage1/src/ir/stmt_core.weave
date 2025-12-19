@@ -1,0 +1,411 @@
+  ;; Helper: compile a branch that might be an expression needing auto-return
+  (fn compile-branch-or-expr
+    (doc "Compile a branch, auto-returning if it's an expression. Returns 1 if a return was emitted.")
+    (params
+      (a (ptr Arena))
+      (node Int32)
+      (ret-type-node Int32)
+      (env-names ArrayString)
+      (env-safe ArrayString)
+      (env-types ArrayInt32)
+      (declared ArrayString)
+      (struct-names ArrayString)
+      (struct-fields ArrayString)
+      (decls Buffer)
+      (str-counter (ptr Int32))
+      (out Buffer)
+      (temp (ptr Int32))
+      (label-counter (ptr Int32))
+      (fn-sig-names ArrayString)
+      (fn-sig-ret-types ArrayInt32)
+    )
+    (returns Int32)
+    (body
+      (if-stmt (== (arena-kind a node) (node-kind-list))
+        (do
+          (let head Int32 (arena-first-child a node))
+          (if-stmt (!= head (- 0 1))
+            (do
+              (let head-val String (arena-value a head))
+              ;; Check if this is a statement form
+              (if-stmt (|| (|| (|| (|| (string-eq head-val "do") (string-eq head-val "let")) (string-eq head-val "if-stmt")) (string-eq head-val "while")) (string-eq head-val "return"))
+                ;; It's a statement form, compile as stmt
+                (return (compile-stmt a node ret-type-node env-names env-safe env-types declared struct-names struct-fields decls str-counter out temp label-counter fn-sig-names fn-sig-ret-types))
+                ;; It's an expression - compile but DO NOT auto-return here.
+                ;; Statement 'if-stmt' branches should not force function returns.
+                (do
+                  (let _ Int32 (compile-expr a node env-names env-safe env-types declared struct-names struct-fields decls str-counter out temp fn-sig-names fn-sig-ret-types))
+                  (return 0)
+                )
+              )
+            )
+            (return 0)
+          )
+        )
+        ;; It's an atom - compile but do not auto-return in stmt context
+        (do
+          (let _ Int32 (compile-expr a node env-names env-safe env-types declared struct-names struct-fields decls str-counter out temp fn-sig-names fn-sig-ret-types))
+          (return 0)
+        )
+      )
+    )
+  )
+
+  (fn compile-stmt
+    (doc "Lower a statement list node; returns 1 if it emitted a return.")
+    (params
+      (a (ptr Arena))
+      (node Int32)
+      (ret-type-node Int32)
+      (env-names ArrayString)
+      (env-safe ArrayString)
+      (env-types ArrayInt32)
+      (declared ArrayString)
+      (struct-names ArrayString)
+      (struct-fields ArrayString)
+      (decls Buffer)
+      (str-counter (ptr Int32))
+      (out Buffer)
+      (temp (ptr Int32))
+      (label-counter (ptr Int32))
+      (fn-sig-names ArrayString)
+      (fn-sig-ret-types ArrayInt32)
+    ) ;; params
+    (returns Int32)
+    (body
+      (do
+        ;; Only list nodes are statements in this stage.
+        (if-stmt (!= (arena-kind a node) (node-kind-list))
+          (return 0)
+          (do 0)
+        ) ;; if-stmt
+
+        (let head-node Int32
+          (arena-first-child a node)
+          (do
+            (if-stmt (== head-node (- 0 1))
+              (return 0)
+              (do 0)
+            ) ;; if-stmt
+
+            (let head String
+              (arena-value a head-node)
+              (do
+                ;; (doc "some text") -- ignore in codegen.
+                (if-stmt (string-eq head "doc")
+                  (return 0)
+                  (do 0)
+                ) ;; if-stmt
+
+                ;; (return expr)
+                (if-stmt (string-eq head "return")
+                  (do
+                    (let expr Int32 (second-child a node))
+                    ;; Special-case arithmetic returns so we don't lose the binary op.
+                    (if-stmt (== (arena-kind a expr) (node-kind-list))
+                      (do
+                        (let head-node Int32 (arena-first-child a expr))
+                        (let head-val String (arena-value a head-node))
+                        (if-stmt
+                          (||
+                            (string-eq head-val "+")
+                            (||
+                              (string-eq head-val "-")
+                              (||
+                                (string-eq head-val "*")
+                                (string-eq head-val "/")
+                              ) ;; ||
+                            ) ;; ||
+                          ) ;; ||
+                          (do
+                            (let lhs Int32 (second-child a expr))
+                            (let rhs Int32 (third-child a expr))
+                            (compile-expr a lhs env-names env-safe env-types declared struct-names struct-fields decls str-counter out temp fn-sig-names fn-sig-ret-types)
+                            (let lhs-t Int32 (- (load Int32 temp) 1))
+                            (compile-expr a rhs env-names env-safe env-types declared struct-names struct-fields decls str-counter out temp fn-sig-names fn-sig-ret-types)
+                            (let rhs-t Int32 (- (load Int32 temp) 1))
+                            (let reg Int32 (compile-binary-arith head-val lhs-t rhs-t out temp))
+                            (buffer-append-string out "  ret ")
+                            (emit-type-node out a ret-type-node)
+                            (buffer-append-string out " ")
+                            (emit-temp out reg)
+                            (buffer-append-string out "\n")
+                            (return 1)
+                          ) ;; do
+                          (do 0)
+                        ) ;; if-stmt
+                      ) ;; do
+                      (do 0)
+                    ) ;; if-stmt
+
+                    ;; Fallback: generic expression.
+                    (let _ Int32 (compile-expr a expr env-names env-safe env-types declared struct-names struct-fields decls str-counter out temp fn-sig-names fn-sig-ret-types))
+                    (let reg Int32 (- (load Int32 temp) 1))
+                    (buffer-append-string out "  ret ")
+                    (emit-type-node out a ret-type-node)
+                    (buffer-append-string out " ")
+                    (emit-temp out reg)
+                    (buffer-append-string out "\n")
+                    (return 1)
+                  ) ;; do
+                  (do 0)
+                ) ;; if-stmt
+
+                ;; (let name type init) or (let name type init body)
+                (if-stmt (string-eq head "let")
+                  (do
+                    (let name-node Int32 (second-child a node))
+                    (let type-node Int32 (third-child a node))
+                    (let init-node Int32 (fourth-child a node))
+                    (let body-node Int32 (fifth-child a node))
+                    (let name String (arena-value a name-node))
+                    (let safe-name String (sanitize-name name))
+                    ;; Compile init BEFORE adding name to env (prevents self-reference issues)
+                    (let _ Int32 (compile-expr a init-node env-names env-safe env-types declared struct-names struct-fields decls str-counter out temp fn-sig-names fn-sig-ret-types))
+                    (let init-reg Int32 (- (load Int32 temp) 1))
+                    ;; Now add to env
+                    (env-add env-names env-safe env-types name safe-name type-node)
+                    (let actual-safe String (env-find-safe env-names env-safe name))
+                    (buffer-append-string out "  %")
+                    (buffer-append-string out actual-safe)
+                    (buffer-append-string out " = alloca ")
+                    (emit-type-node out a type-node)
+                    (buffer-append-string out "\n")
+                    (buffer-append-string out "  store ")
+                    (emit-type-node out a type-node)
+                    (buffer-append-string out " ")
+                    (emit-temp out init-reg)
+                    (buffer-append-string out ", ")
+                    (emit-pointer-type-node out a type-node)
+                    (buffer-append-string out " %")
+                    (buffer-append-string out actual-safe)
+                    (buffer-append-string out "\n")
+                    ;; If there's a body (5-child let), compile it
+                    (if-stmt (!= body-node (- 0 1))
+                      ;; Check if body is a stmt form or an expression
+                      (if-stmt (== (arena-kind a body-node) (node-kind-list))
+                        (do
+                          (let bhead Int32 (arena-first-child a body-node))
+                          (if-stmt (!= bhead (- 0 1))
+                            (do
+                              (let bhead-val String (arena-value a bhead))
+                              (if-stmt (|| (|| (|| (|| (string-eq bhead-val "do") (string-eq bhead-val "let")) (string-eq bhead-val "if-stmt")) (string-eq bhead-val "while")) (string-eq bhead-val "return"))
+                                ;; Body is a stmt form, compile as stmt
+                                (return (compile-stmt a body-node ret-type-node env-names env-safe env-types declared struct-names struct-fields decls str-counter out temp label-counter fn-sig-names fn-sig-ret-types))
+                                ;; Body is an expression - compile and auto-return
+                                (do
+                                  (let result-temp Int32 (compile-expr a body-node env-names env-safe env-types declared struct-names struct-fields decls str-counter out temp fn-sig-names fn-sig-ret-types))
+                                  (buffer-append-string out "  ret ")
+                                  (emit-type-node out a ret-type-node)
+                                  (buffer-append-string out " %t")
+                                  (buffer-append-string out (int-to-string result-temp))
+                                  (buffer-append-string out "\n")
+                                  (return 1)
+                                )
+                              )
+                            )
+                            (return 0)
+                          )
+                        )
+                        ;; Body is an atom - compile and auto-return
+                        (do
+                          (let result-temp Int32 (compile-expr a body-node env-names env-safe env-types declared struct-names struct-fields decls str-counter out temp fn-sig-names fn-sig-ret-types))
+                          (buffer-append-string out "  ret ")
+                          (emit-type-node out a ret-type-node)
+                          (buffer-append-string out " %t")
+                          (buffer-append-string out (int-to-string result-temp))
+                          (buffer-append-string out "\n")
+                          (return 1)
+                        )
+                      )
+                      (return 0)
+                    )
+                  ) ;; do
+                  (do 0)
+                ) ;; if-stmt
+
+                ;; (set name expr)
+                (if-stmt (string-eq head "set")
+                  (do
+                    (let name-node Int32 (second-child a node))
+                    (let expr-node Int32 (third-child a node))
+                    (let name String (arena-value a name-node))
+                    (let safe-name String (env-find-safe env-names env-safe name))
+                    (if-stmt (== (string-length safe-name) 0)
+                      (set safe-name (sanitize-name name))
+                      (set safe-name safe-name)
+                    ) ;; if-stmt
+                    (let _ Int32 (compile-expr a expr-node env-names env-safe env-types declared struct-names struct-fields decls str-counter out temp fn-sig-names fn-sig-ret-types))
+                    (let reg Int32 (- (load Int32 temp) 1))
+                    (let set-ty-node Int32 (env-find-type env-names env-types name))
+                    (buffer-append-string out "  store ")
+                    (emit-type-node out a set-ty-node)
+                    (buffer-append-string out " ")
+                    (emit-temp out reg)
+                    (buffer-append-string out ", ")
+                    (emit-pointer-type-node out a set-ty-node)
+                    (buffer-append-string out " %")
+                    (buffer-append-string out safe-name)
+                    (buffer-append-string out "\n")
+                    (return 0)
+                  ) ;; do
+                  (do 0)
+                ) ;; if-stmt
+
+                ;; (store ty value ptr) as a statement.
+                (if-stmt (string-eq head "store")
+                  (do
+                    (let _ Int32 (compile-expr a node env-names env-safe env-types declared struct-names struct-fields decls str-counter out temp fn-sig-names fn-sig-ret-types))
+                    (return 0)
+                  )
+                  (do 0)
+                ) ;; if-stmt
+
+                ;; (do stmt...)
+                (if-stmt (string-eq head "do")
+                  (do
+                    ;; first stmt is the second child of the do list
+                    (let item Int32 (second-child a node))
+                    (while (!= item (- 0 1))
+                      (do
+                        (let res Int32 (compile-stmt a item ret-type-node env-names env-safe env-types declared struct-names struct-fields decls str-counter out temp label-counter fn-sig-names fn-sig-ret-types))
+                        (if-stmt (== res 1)
+                          (return 1)
+                          (do (set item (arena-next-sibling a item)))
+                        ) ;; if-stmt
+                      ) ;; do
+                    ) ;; while
+                    (return 0)
+                  ) ;; do
+                  (do 0)
+                ) ;; if-stmt
+
+                ;; (if-stmt cond then else)
+                (if-stmt (string-eq head "if-stmt")
+                  (do
+                    (let cond Int32 (second-child a node))
+                    (let then Int32 (third-child a node))
+                    (let els Int32 (fourth-child a node))
+                    (let _ Int32 (compile-expr a cond env-names env-safe env-types declared struct-names struct-fields decls str-counter out temp fn-sig-names fn-sig-ret-types))
+                    (let cond-t Int32 (- (load Int32 temp) 1))
+                    (let cond-i1 Int32 (load Int32 temp))
+                    (buffer-append-string out "  ")
+                    (emit-temp out cond-i1)
+                    (buffer-append-string out " = icmp ne i32 ")
+                    (emit-temp out cond-t)
+                    (buffer-append-string out ", 0\n")
+                    (store Int32 temp (+ cond-i1 1))
+                    (let l-then Int32 (load Int32 label-counter))
+                    (store Int32 label-counter (+ l-then 1))
+                    (let l-else Int32 (load Int32 label-counter))
+                    (store Int32 label-counter (+ l-else 1))
+                    (let l-end Int32 (load Int32 label-counter))
+                    (store Int32 label-counter (+ l-end 1))
+                    (buffer-append-string out "  br i1 ")
+                    (emit-temp out cond-i1)
+                    (buffer-append-string out ", label ")
+                    (emit-label-ref out l-then)
+                    (buffer-append-string out ", label ")
+                    (emit-label-ref out l-else)
+                    (buffer-append-string out "\n")
+
+                    ;; Compile then branch
+                    (emit-label-def out l-then)
+                    (let then-ret Int32 (compile-branch-or-expr a then ret-type-node env-names env-safe env-types declared struct-names struct-fields decls str-counter out temp label-counter fn-sig-names fn-sig-ret-types))
+                    (if-stmt (!= then-ret 1)
+                      (do
+                        (buffer-append-string out "  br label ")
+                        (emit-label-ref out l-end)
+                        (buffer-append-string out "\n")
+                      )
+                      (do 0)
+                    ) ;; if-stmt
+
+                    ;; Compile else branch
+                    (emit-label-def out l-else)
+                    (let else-ret Int32 (compile-branch-or-expr a els ret-type-node env-names env-safe env-types declared struct-names struct-fields decls str-counter out temp label-counter fn-sig-names fn-sig-ret-types))
+                    (if-stmt (!= else-ret 1)
+                      (do
+                        (buffer-append-string out "  br label ")
+                        (emit-label-ref out l-end)
+                        (buffer-append-string out "\n")
+                      )
+                      (do 0)
+                    ) ;; if-stmt
+
+                    ;; Only emit l-end label if at least one branch didn't return
+                    (if-stmt (&& (== then-ret 1) (== else-ret 1))
+                      ;; Both branches returned - no merge point needed
+                      (return 1)
+                      (do
+                        (emit-label-def out l-end)
+                        (return 0)
+                      )
+                    )
+                  ) ;; do
+                  (do 0)
+                ) ;; if-stmt
+
+                ;; (while cond body)
+                (if-stmt (string-eq head "while")
+                  (do
+                    (let cond Int32 (second-child a node))
+                    (let body Int32 (third-child a node))
+                    (let l-cond Int32 (load Int32 label-counter))
+                    (store Int32 label-counter (+ l-cond 1))
+                    (let l-body Int32 (load Int32 label-counter))
+                    (store Int32 label-counter (+ l-body 1))
+                    (let l-end Int32 (load Int32 label-counter))
+                    (store Int32 label-counter (+ l-end 1))
+
+                    (buffer-append-string out "  br label ")
+                    (emit-label-ref out l-cond)
+                    (buffer-append-string out "\n")
+
+                    (emit-label-def out l-cond)
+                    (let _ Int32 (compile-expr a cond env-names env-safe env-types declared struct-names struct-fields decls str-counter out temp fn-sig-names fn-sig-ret-types))
+                    (let cond-t Int32 (- (load Int32 temp) 1))
+                    (let cond-i1 Int32 (load Int32 temp))
+                    (buffer-append-string out "  ")
+                    (emit-temp out cond-i1)
+                    (buffer-append-string out " = icmp ne i32 ")
+                    (emit-temp out cond-t)
+                    (buffer-append-string out ", 0\n")
+                    (store Int32 temp (+ cond-i1 1))
+                    (buffer-append-string out "  br i1 ")
+                    (emit-temp out cond-i1)
+                    (buffer-append-string out ", label ")
+                    (emit-label-ref out l-body)
+                    (buffer-append-string out ", label ")
+                    (emit-label-ref out l-end)
+                    (buffer-append-string out "\n")
+
+                    (emit-label-def out l-body)
+                    (let body-ret Int32 (compile-stmt a body ret-type-node env-names env-safe env-types declared struct-names struct-fields decls str-counter out temp label-counter fn-sig-names fn-sig-ret-types))
+                    (if-stmt (!= body-ret 1)
+                      (do
+                        (buffer-append-string out "  br label ")
+                        (emit-label-ref out l-cond)
+                        (buffer-append-string out "\n")
+                      )
+                      (do 0)
+                    ) ;; if-stmt
+
+                    (emit-label-def out l-end)
+                    (return 0)
+                  ) ;; do
+                  (do 0)
+                ) ;; if-stmt
+
+                ;; Expression in statement position (e.g., ccall).
+                (let _ Int32 (compile-expr a node env-names env-safe env-types declared struct-names struct-fields decls str-counter out temp fn-sig-names fn-sig-ret-types))
+                (return 0)
+
+                (return 0)
+              ) ;; do
+            ) ;; let head
+          ) ;; do
+        ) ;; let head-node
+      ) ;; do
+    ) ;; body
+  ) ;; fn compile-stmt

@@ -1,0 +1,139 @@
+;; Binary operations compilation
+
+  (fn compile-binary-ops
+    (doc "Check if head-val is a binary operator.")
+    (params (head-val String))
+    (returns Int32)
+    (body
+      (if-stmt
+        (||
+          (string-eq head-val "+")
+          (||
+            (string-eq head-val "-")
+            (||
+              (string-eq head-val "*")
+              (||
+                (string-eq head-val "/")
+                (||
+                  (string-eq head-val "==")
+                  (||
+                    (string-eq head-val "!=")
+                    (||
+                      (string-eq head-val "<")
+                      (||
+                        (string-eq head-val ">")
+                        (||
+                          (string-eq head-val "<=")
+                          (||
+                            (string-eq head-val ">=")
+                            (||
+                              (string-eq head-val "&&")
+                              (string-eq head-val "||")
+                            )
+                          )
+                        )
+                      )
+                    )
+                  )
+                )
+              )
+            )
+          )
+        )
+        (return 1)
+        (return 0)
+      )
+    )
+  )
+
+  (fn is-comparison-op
+    (doc "Check if head-val is a comparison or logical operator.")
+    (params (head-val String))
+    (returns Int32)
+    (body
+      (if-stmt
+        (||
+          (string-eq head-val "==")
+          (||
+            (string-eq head-val "!=")
+            (||
+              (string-eq head-val "<")
+              (||
+                (string-eq head-val ">")
+                (||
+                  (string-eq head-val "<=")
+                  (||
+                    (string-eq head-val ">=")
+                    (||
+                      (string-eq head-val "&&")
+                      (string-eq head-val "||")
+                    )
+                  )
+                )
+              )
+            )
+          )
+        )
+        (return 1)
+        (return 0)
+      )
+    )
+  )
+
+  (fn compile-binary-expr
+    (doc "Compile a binary expression.")
+    (params
+      (a (ptr Arena))
+      (node Int32)
+      (head-val String)
+      (env-names ArrayString)
+      (env-safe ArrayString)
+      (env-types ArrayInt32)
+      (declared ArrayString)
+      (struct-names ArrayString)
+      (struct-fields ArrayString)
+      (decls Buffer)
+      (str-counter (ptr Int32))
+      (out Buffer)
+      (temp (ptr Int32))
+      (fn-sig-names ArrayString)
+      (fn-sig-ret-types ArrayInt32)
+    )
+    (returns Int32)
+    (body
+      (let lhs Int32 (second-child a node))
+      (let rhs Int32 (third-child a node))
+      (compile-expr a lhs env-names env-safe env-types declared struct-names struct-fields decls str-counter out temp fn-sig-names fn-sig-ret-types)
+      (let lhs-t Int32 (- (load Int32 temp) 1))
+      (compile-expr a rhs env-names env-safe env-types declared struct-names struct-fields decls str-counter out temp fn-sig-names fn-sig-ret-types)
+      (let rhs-t Int32 (- (load Int32 temp) 1))
+      (if-stmt (== (is-comparison-op head-val) 1)
+        (do
+          (if-stmt
+            (||
+              (string-eq head-val "&&")
+              (string-eq head-val "||")
+            )
+            (do
+              (let reg Int32 (compile-logical head-val lhs-t rhs-t out temp))
+              (return reg)
+            )
+            (do
+              (let pred String "eq")
+              (if-stmt (string-eq head-val "!=") (set pred "ne") (do 0))
+              (if-stmt (string-eq head-val "<") (set pred "slt") (do 0))
+              (if-stmt (string-eq head-val ">") (set pred "sgt") (do 0))
+              (if-stmt (string-eq head-val "<=") (set pred "sle") (do 0))
+              (if-stmt (string-eq head-val ">=") (set pred "sge") (do 0))
+              (let reg Int32 (compile-icmp pred lhs-t rhs-t out temp))
+              (return reg)
+            )
+          )
+        )
+        (do
+          (let reg Int32 (compile-binary-arith head-val lhs-t rhs-t out temp))
+          (return reg)
+        )
+      )
+    )
+  )

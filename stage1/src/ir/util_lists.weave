@@ -1,0 +1,142 @@
+(fn is-list-with-head
+  (doc "Return 1 if node is a list whose first atom equals head.")
+  (params
+    (a (ptr Arena))
+    (node Int32)
+    (head String)
+  ) ;; params
+  (returns Int32)
+  (body
+    (if-stmt (== (arena-kind a node) (node-kind-list))
+      (let first Int32
+        (arena-first-child a node)
+        (if-stmt (== first (- 0 1))
+          (return 0)
+          (if-stmt (== (arena-kind a first) (node-kind-atom))
+            (return (string-eq (arena-value a first) head))
+            (return 0)
+          ) ;; if-stmt
+        ) ;; if-stmt
+      ) ;; let first
+      (return 0)
+    ) ;; if-stmt
+  ) ;; body
+) ;; fn is-list-with-head
+
+(fn count-children
+  (doc "Return the number of children of a list node.")
+  (params
+    (a (ptr Arena))
+    (list-node Int32)
+  ) ;; params
+  (returns Int32)
+  (body (do
+    (let count Int32 0)
+    (let child Int32 (arena-first-child a list-node))
+    (while (!= child (- 0 1))
+      (do
+        (set count (+ count 1))
+        (set child (arena-next-sibling a child))
+      )
+    )
+    (return count)
+  )) ;; body
+) ;; fn count-children
+
+(fn second-child
+  (doc "Return the second child of a list node (or -1).")
+  (params
+    (a (ptr Arena))
+    (list-node Int32)
+  ) ;; params
+  (returns Int32)
+  (body (do
+    (let first Int32
+      (arena-first-child a list-node)
+      (if-stmt (== first (- 0 1))
+        (return (- 0 1))
+        (return (arena-next-sibling a first))
+      ) ;; if-stmt
+    ) ;; let first
+  )) ;; body
+) ;; fn second-child
+
+(fn third-child
+  (doc "Return the third child of a list node (or -1).")
+  (params
+    (a (ptr Arena))
+    (list-node Int32)
+  ) ;; params
+  (returns Int32)
+  (body (do
+    (let second Int32
+      (second-child a list-node)
+      (if-stmt (== second (- 0 1))
+        (return (- 0 1))
+        (return (arena-next-sibling a second))
+      ) ;; if-stmt
+    ) ;; let second
+  )) ;; body
+) ;; fn third-child
+
+(fn fourth-child
+  (doc "Return the fourth child of a list node (or -1).")
+  (params
+    (a (ptr Arena))
+    (list-node Int32)
+  ) ;; params
+  (returns Int32)
+  (body (do
+    (let third Int32
+      (third-child a list-node)
+      (if-stmt (== third (- 0 1))
+        (return (- 0 1))
+        (return (arena-next-sibling a third))
+      ) ;; if-stmt
+    ) ;; let third
+  )) ;; body
+) ;; fn fourth-child
+
+(fn fifth-child
+  (doc "Return the fifth child of a list node (or -1).")
+  (params
+    (a (ptr Arena))
+    (list-node Int32)
+  ) ;; params
+  (returns Int32)
+  (body (do
+    (let fourth Int32
+      (fourth-child a list-node)
+      (if-stmt (== fourth (- 0 1))
+        (return (- 0 1))
+        (return (arena-next-sibling a fourth))
+      ) ;; if-stmt
+    ) ;; let fourth
+  )) ;; body
+) ;; fn fifth-child
+
+(fn find-first-child-list
+  (doc "Return the first child list whose head matches.")
+  (params
+    (a (ptr Arena))
+    (list-node Int32)
+    (head String)
+  ) ;; params
+  (returns Int32)
+  (body
+    (let child Int32
+      (arena-first-child a list-node)
+      (do
+        (while (!= child (- 0 1))
+          (do
+            (if-stmt (is-list-with-head a child head)
+              (return child)
+              (set child (arena-next-sibling a child))
+            ) ;; if-stmt
+          ) ;; do
+        ) ;; while
+        (return (- 0 1))
+      ) ;; do
+    ) ;; let child
+  ) ;; body
+) ;; fn find-first-child-list

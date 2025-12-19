@@ -1,0 +1,18 @@
+(program
+  (name "test-typecheck-bad-call")
+  (doc "Expect typecheck failure: foo arity mismatch.")
+
+  (fn foo
+    (doc "Returns its input.")
+    (params (x Int32))
+    (returns Int32)
+    (body (return x))
+  ) ;; fn foo
+
+  (entry main
+    (doc "Call foo with two args; should fail typecheck.")
+    (params)
+    (returns Int32)
+    (body (return (foo 1 2)))
+  ) ;; entry
+) ;; program

@@ -1,0 +1,1070 @@
+  (fn type-node-to-llvm-str
+    (doc "Convert a type AST node to LLVM type string.")
+    (params (a (ptr Arena)) (ty-node Int32))
+    (returns String)
+    (body
+      (if-stmt (== (arena-kind a ty-node) (node-kind-atom))
+        (do
+          (let ty-val String (arena-value a ty-node))
+          (if-stmt (string-eq ty-val "Int32")
+            (return "i32")
+            (if-stmt (string-eq ty-val "Int64")
+              (return "i64")
+              (if-stmt (string-eq ty-val "String")
+                (return "i8*")
+                (if-stmt (string-eq ty-val "Int8")
+                  (return "i8")
+                  (if-stmt (string-eq ty-val "Buffer")
+                    (return "i8*")
+                    (if-stmt (string-eq ty-val "Arena")
+                      (return "%Arena")
+                      (if-stmt (string-eq ty-val "ArrayString")
+                        (return "i8*")
+                        (if-stmt (string-eq ty-val "ArrayInt32")
+                          (return "i8*")
+                          (if-stmt (string-eq ty-val "NodeKind")
+                            (return "i32")
+                            (if-stmt (string-eq ty-val "Int64")
+                              (return "i64")
+                              ;; Assume user-defined type is i32 for now
+                              (return "i32")
+                            )
+                          )
+                        )
+                      )
+                    )
+                  )
+                )
+              )
+            )
+          )
+        )
+        ;; It's a list - could be (ptr X)
+        (do
+          (let head Int32 (arena-first-child a ty-node))
+          (if-stmt (== head (- 0 1))
+            (return "i32")
+            (do
+              (let head-val String (arena-value a head))
+              (if-stmt (string-eq head-val "ptr")
+                (do
+                  (let inner Int32 (second-child a ty-node))
+                  (let inner-ty String (type-node-to-llvm-str a inner))
+                  ;; Append * to make it a pointer
+                  (let buf Buffer (buffer-new))
+                  (buffer-append-string buf inner-ty)
+                  (buffer-append-string buf "*")
+                  (return (buffer-to-string buf))
+                )
+                (return "i32")
+              )
+            )
+          )
+        )
+      )
+    )
+  )
+
+  (fn infer-arg-type
+    (doc "Infer the LLVM type of an expression (for call arguments).")
+    (params (a (ptr Arena)) (node Int32) (env-names ArrayString) (env-types ArrayInt32) (fn-sig-names ArrayString) (fn-sig-ret-types ArrayInt32))
+    (returns String)
+    (body
+      (if-stmt (== (arena-kind a node) (node-kind-atom))
+        ;; Atom: could be integer literal, string literal, or variable
+        (do
+          (let val String (arena-value a node))
+          ;; Check if it's a string literal
+          (if-stmt (== (is-string-literal val) 1)
+            (return "i8*")
+            (do 0)
+          )
+          ;; Check if it's a number
+          (let first-char Int32 (string-char-at val 0))
+          (if-stmt (|| (&& (>= first-char 48) (<= first-char 57)) (== first-char 45))
+            (return "i32")
+            ;; It's a variable - look up its type
+            (do
+              (let ty-node Int32 (env-find-type env-names env-types val))
+              (if-stmt (== ty-node (- 0 1))
+                (return "i32")
+                (return (type-node-to-llvm-str a ty-node))
+              )
+            )
+          )
+        )
+        ;; List expression
+        (do
+          (let head Int32 (arena-first-child a node))
+          (if-stmt (== head (- 0 1))
+            (return "i32")
+            (do
+              (let head-val String (arena-value a head))
+              ;; (addr x) returns a pointer
+              (if-stmt (string-eq head-val "addr")
+                (do
+                  (let inner Int32 (second-child a node))
+                  (let inner-type String (infer-arg-type a inner env-names env-types fn-sig-names fn-sig-ret-types))
+                  (let buf Buffer (buffer-new))
+                  (buffer-append-string buf inner-type)
+                  (buffer-append-string buf "*")
+                  (return (buffer-to-string buf))
+                )
+                (do 0)
+              )
+              ;; (load ty ptr) returns ty
+              (if-stmt (string-eq head-val "load")
+                (do
+                  (let ty-node Int32 (second-child a node))
+                  (return (type-node-to-llvm-str a ty-node))
+                )
+                (do 0)
+              )
+              ;; (get-field ...) returns i8* for now (most fields are opaque handles)
+              (if-stmt (string-eq head-val "get-field")
+                (return "i8*")
+                (do 0)
+              )
+              ;; Arithmetic ops return i32
+              (if-stmt (|| (|| (|| (string-eq head-val "+") (string-eq head-val "-")) (string-eq head-val "*")) (string-eq head-val "/"))
+                (return "i32")
+                (do 0)
+              )
+              ;; Comparison ops return i32 (zext'd)
+              (if-stmt (|| (|| (|| (|| (string-eq head-val "==") (string-eq head-val "!=")) (string-eq head-val "<")) (string-eq head-val ">")) (|| (string-eq head-val "<=") (string-eq head-val ">=")))
+                (return "i32")
+                (do 0)
+              )
+              ;; Function call - look up return type
+              (return (lookup-fn-ret-type a head-val fn-sig-names fn-sig-ret-types))
+            )
+          )
+        )
+      )
+    )
+  )
+
+  (fn get-struct-name-from-type-node
+    (doc "Extract struct name from a type node (atom 'Arena' or list '(struct Arena)').")
+    (params (a (ptr Arena)) (ty-node Int32)) (returns String)
+    (body
+      (if-stmt (== (arena-kind a ty-node) (node-kind-atom))
+        ;; Atom type: just the struct name
+        (return (arena-value a ty-node))
+        (do
+          ;; List type: should be (struct Name)
+          (let head Int32 (arena-first-child a ty-node))
+          (if-stmt (== head (- 0 1)) (return "") (do 0))
+          (let head-val String (arena-value a head))
+          (if-stmt (string-eq head-val "struct")
+            (do
+              (let name-node Int32 (arena-next-sibling a head))
+              (if-stmt (== name-node (- 0 1)) (return "") (do 0))
+              (return (arena-value a name-node))
+            )
+            (return "")
+          )
+        )
+      )
+    )
+  ) ;; fn get-struct-name-from-type-node
+
+  (fn compile-int-lit
+    (doc "Emit an add that materializes the integer literal into temp.")
+    (params
+      (out Buffer)
+      (value String)
+      (temp Int32)
+    ) ;; params
+    (returns Int32)
+    (body
+      (do
+        (buffer-append-string out "  ")
+        (emit-temp out temp)
+        (buffer-append-string out " = add i32 0, ")
+        (buffer-append-string out value)
+        (buffer-append-string out "\n")
+        (return temp)
+      ) ;; do
+    ) ;; body
+  ) ;; fn compile-int-lit
+
+  (fn compile-var
+    (doc "Load a variable of type ty-node into temp (assumes an alloca exists).")
+    (params
+      (a (ptr Arena))
+      (out Buffer)
+      (name String)
+      (ty-node Int32)
+      (temp Int32)
+    ) ;; params
+    (returns Int32)
+    (body
+      (do
+        (let nm String name)
+        (if-stmt (== (string-length nm) 0)
+          (set nm "tmp")
+          (set nm nm)
+        ) ;; if-stmt
+        (buffer-append-string out "  ")
+        (emit-temp out temp)
+        (buffer-append-string out " = load ")
+        (emit-type-node out a ty-node)
+        (buffer-append-string out ", ")
+        (emit-pointer-type-node out a ty-node)
+        (buffer-append-string out " %")
+        (buffer-append-string out nm)
+        (buffer-append-string out "\n")
+        (return temp)
+      ) ;; do
+    ) ;; body
+  ) ;; fn compile-var
+
+  (fn compile-expr
+    (doc "Dispatch expression kinds and update temp counter; returns last temp.")
+    (params
+      (a (ptr Arena))
+      (node Int32)
+      (env-names ArrayString)
+      (env-safe ArrayString)
+      (env-types ArrayInt32)
+      (declared ArrayString)
+      (struct-names ArrayString)
+      (struct-fields ArrayString)
+      (decls Buffer)
+      (str-counter (ptr Int32))
+      (out Buffer)
+      (temp (ptr Int32))
+      (fn-sig-names ArrayString)
+      (fn-sig-ret-types ArrayInt32)
+    ) ;; params
+    (returns Int32)
+    (body
+      (if-stmt (== (arena-kind a node) (node-kind-atom))
+        (do
+          (let v String
+            (arena-value a node)
+            (do
+              (if-stmt (== (is-string-literal v) 1)
+                (do
+                  (let raw String (string-literal-value v))
+                  (let idx Int32 (load Int32 str-counter))
+                  (store Int32 str-counter (+ idx 1))
+                  
+                  ;; Escape the string and get the actual byte count
+                  (let byte-count Int32 0)
+                  (let escaped String (escape-llvm-string raw (addr byte-count)))
+                  (let total-len Int32 (+ byte-count 1)) ;; +1 for null terminator
+
+                  (let gname Buffer (buffer-new))
+                  (buffer-append-string gname "@.str")
+                  (buffer-append-string gname (int-to-string idx))
+
+                  (let gbuf Buffer (buffer-new))
+                  (buffer-append-string gbuf (buffer-to-string gname))
+                  (buffer-append-string gbuf " = private unnamed_addr constant [")
+                  (buffer-append-string gbuf (int-to-string total-len))
+                  (buffer-append-string gbuf " x i8] c\"")
+                  (buffer-append-string gbuf escaped)
+                  (buffer-append-string gbuf "\\00\"\n")
+
+                  (if-stmt (== (array-str-contains declared (buffer-to-string gname)) 0)
+                    (do
+                      (array-str-append declared (buffer-to-string gname))
+                      (buffer-append-string decls (buffer-to-string gbuf))
+                    )
+                    (do 0)
+                  ) ;; if-stmt
+
+                  (let t Int32 (load Int32 temp))
+                  (buffer-append-string out "  ")
+                  (emit-temp out t)
+                  (buffer-append-string out " = getelementptr inbounds [")
+                  (buffer-append-string out (int-to-string total-len))
+                  (buffer-append-string out " x i8], [")
+                  (buffer-append-string out (int-to-string total-len))
+                  (buffer-append-string out " x i8]* ")
+                  (buffer-append-string out (buffer-to-string gname))
+                  (buffer-append-string out ", i32 0, i32 0\n")
+                  (store Int32 temp (+ t 1))
+                  (return t)
+                )
+                (do 0)
+              ) ;; if-stmt
+
+              (if-stmt (== (is-number-string v) 1)
+                (do
+                  (let t Int32 (compile-int-lit out v (load Int32 temp)))
+                  (store Int32 temp (+ t 1))
+                  (return t)
+                )
+                (do
+                  (let ty-node Int32 (env-find-type env-names env-types v))
+                  (let t Int32 (compile-var a out (env-find-safe env-names env-safe v) ty-node (load Int32 temp)))
+                  (store Int32 temp (+ t 1))
+                  (return t)
+                ) ;; do
+              ) ;; if-stmt
+            ) ;; do
+          ) ;; let v
+        ) ;; do
+        (do
+          (let head Int32 (arena-first-child a node))
+          (let head-val String (arena-value a head))
+          ;; Ignore doc forms in expression position.
+          (if-stmt (string-eq head-val "doc")
+            (return (load Int32 temp))
+            (do 0)
+          ) ;; if-stmt
+
+          ;; Handle statement forms that can appear in expression position
+          ;; (do stmt...) - iterate over children, return last reg
+          (if-stmt (string-eq head-val "do")
+            (do
+              (let do-child Int32 (arena-next-sibling a head))
+              (let do-last-reg Int32 0)
+              (while (!= do-child (- 0 1))
+                (do
+                  (set do-last-reg (compile-expr a do-child env-names env-safe env-types declared struct-names struct-fields decls str-counter out temp fn-sig-names fn-sig-ret-types))
+                  (set do-child (arena-next-sibling a do-child))
+                )
+              )
+              (return do-last-reg)
+            )
+            (do 0)
+          ) ;; if-stmt
+
+          ;; (let name type init) or (let name type init body)
+          (if-stmt (string-eq head-val "let")
+            (do
+              (let let-name-node Int32 (second-child a node))
+              (let let-type-node Int32 (third-child a node))
+              (let let-init-node Int32 (fourth-child a node))
+              (let let-name String (arena-value a let-name-node))
+              (let let-safe String (sanitize-name let-name))
+              ;; Compile init first
+              (compile-expr a let-init-node env-names env-safe env-types declared struct-names struct-fields decls str-counter out temp fn-sig-names fn-sig-ret-types)
+              (let init-reg Int32 (- (load Int32 temp) 1))
+              ;; Add to env
+              (env-add env-names env-safe env-types let-name let-safe let-type-node)
+              ;; Emit alloca and store
+              (buffer-append-string out "  %")
+              (buffer-append-string out let-safe)
+              (buffer-append-string out " = alloca ")
+              (emit-type-node out a let-type-node)
+              (buffer-append-string out "\n")
+              (buffer-append-string out "  store ")
+              (emit-type-node out a let-type-node)
+              (buffer-append-string out " ")
+              (emit-temp out init-reg)
+              (buffer-append-string out ", ")
+              (emit-pointer-type-node out a let-type-node)
+              (buffer-append-string out " %")
+              (buffer-append-string out let-safe)
+              (buffer-append-string out "\n")
+              ;; Check for body (5-child let)
+              (let let-body-node Int32 (fifth-child a node))
+              (if-stmt (!= let-body-node (- 0 1))
+                (return (compile-expr a let-body-node env-names env-safe env-types declared struct-names struct-fields decls str-counter out temp fn-sig-names fn-sig-ret-types))
+                (return init-reg)
+              )
+            )
+            (do 0)
+          ) ;; if-stmt
+
+          ;; (set name expr)
+          (if-stmt (string-eq head-val "set")
+            (do
+              (let set-name-node Int32 (second-child a node))
+              (let set-expr-node Int32 (third-child a node))
+              (let set-name String (arena-value a set-name-node))
+              (let set-safe String (env-find-safe env-names env-safe set-name))
+              (let set-ty-node Int32 (env-find-type env-names env-types set-name))
+              (compile-expr a set-expr-node env-names env-safe env-types declared struct-names struct-fields decls str-counter out temp fn-sig-names fn-sig-ret-types)
+              (let val-reg Int32 (- (load Int32 temp) 1))
+              (buffer-append-string out "  store ")
+              (emit-type-node out a set-ty-node)
+              (buffer-append-string out " ")
+              (emit-temp out val-reg)
+              (buffer-append-string out ", ")
+              (emit-pointer-type-node out a set-ty-node)
+              (buffer-append-string out " %")
+              (buffer-append-string out set-safe)
+              (buffer-append-string out "\n")
+              (return val-reg)
+            )
+            (do 0)
+          ) ;; if-stmt
+
+          ;; (if-stmt cond then else)
+          (if-stmt (string-eq head-val "if-stmt")
+            (do
+              (let if-cond Int32 (second-child a node))
+              (let if-then Int32 (third-child a node))
+              (let if-else Int32 (fourth-child a node))
+              ;; Compile condition
+              (compile-expr a if-cond env-names env-safe env-types declared struct-names struct-fields decls str-counter out temp fn-sig-names fn-sig-ret-types)
+              (let cond-t Int32 (- (load Int32 temp) 1))
+              ;; Convert to i1
+              (let cond-i1 Int32 (load Int32 temp))
+              (buffer-append-string out "  ")
+              (emit-temp out cond-i1)
+              (buffer-append-string out " = icmp ne i32 ")
+              (emit-temp out cond-t)
+              (buffer-append-string out ", 0\n")
+              (store Int32 temp (+ cond-i1 1))
+              ;; Generate labels
+              (let l-then Int32 (load Int32 temp))
+              (store Int32 temp (+ l-then 1))
+              (let l-else Int32 (load Int32 temp))
+              (store Int32 temp (+ l-else 1))
+              (let l-end Int32 (load Int32 temp))
+              (store Int32 temp (+ l-end 1))
+              ;; Branch
+              (buffer-append-string out "  br i1 ")
+              (emit-temp out cond-i1)
+              (buffer-append-string out ", label %L")
+              (buffer-append-string out (int-to-string l-then))
+              (buffer-append-string out ", label %L")
+              (buffer-append-string out (int-to-string l-else))
+              (buffer-append-string out "\n")
+              ;; Then block
+              (buffer-append-string out "L")
+              (buffer-append-string out (int-to-string l-then))
+              (buffer-append-string out ":\n")
+              (let then-last-reg Int32 (compile-expr a if-then env-names env-safe env-types declared struct-names struct-fields decls str-counter out temp fn-sig-names fn-sig-ret-types))
+              (buffer-append-string out "  br label %L")
+              (buffer-append-string out (int-to-string l-end))
+              (buffer-append-string out "\n")
+              ;; Else block
+              (buffer-append-string out "L")
+              (buffer-append-string out (int-to-string l-else))
+              (buffer-append-string out ":\n")
+              (if-stmt (!= if-else (- 0 1))
+                (compile-expr a if-else env-names env-safe env-types declared struct-names struct-fields decls str-counter out temp fn-sig-names fn-sig-ret-types)
+                (do 0)
+              )
+              (buffer-append-string out "  br label %L")
+              (buffer-append-string out (int-to-string l-end))
+              (buffer-append-string out "\n")
+              ;; End label
+              (buffer-append-string out "L")
+              (buffer-append-string out (int-to-string l-end))
+              (buffer-append-string out ":\n")
+              (return then-last-reg)
+            )
+            (do 0)
+          ) ;; if-stmt
+
+          ;; (while cond body)
+          (if-stmt (string-eq head-val "while")
+            (do
+              (let while-cond Int32 (second-child a node))
+              (let while-body Int32 (third-child a node))
+              ;; Generate labels
+              (let l-cond Int32 (load Int32 temp))
+              (store Int32 temp (+ l-cond 1))
+              (let l-body Int32 (load Int32 temp))
+              (store Int32 temp (+ l-body 1))
+              (let l-end Int32 (load Int32 temp))
+              (store Int32 temp (+ l-end 1))
+              ;; Jump to cond check
+              (buffer-append-string out "  br label %L")
+              (buffer-append-string out (int-to-string l-cond))
+              (buffer-append-string out "\n")
+              ;; Cond block
+              (buffer-append-string out "L")
+              (buffer-append-string out (int-to-string l-cond))
+              (buffer-append-string out ":\n")
+              (compile-expr a while-cond env-names env-safe env-types declared struct-names struct-fields decls str-counter out temp fn-sig-names fn-sig-ret-types)
+              (let cond-t Int32 (- (load Int32 temp) 1))
+              (let cond-i1 Int32 (load Int32 temp))
+              (buffer-append-string out "  ")
+              (emit-temp out cond-i1)
+              (buffer-append-string out " = icmp ne i32 ")
+              (emit-temp out cond-t)
+              (buffer-append-string out ", 0\n")
+              (store Int32 temp (+ cond-i1 1))
+              (buffer-append-string out "  br i1 ")
+              (emit-temp out cond-i1)
+              (buffer-append-string out ", label %L")
+              (buffer-append-string out (int-to-string l-body))
+              (buffer-append-string out ", label %L")
+              (buffer-append-string out (int-to-string l-end))
+              (buffer-append-string out "\n")
+              ;; Body block
+              (buffer-append-string out "L")
+              (buffer-append-string out (int-to-string l-body))
+              (buffer-append-string out ":\n")
+              (compile-expr a while-body env-names env-safe env-types declared struct-names struct-fields decls str-counter out temp fn-sig-names fn-sig-ret-types)
+              (buffer-append-string out "  br label %L")
+              (buffer-append-string out (int-to-string l-cond))
+              (buffer-append-string out "\n")
+              ;; End label
+              (buffer-append-string out "L")
+              (buffer-append-string out (int-to-string l-end))
+              (buffer-append-string out ":\n")
+              (return 0)
+            )
+            (do 0)
+          ) ;; if-stmt
+
+          ;; Address-of local binding.
+          (if-stmt (string-eq head-val "addr")
+            (return (compile-addr node a env-names env-safe env-types out temp))
+            (do 0)
+          ) ;; if-stmt
+          ;; Load/store/bitcast/get-field
+          (if-stmt (string-eq head-val "load")
+            (do
+              (let ty-node Int32 (second-child a node))
+              (let ptr-node Int32 (third-child a node))
+              (compile-expr a ptr-node env-names env-safe env-types declared struct-names struct-fields decls str-counter out temp fn-sig-names fn-sig-ret-types)
+              (let ptr-reg Int32 (- (load Int32 temp) 1))
+              (let reg Int32 (compile-load-node a ty-node ptr-reg out temp))
+              (return reg)
+            )
+            (do 0)
+          ) ;; if-stmt
+
+          (if-stmt (string-eq head-val "store")
+            (do
+              (let ty-node Int32 (second-child a node))
+              (let ptr-node Int32 (third-child a node))
+              (let val-node Int32 (fourth-child a node))
+              (compile-expr a val-node env-names env-safe env-types declared struct-names struct-fields decls str-counter out temp fn-sig-names fn-sig-ret-types)
+              (let val-reg Int32 (- (load Int32 temp) 1))
+              (compile-expr a ptr-node env-names env-safe env-types declared struct-names struct-fields decls str-counter out temp fn-sig-names fn-sig-ret-types)
+              (let ptr-reg Int32 (- (load Int32 temp) 1))
+              (compile-store-node a ty-node val-reg ptr-reg out)
+              (return val-reg)
+            )
+            (do 0)
+          ) ;; if-stmt
+
+          (if-stmt (string-eq head-val "bitcast")
+            (do
+              (let ty-node Int32 (second-child a node))
+              (let src-node Int32 (third-child a node))
+              (compile-expr a src-node env-names env-safe env-types declared struct-names struct-fields decls str-counter out temp fn-sig-names fn-sig-ret-types)
+              (let src-reg Int32 (- (load Int32 temp) 1))
+              (let reg Int32 (compile-bitcast-node a ty-node src-reg out temp))
+              (return reg)
+            )
+            (do 0)
+          ) ;; if-stmt
+
+          (if-stmt (string-eq head-val "get-field")
+            (do
+              ;; (get-field type-node field-index ptr-expr)
+              ;; GEP to field pointer, then load to get the field value
+              (let elem-ty-node Int32 (second-child a node))
+              (let idx-node Int32 (third-child a node))
+              (let ptr-node Int32 (fourth-child a node))
+              (let idx_str String (arena-value a idx-node))
+              (let struct-name String (get-struct-name-from-type-node a elem-ty-node))
+              ;; Compile pointer expression
+              (compile-expr a ptr-node env-names env-safe env-types declared struct-names struct-fields decls str-counter out temp fn-sig-names fn-sig-ret-types)
+              (let ptr-reg Int32 (- (load Int32 temp) 1))
+              ;; GEP to field
+              (let field-ptr Int32 (compile-get-field-node a elem-ty-node idx_str ptr-reg struct-names struct-fields out temp))
+              ;; Load the field value
+              (let fty String (struct-field-type struct-names struct-fields struct-name (string-to-int idx_str)))
+              (if-stmt (== (string-length fty) 0)
+                (set fty "Int32")
+                (set fty fty)
+              )
+              (let load-reg Int32 (load Int32 temp))
+              (buffer-append-string out "  ")
+              (emit-temp out load-reg)
+              (buffer-append-string out " = load ")
+              (buffer-append-string out (map-simple-type-name fty))
+              (buffer-append-string out ", ")
+              (buffer-append-string out (map-simple-type-name fty))
+              (buffer-append-string out "* ")
+              (emit-temp out field-ptr)
+              (buffer-append-string out "\n")
+              (store Int32 temp (+ load-reg 1))
+              (return load-reg)
+            )
+            (do 0)
+          ) ;; if-stmt
+
+          (if-stmt (string-eq head-val "set-field")
+            (do
+              ;; (set-field type-node field-index ptr-expr val-expr)
+              (let elem-ty-node Int32 (second-child a node))
+              (let idx-node Int32 (third-child a node))
+              (let ptr-node Int32 (fourth-child a node))
+              (let val-node Int32 (arena-next-sibling a ptr-node))
+              (let struct-name String (get-struct-name-from-type-node a elem-ty-node))
+              (let idx_str String (arena-value a idx-node))
+              ;; Compile pointer and value expressions
+              (compile-expr a ptr-node env-names env-safe env-types declared struct-names struct-fields decls str-counter out temp fn-sig-names fn-sig-ret-types)
+              (let ptr-reg Int32 (- (load Int32 temp) 1))
+              (compile-expr a val-node env-names env-safe env-types declared struct-names struct-fields decls str-counter out temp fn-sig-names fn-sig-ret-types)
+              (let val-reg Int32 (- (load Int32 temp) 1))
+              ;; Get field type for store instruction
+              (let field-ty String (struct-field-type struct-names struct-fields struct-name (string-to-int idx_str)))
+              (if-stmt (== (string-length field-ty) 0)
+                (set field-ty "Int32")
+                (do 0)
+              )
+              ;; GEP to field pointer
+              (let field-ptr Int32 (compile-get-field-node a elem-ty-node idx_str ptr-reg struct-names struct-fields out temp))
+              ;; Store value using the field type (not struct type)
+              (buffer-append-string out "  store ")
+              (buffer-append-string out (map-simple-type-name field-ty))
+              (buffer-append-string out " ")
+              (emit-temp out val-reg)
+              (buffer-append-string out ", ")
+              (buffer-append-string out (map-simple-type-name field-ty))
+              (buffer-append-string out "* ")
+              (emit-temp out field-ptr)
+              (buffer-append-string out "\n")
+              (return val-reg)
+            )
+            (do 0)
+          ) ;; if-stmt
+
+          (if-stmt (string-eq head-val "ptr-add")
+            (do
+              (let ty-node Int32 (second-child a node))
+              (let ptr-node Int32 (third-child a node))
+              (let idx-node Int32 (fourth-child a node))
+              (compile-expr a ptr-node env-names env-safe env-types declared struct-names struct-fields decls str-counter out temp fn-sig-names fn-sig-ret-types)
+              (let ptr-reg Int32 (- (load Int32 temp) 1))
+              (compile-expr a idx-node env-names env-safe env-types declared struct-names struct-fields decls str-counter out temp fn-sig-names fn-sig-ret-types)
+              (let idx-reg Int32 (- (load Int32 temp) 1))
+              (let reg Int32 (compile-ptr-add-node a ty-node ptr-reg idx-reg out temp))
+              (return reg)
+            )
+            (do 0)
+          ) ;; if-stmt
+
+          (if-stmt (string-eq head-val "make")
+            (do
+              (let ty-node Int32 (second-child a node))
+              (let struct-name String (get-struct-name-from-type-node a ty-node))
+              (let base Int32 (load Int32 temp))
+              (buffer-append-string out "  ")
+              (emit-temp out base)
+              (buffer-append-string out " = alloca %")
+              (buffer-append-string out (sanitize-name struct-name))
+              (buffer-append-string out "\n")
+              (store Int32 temp (+ base 1))
+              ;; Return a pointer to the struct (bitcast if needed)
+              (let result Int32 base)
+              ;; Populate fields - values are direct children after ty-node
+              (let field Int32 (third-child a node))
+              (let fidx Int32 0)
+              (while (!= field (- 0 1))
+                (do
+                  ;; Field IS the value directly (not wrapped in a list)
+                  (compile-expr a field env-names env-safe env-types declared struct-names struct-fields decls str-counter out temp fn-sig-names fn-sig-ret-types)
+                  (let val-reg Int32 (- (load Int32 temp) 1))
+                  (let ptr Int32 (compile-get-field-node a ty-node (int-to-string fidx) result struct-names struct-fields out temp))
+                  (let fty String (struct-field-type struct-names struct-fields struct-name fidx))
+                  (if-stmt (== (string-length fty) 0)
+                    (set fty "Int32")
+                    (set fty fty)
+                  )
+                  ;; Store value at field pointer (using simple type string for now)
+                  (buffer-append-string out "  store ")
+                  (buffer-append-string out (map-simple-type-name fty))
+                  (buffer-append-string out " ")
+                  (emit-temp out val-reg)
+                  (buffer-append-string out ", ")
+                  (buffer-append-string out (map-simple-type-name fty))
+                  (buffer-append-string out "* ")
+                  (emit-temp out ptr)
+                  (buffer-append-string out "\n")
+                  (set fidx (+ fidx 1))
+                  (set field (arena-next-sibling a field))
+                ) ;; do
+              ) ;; while
+              ;; Load the struct value from the alloca
+              (let ret Int32 (load Int32 temp))
+              (buffer-append-string out "  ")
+              (emit-temp out ret)
+              (buffer-append-string out " = load %")
+              (buffer-append-string out (sanitize-name struct-name))
+              (buffer-append-string out ", %")
+              (buffer-append-string out (sanitize-name struct-name))
+              (buffer-append-string out "* ")
+              (emit-temp out result)
+              (buffer-append-string out "\n")
+              (store Int32 temp (+ ret 1))
+              (return ret)
+            )
+            (do 0)
+          ) ;; if-stmt
+          ;; Binary arithmetic: (+ lhs rhs) etc.
+          (if-stmt
+            (||
+              (string-eq head-val "+")
+              (||
+                (string-eq head-val "-")
+                (||
+                  (string-eq head-val "*")
+                  (||
+                    (string-eq head-val "/")
+                    (||
+                      (string-eq head-val "==")
+                      (||
+                        (string-eq head-val "!=")
+                        (||
+                          (string-eq head-val "<")
+                          (||
+                            (string-eq head-val ">")
+                            (||
+                              (string-eq head-val "<=")
+                              (||
+                                (string-eq head-val ">=")
+                                (||
+                                  (string-eq head-val "&&")
+                                  (string-eq head-val "||")
+                                ) ;; ||
+                              ) ;; ||
+                            ) ;; ||
+                          ) ;; ||
+                        ) ;; ||
+                      ) ;; ||
+                    ) ;; ||
+                  ) ;; ||
+                ) ;; ||
+              ) ;; ||
+            ) ;; ||
+            (do
+              (let lhs Int32 (second-child a node))
+              (let rhs Int32 (third-child a node))
+              (compile-expr a lhs env-names env-safe env-types declared struct-names struct-fields decls str-counter out temp fn-sig-names fn-sig-ret-types)
+              (let lhs-t Int32 (- (load Int32 temp) 1))
+              (compile-expr a rhs env-names env-safe env-types declared struct-names struct-fields decls str-counter out temp fn-sig-names fn-sig-ret-types)
+              (let rhs-t Int32 (- (load Int32 temp) 1))
+              (if-stmt
+                (||
+                  (string-eq head-val "==")
+                  (||
+                    (string-eq head-val "!=")
+                    (||
+                      (string-eq head-val "<")
+                      (||
+                        (string-eq head-val ">")
+                        (||
+                          (string-eq head-val "<=")
+                          (||
+                            (string-eq head-val ">=")
+                            (||
+                              (string-eq head-val "&&")
+                              (string-eq head-val "||")
+                            ) ;; ||
+                          ) ;; ||
+                        ) ;; ||
+                      ) ;; ||
+                    ) ;; ||
+                  ) ;; ||
+                ) ;; ||
+                (do
+                  (if-stmt
+                    (||
+                      (string-eq head-val "&&")
+                      (string-eq head-val "||")
+                    ) ;; ||
+                    (do
+                      (let reg Int32 (compile-logical head-val lhs-t rhs-t out temp))
+                      (return reg)
+                    ) ;; do
+                    (do
+                      (let pred String "eq")
+                      (if-stmt (string-eq head-val "!=") (set pred "ne") (do 0))
+                      (if-stmt (string-eq head-val "<") (set pred "slt") (do 0))
+                      (if-stmt (string-eq head-val ">") (set pred "sgt") (do 0))
+                      (if-stmt (string-eq head-val "<=") (set pred "sle") (do 0))
+                      (if-stmt (string-eq head-val ">=") (set pred "sge") (do 0))
+                      (let reg Int32 (compile-icmp pred lhs-t rhs-t out temp))
+                      (return reg)
+                    ) ;; do
+                  ) ;; if-stmt
+                )
+                (do
+                  (let reg Int32 (compile-binary-arith head-val lhs-t rhs-t out temp))
+                  (return reg)
+                ) ;; do
+              ) ;; if-stmt
+            ) ;; do
+            (do
+              (if-stmt (string-eq head-val "ccall")
+                (return (compile-ccall node a env-names env-safe env-types declared struct-names struct-fields decls str-counter out temp fn-sig-names fn-sig-ret-types))
+                (do
+                  ;; (block stmt... expr) - sequence with implicit return
+                  ;; Block can contain let, set, etc statements, with final expression as result
+                  (if-stmt (string-eq head-val "block")
+                    (do
+                      (let child Int32 (arena-next-sibling a head))
+                      (let last-reg Int32 0)
+                      (while (!= child (- 0 1))
+                        (do
+                          ;; Check if it's a let statement
+                          (if-stmt (== (arena-kind a child) (node-kind-list))
+                            (do
+                              (let ch Int32 (arena-first-child a child))
+                              (if-stmt (!= ch (- 0 1))
+                                (do
+                                  (let chv String (arena-value a ch))
+                                  (if-stmt (string-eq chv "let")
+                                    (do
+                                      ;; Handle let: (let name type init body...)
+                                      (let let-name-node Int32 (second-child a child))
+                                      (let let-type-node Int32 (third-child a child))
+                                      (let let-init-node Int32 (fourth-child a child))
+                                      (let let-name String (arena-value a let-name-node))
+                                      (let let-safe String (sanitize-name let-name))
+                                      ;; Compile init first
+                                      (compile-expr a let-init-node env-names env-safe env-types declared struct-names struct-fields decls str-counter out temp fn-sig-names fn-sig-ret-types)
+                                      (let init-reg Int32 (- (load Int32 temp) 1))
+                                      ;; Add to env
+                                      (env-add env-names env-safe env-types let-name let-safe let-type-node)
+                                      ;; Emit alloca and store
+                                      (buffer-append-string out "  %")
+                                      (buffer-append-string out let-safe)
+                                      (buffer-append-string out " = alloca ")
+                                      (emit-type-node out a let-type-node)
+                                      (buffer-append-string out "\n")
+                                      (buffer-append-string out "  store ")
+                                      (emit-type-node out a let-type-node)
+                                      (buffer-append-string out " ")
+                                      (emit-temp out init-reg)
+                                      (buffer-append-string out ", ")
+                                      (emit-pointer-type-node out a let-type-node)
+                                      (buffer-append-string out " %")
+                                      (buffer-append-string out let-safe)
+                                      (buffer-append-string out "\n")
+                                      ;; Check for body (5-child let)
+                                      (let let-body-node Int32 (fifth-child a child))
+                                      (if-stmt (!= let-body-node (- 0 1))
+                                        ;; Compile body - it may contain statements
+                                        (set last-reg (compile-expr a let-body-node env-names env-safe env-types declared struct-names struct-fields decls str-counter out temp fn-sig-names fn-sig-ret-types))
+                                        (set last-reg init-reg)
+                                      )
+                                    )
+                                    ;; Check for other statement forms
+                                    (if-stmt (string-eq chv "do")
+                                      (do
+                                        ;; (do stmt...) - iterate over children
+                                        (let do-child Int32 (arena-next-sibling a ch))
+                                        (while (!= do-child (- 0 1))
+                                          (do
+                                            (set last-reg (compile-expr a do-child env-names env-safe env-types declared struct-names struct-fields decls str-counter out temp fn-sig-names fn-sig-ret-types))
+                                            (set do-child (arena-next-sibling a do-child))
+                                          )
+                                        )
+                                      )
+                                      (if-stmt (string-eq chv "set")
+                                        (do
+                                          ;; (set name expr)
+                                          (let set-name-node Int32 (second-child a child))
+                                          (let set-expr-node Int32 (third-child a child))
+                                          (let set-name String (arena-value a set-name-node))
+                                          (let set-safe String (env-find-safe env-names env-safe set-name))
+                                          (let set-ty-node Int32 (env-find-type env-names env-types set-name))
+                                          (compile-expr a set-expr-node env-names env-safe env-types declared struct-names struct-fields decls str-counter out temp fn-sig-names fn-sig-ret-types)
+                                          (let val-reg Int32 (- (load Int32 temp) 1))
+                                          (buffer-append-string out "  store ")
+                                          (emit-type-node out a set-ty-node)
+                                          (buffer-append-string out " ")
+                                          (emit-temp out val-reg)
+                                          (buffer-append-string out ", ")
+                                          (emit-pointer-type-node out a set-ty-node)
+                                          (buffer-append-string out " %")
+                                          (buffer-append-string out set-safe)
+                                          (buffer-append-string out "\n")
+                                          (set last-reg val-reg)
+                                        )
+                                        (if-stmt (string-eq chv "if-stmt")
+                                          (do
+                                            ;; (if-stmt cond then else)
+                                            (let if-cond Int32 (second-child a child))
+                                            (let if-then Int32 (third-child a child))
+                                            (let if-else Int32 (fourth-child a child))
+                                            ;; Compile condition
+                                            (compile-expr a if-cond env-names env-safe env-types declared struct-names struct-fields decls str-counter out temp fn-sig-names fn-sig-ret-types)
+                                            (let cond-t Int32 (- (load Int32 temp) 1))
+                                            ;; Convert to i1
+                                            (let cond-i1 Int32 (load Int32 temp))
+                                            (buffer-append-string out "  ")
+                                            (emit-temp out cond-i1)
+                                            (buffer-append-string out " = icmp ne i32 ")
+                                            (emit-temp out cond-t)
+                                            (buffer-append-string out ", 0\n")
+                                            (store Int32 temp (+ cond-i1 1))
+                                            ;; Generate labels using temp counter to avoid collisions
+                                            (let l-then Int32 (load Int32 temp))
+                                            (store Int32 temp (+ l-then 1))
+                                            (let l-else Int32 (load Int32 temp))
+                                            (store Int32 temp (+ l-else 1))
+                                            (let l-end Int32 (load Int32 temp))
+                                            (store Int32 temp (+ l-end 1))
+                                            ;; Branch
+                                            (buffer-append-string out "  br i1 ")
+                                            (emit-temp out cond-i1)
+                                            (buffer-append-string out ", label %L")
+                                            (buffer-append-string out (int-to-string l-then))
+                                            (buffer-append-string out ", label %L")
+                                            (buffer-append-string out (int-to-string l-else))
+                                            (buffer-append-string out "\n")
+                                            ;; Then block
+                                            (buffer-append-string out "L")
+                                            (buffer-append-string out (int-to-string l-then))
+                                            (buffer-append-string out ":\n")
+                                            (set last-reg (compile-expr a if-then env-names env-safe env-types declared struct-names struct-fields decls str-counter out temp fn-sig-names fn-sig-ret-types))
+                                            (buffer-append-string out "  br label %L")
+                                            (buffer-append-string out (int-to-string l-end))
+                                            (buffer-append-string out "\n")
+                                            ;; Else block
+                                            (buffer-append-string out "L")
+                                            (buffer-append-string out (int-to-string l-else))
+                                            (buffer-append-string out ":\n")
+                                            (if-stmt (!= if-else (- 0 1))
+                                              (set last-reg (compile-expr a if-else env-names env-safe env-types declared struct-names struct-fields decls str-counter out temp fn-sig-names fn-sig-ret-types))
+                                              (do 0)
+                                            )
+                                            (buffer-append-string out "  br label %L")
+                                            (buffer-append-string out (int-to-string l-end))
+                                            (buffer-append-string out "\n")
+                                            ;; End label
+                                            (buffer-append-string out "L")
+                                            (buffer-append-string out (int-to-string l-end))
+                                            (buffer-append-string out ":\n")
+                                          )
+                                          (if-stmt (string-eq chv "while")
+                                            (do
+                                              ;; (while cond body)
+                                              (let while-cond Int32 (second-child a child))
+                                              (let while-body Int32 (third-child a child))
+                                              ;; Generate labels
+                                              (let l-cond Int32 (load Int32 temp))
+                                              (store Int32 temp (+ l-cond 1))
+                                              (let l-body Int32 (load Int32 temp))
+                                              (store Int32 temp (+ l-body 1))
+                                              (let l-end Int32 (load Int32 temp))
+                                              (store Int32 temp (+ l-end 1))
+                                              ;; Jump to cond check
+                                              (buffer-append-string out "  br label %L")
+                                              (buffer-append-string out (int-to-string l-cond))
+                                              (buffer-append-string out "\n")
+                                              ;; Cond block
+                                              (buffer-append-string out "L")
+                                              (buffer-append-string out (int-to-string l-cond))
+                                              (buffer-append-string out ":\n")
+                                              (compile-expr a while-cond env-names env-safe env-types declared struct-names struct-fields decls str-counter out temp fn-sig-names fn-sig-ret-types)
+                                              (let cond-t Int32 (- (load Int32 temp) 1))
+                                              (let cond-i1 Int32 (load Int32 temp))
+                                              (buffer-append-string out "  ")
+                                              (emit-temp out cond-i1)
+                                              (buffer-append-string out " = icmp ne i32 ")
+                                              (emit-temp out cond-t)
+                                              (buffer-append-string out ", 0\n")
+                                              (store Int32 temp (+ cond-i1 1))
+                                              (buffer-append-string out "  br i1 ")
+                                              (emit-temp out cond-i1)
+                                              (buffer-append-string out ", label %L")
+                                              (buffer-append-string out (int-to-string l-body))
+                                              (buffer-append-string out ", label %L")
+                                              (buffer-append-string out (int-to-string l-end))
+                                              (buffer-append-string out "\n")
+                                              ;; Body block
+                                              (buffer-append-string out "L")
+                                              (buffer-append-string out (int-to-string l-body))
+                                              (buffer-append-string out ":\n")
+                                              (set last-reg (compile-expr a while-body env-names env-safe env-types declared struct-names struct-fields decls str-counter out temp fn-sig-names fn-sig-ret-types))
+                                              (buffer-append-string out "  br label %L")
+                                              (buffer-append-string out (int-to-string l-cond))
+                                              (buffer-append-string out "\n")
+                                              ;; End label
+                                              (buffer-append-string out "L")
+                                              (buffer-append-string out (int-to-string l-end))
+                                              (buffer-append-string out ":\n")
+                                            )
+                                            ;; Not a recognized stmt - compile as expression
+                                            (set last-reg (compile-expr a child env-names env-safe env-types declared struct-names struct-fields decls str-counter out temp fn-sig-names fn-sig-ret-types))
+                                          )
+                                        )
+                                      )
+                                    )
+                                  )
+                                )
+                                (set last-reg (compile-expr a child env-names env-safe env-types declared struct-names struct-fields decls str-counter out temp fn-sig-names fn-sig-ret-types))
+                              )
+                            )
+                            ;; Not a list - compile as expression
+                            (set last-reg (compile-expr a child env-names env-safe env-types declared struct-names struct-fields decls str-counter out temp fn-sig-names fn-sig-ret-types))
+                          )
+                          (set child (arena-next-sibling a child))
+                        )
+                      )
+                      (return last-reg)
+                    )
+                    (do 0)
+                  )
+                  ;; General function call: (fn-name arg1 arg2 ...)
+                  ;; Compile arguments and track their types
+                  (let arg Int32 (arena-next-sibling a head))
+                  (let arg-regs ArrayInt32 (array-i32-new))
+                  (let arg-types ArrayString (array-str-new))
+                  (let max-args Int32 (- 0 1))
+                  (if-stmt (string-eq head-val "buffer-append-string")
+                    (set max-args 2)
+                    (do 0)
+                  )
+                  (while (!= arg (- 0 1))
+                    (do
+                      (if-stmt (&& (!= max-args (- 0 1)) (>= (array-i32-len arg-regs) max-args))
+                        (set arg (- 0 1))
+                        (do
+                          ;; Infer type before compiling
+                          (let arg-type String (infer-arg-type a arg env-names env-types fn-sig-names fn-sig-ret-types))
+                          (compile-expr a arg env-names env-safe env-types declared struct-names struct-fields decls str-counter out temp fn-sig-names fn-sig-ret-types)
+                          (array-i32-append arg-regs (- (load Int32 temp) 1))
+                          (array-str-append arg-types arg-type)
+                          (set arg (arena-next-sibling a arg))
+                        )
+                      )
+                    )
+                  )
+                  ;; Look up function return type
+                  (let ret-type String (lookup-fn-ret-type a head-val fn-sig-names fn-sig-ret-types))
+                  ;; Emit call
+                  (let result-reg Int32 (load Int32 temp))
+                  (buffer-append-string out "  ")
+                  (emit-temp out result-reg)
+                  (buffer-append-string out " = call ")
+                  (buffer-append-string out ret-type)
+                  (buffer-append-string out " @")
+                  (buffer-append-string out head-val)
+                  (buffer-append-string out "(")
+                  (let i Int32 0)
+                  (let argc Int32 (array-i32-len arg-regs))
+                  (while (< i argc)
+                    (do
+                      (if-stmt (> i 0)
+                        (buffer-append-string out ", ")
+                        (do 0)
+                      )
+                      (buffer-append-string out (array-str-get arg-types i))
+                      (buffer-append-string out " ")
+                      (emit-temp out (array-i32-get arg-regs i))
+                      (set i (+ i 1))
+                    )
+                  )
+                  (buffer-append-string out ")\n")
+                  (store Int32 temp (+ result-reg 1))
+                  (return result-reg)
+                ) ;; do
+              ) ;; if-stmt
+            ) ;; do
+          ) ;; if-stmt
+        ) ;; do
+      ) ;; if-stmt
+    ) ;; body
+  ) ;; fn compile-expr

@@ -1,0 +1,175 @@
+(module
+  (name "stage1-ir-types")
+  (doc "Type mapping and struct layout emission helpers used by IR generation.")
+
+  (include "../prelude.weave")
+  (include "./util.weave")
+
+  (fn map-type-node
+    (doc "Lower a type AST node into an LLVM spelling.")
+    (params (a (ptr Arena)) (node Int32)) (returns String)
+    (body (do
+      (if-stmt (== (arena-kind a node) (node-kind-atom))
+        (do
+          ;; Atom type: Int32, String, etc.
+          (let name String (arena-value a node))
+          (if-stmt (string-eq name "Int32") (return "i32") (do 0))
+          (if-stmt (string-eq name "Int8") (return "i8") (do 0))
+          (if-stmt (string-eq name "Int64") (return "i64") (do 0))
+          (if-stmt (string-eq name "String") (return "i8*") (do 0))
+          (if-stmt (string-eq name "Void") (return "void") (do 0))
+          ;; Common aliases
+          (if-stmt (string-eq name "ExitCode") (return "i32") (do 0))
+          (if-stmt (string-eq name "Buffer") (return "i8*") (do 0))
+          (if-stmt (string-eq name "ArrayString") (return "i8*") (do 0))
+          (if-stmt (string-eq name "ArrayInt32") (return "i8*") (do 0))
+          (if-stmt (string-eq name "NodeKind") (return "i32") (do 0))
+          ;; Unknown atom - treat as user-defined struct type, prefix with %
+          (let b Buffer (buffer-new))
+          (buffer-append-string b "%")
+          (buffer-append-string b (sanitize-name name))
+          (return (buffer-to-string b))
+        )
+        (do
+          ;; List type: (ptr T) or (struct Name)
+          (let head Int32 (arena-first-child a node))
+          (if-stmt (== head (- 0 1)) (return "void") (do 0))
+          (let head-val String (arena-value a head))
+          (if-stmt (string-eq head-val "ptr")
+            (do
+              ;; (ptr InnerType) -> mapped(InnerType)*
+              (let inner Int32 (arena-next-sibling a head))
+              (if-stmt (== inner (- 0 1)) (return "i8*") (do 0))
+              (let mapped String (map-type-node a inner))
+              (let b Buffer (buffer-new))
+              (buffer-append-string b mapped)
+              (buffer-append-string b "*")
+              (return (buffer-to-string b))
+            )
+            (do 0)
+          )
+          (if-stmt (string-eq head-val "struct")
+            (do
+              ;; (struct Name) -> %Name
+              (let name-node Int32 (arena-next-sibling a head))
+              (if-stmt (== name-node (- 0 1)) (return "%unknown") (do 0))
+              (let struct-name String (arena-value a name-node))
+              (let b Buffer (buffer-new))
+              (buffer-append-string b "%")
+              (buffer-append-string b (sanitize-name struct-name))
+              (return (buffer-to-string b))
+            )
+            (do 0)
+          )
+          ;; Unknown list form, return head value
+          (return head-val)
+        )
+      )
+    )) ;; body
+  ) ;; fn map-type-node
+
+  (fn emit-type-node
+    (doc "Append the mapped type from an AST node to the buffer.")
+    (params (out Buffer) (a (ptr Arena)) (node Int32)) (returns Int32)
+    (body (do
+      (buffer-append-string out (map-type-node a node))
+      (return 0)
+    )) ;; body
+  ) ;; fn emit-type-node
+
+  (fn emit-pointer-type-node
+    (doc "Append mapped pointer type from AST node (adds a trailing *).")
+    (params (out Buffer) (a (ptr Arena)) (node Int32)) (returns Int32)
+    (body (do
+      (emit-type-node out a node)
+      (buffer-append-string out "*")
+      (return 0)
+    )) ;; body
+  ) ;; fn emit-pointer-type-node
+
+  (fn map-simple-type-name
+    (doc "Map simple atom type names to LLVM (for struct field emission only).")
+    (params (name String)) (returns String)
+    (body (do
+      (if-stmt (string-eq name "Int32") (return "i32") (do 0))
+      (if-stmt (string-eq name "Int8") (return "i8") (do 0))
+      (if-stmt (string-eq name "Int64") (return "i64") (do 0))
+      (if-stmt (string-eq name "String") (return "i8*") (do 0))
+      (if-stmt (string-eq name "Void") (return "void") (do 0))
+      (if-stmt (string-eq name "Buffer") (return "i8*") (do 0))
+      (if-stmt (string-eq name "ArrayString") (return "i8*") (do 0))
+      (if-stmt (string-eq name "ArrayInt32") (return "i8*") (do 0))
+      (if-stmt (string-eq name "Arena") (return "i8*") (do 0))
+      (if-stmt (string-eq name "NodeKind") (return "i32") (do 0))
+      ;; User-defined struct type - return as %Name
+      (let b Buffer (buffer-new))
+      (buffer-append-string b "%")
+      (buffer-append-string b (sanitize-name name))
+      (return (buffer-to-string b))
+    )) ;; body
+  ) ;; fn map-simple-type-name
+
+  (fn emit-struct-defs
+    (doc "Emit `%Name = type { ... }` for collected struct declarations.")
+    (params (out Buffer) (names ArrayString) (fields ArrayString)) (returns Int32)
+    (body (do
+      (let i Int32 0)
+      (while (< i (array-str-len names))
+        (do
+          (let n String (array-str-get names i))
+          (let fl String (array-str-get fields i))
+          (buffer-append-string out "%")
+          (buffer-append-string out (sanitize-name n))
+          (buffer-append-string out " = type { ")
+          (let j Int32 0)
+          (let start Int32 0)
+          (let len Int32 (string-length fl))
+          (let first Int32 1)
+          (while (<= j len)
+            (do
+              (if-stmt (|| (== j len) (== (string-char-at fl j) 44))
+                (do
+                  (if-stmt (> j start)
+                    (do
+                      (let entry String (string-slice fl start (- j start)))
+                      ;; entry is "fieldname:Type", extract the Type part after colon
+                      (let entry-len Int32 (string-length entry))
+                      (let colon-pos Int32 (- 0 1))
+                      (let ci Int32 0)
+                      (while (< ci entry-len)
+                        (do
+                          (if-stmt (== (string-char-at entry ci) 58) ;; ':'
+                            (do
+                              (set colon-pos ci)
+                              (set ci entry-len) ;; break
+                            )
+                            (set ci (+ ci 1))
+                          )
+                        )
+                      )
+                      (let ty String entry)
+                      (if-stmt (>= colon-pos 0)
+                        (set ty (string-slice entry (+ colon-pos 1) (- entry-len (+ colon-pos 1))))
+                        (do 0)
+                      )
+                      (if-stmt (== first 0) (buffer-append-string out ", ") (do 0))
+                      (buffer-append-string out (map-simple-type-name ty))
+                      (set first 0)
+                    )
+                    (do 0)
+                  ) ;; if-stmt
+                  (set start (+ j 1))
+                )
+                (do 0)
+              ) ;; if-stmt
+              (set j (+ j 1))
+            ) ;; while
+          ) ;; while
+          (buffer-append-string out " }\n")
+          (set i (+ i 1))
+        ) ;; do
+      ) ;; while
+      (return 0)
+    )) ;; body
+  ) ;; fn emit-struct-defs
+) ;; module

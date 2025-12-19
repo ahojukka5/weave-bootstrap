@@ -1,0 +1,88 @@
+(module
+  (name "stage1-ir-main")
+  (doc "Entry point that lowers parsed S-expressions into LLVM IR.")
+
+  (include "../prelude.weave")
+  (include "../arena.weave")
+  (include "../debug.weave")
+  (include "./emit.weave")
+  (include "./util.weave")
+  (include "./expr.weave")
+  (include "./stmt.weave")
+  (include "./ir_runtime.weave")
+  (include "./ir_util.weave")
+  (include "./ir_fns.weave")
+
+  (fn generate-ir
+    (doc "Builds decls + all function IR from the parsed arena.")
+    (params
+      (a (ptr Arena))
+      (root Int32)
+      (out Buffer)
+      (token-count Int32)
+    )
+    (returns Int32)
+    (body
+      (do
+        (let decls Buffer (buffer-new))
+        (let fn-out Buffer (buffer-new))
+        (let env-names ArrayString (array-str-new))
+        (let env-safe ArrayString (array-str-new))
+        (let env-types ArrayInt32 (array-i32-new))
+        (let struct-names ArrayString (array-str-new))
+        (let struct-fields ArrayString (array-str-new))
+        
+        ;; Debug: report child count and dump heads
+        (buffer-append-string fn-out "; debug: child-count: ")
+        (buffer-append-string fn-out (int-to-string (count-children a root)))
+        (buffer-append-string fn-out "\n; debug: root children:\n")
+        (let ch Int32 (arena-first-child a root))
+        (while (!= ch (- 0 1))
+          (do
+            (if-stmt (== (arena-kind a ch) (node-kind-list))
+              (do
+                (let h Int32 (arena-first-child a ch))
+                (if-stmt (!= h (- 0 1))
+                  (if-stmt (== (arena-kind a h) (node-kind-atom))
+                    (do
+                      (buffer-append-string fn-out "; head: ")
+                      (buffer-append-string fn-out (arena-value a h))
+                      (buffer-append-string fn-out "\n")
+                    )
+                    (do 0)
+                  )
+                  (do 0)
+                )
+              )
+              (do
+                (buffer-append-string fn-out "; atom-child\n")
+              )
+            )
+            (set ch (arena-next-sibling a ch))
+          )
+        )
+
+        ;; Collect function signatures for call type inference
+        (let fn-sig-names ArrayString (array-str-new))
+        (let fn-sig-ret-types ArrayInt32 (array-i32-new))
+        (collect-fn-sigs a root fn-sig-names fn-sig-ret-types)
+
+        (collect-structs a root struct-names struct-fields)
+        (emit-struct-defs decls struct-names struct-fields)
+        (let declared ArrayString (array-str-new))
+        ;; Seed runtime decls we rely on
+        (emit-runtime-decl "weave_get_cli_string" "declare i8* @weave_get_cli_string(i8*)" decls declared)
+        (emit-runtime-decl "weave_read_file" "declare i8* @weave_read_file(i8*)" decls declared)
+        (emit-runtime-decl "weave_write_file" "declare i32 @weave_write_file(i8*, i8*)" decls declared)
+        (let str-counter Int32 0)
+
+        ;; Compile all fn and entry definitions
+        (compile-all-fns a root declared struct-names struct-fields decls (addr str-counter) fn-out fn-sig-names fn-sig-ret-types)
+
+        (buffer-append-string out (buffer-to-string decls))
+        (buffer-append-string out (buffer-to-string fn-out))
+        (return 0)
+      )
+    )
+  )
+)

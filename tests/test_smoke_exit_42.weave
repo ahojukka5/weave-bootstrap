@@ -1,0 +1,17 @@
+;; Smoke test for bootstrap tests
+;; Purpose: Verify the test harness can compile and run a trivial program
+;; Behavior: Program exits with code 42 when run
+
+(program
+  (name "bootstrap-test-smoke-exit-42")
+  (version "0.1")
+
+  (type Int32 (primitive signed 32))
+  (type ExitCode (alias Int32))
+
+  ;; Main entry point: return 42 to signal success
+  (entry main
+    (params ())
+    (returns ExitCode)
+    (body
+      (return 42))))

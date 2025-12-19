@@ -1,0 +1,320 @@
+;; Expression type checking
+
+  (fn tc-expr
+    (doc "Check expressions recursively.")
+    (params
+      (a (ptr Arena))
+      (node Int32)
+      (names ArrayString)
+      (param-counts ArrayInt32)
+      (struct-names ArrayString)
+      (struct-fields ArrayString)
+    )
+    (returns Int32)
+    (body
+      (if-stmt (== (arena-kind a node) (node-kind-atom))
+        (return 0)
+        (do
+          (let head Int32 (arena-first-child a node))
+          (if-stmt (== head (- 0 1)) (return 0) (do 0))
+          (let head-val String (arena-value a head))
+          (if-stmt (string-eq head-val "doc") (return 0) (do 0))
+          (let argc Int32 (child-count a node))
+          (if-stmt
+            (||
+              (string-eq head-val "params")
+              (|| (string-eq head-val "returns") (string-eq head-val "args"))
+            )
+            (return 0)
+            (do 0)
+          )
+          ;; Type expressions - skip them in expression checking
+          (if-stmt (|| (string-eq head-val "ptr") (string-eq head-val "struct"))
+            (return 0)
+            (do 0)
+          )
+          (if-stmt (string-eq head-val "addr")
+            (do
+              (if-stmt (!= (child-count a node) 1) (return (tc-error "Arity mismatch in addr")) (do 0))
+              (return (tc-expr a (second-child a node) names param-counts struct-names struct-fields))
+            )
+            (do 0)
+          )
+
+          (if-stmt (string-eq head-val "load")
+            (do
+              (if-stmt (!= (child-count a node) 2) (return (tc-error "Arity mismatch in load")) (do 0))
+              (let ty-node Int32 (second-child a node))
+              (let ptr-node Int32 (third-child a node))
+              (let rc Int32 (tc-expr a ty-node names param-counts struct-names struct-fields))
+              (if-stmt (!= rc 0) (return rc) (do 0))
+              (return (tc-expr a ptr-node names param-counts struct-names struct-fields))
+            )
+            (do 0)
+          )
+
+          (if-stmt (string-eq head-val "store")
+            (do
+              (if-stmt (!= (child-count a node) 3) (return (tc-error "Arity mismatch in store")) (do 0))
+              (let ty-node Int32 (second-child a node))
+              (let val-node Int32 (third-child a node))
+              (let ptr-node Int32 (fourth-child a node))
+              (let rc1 Int32 (tc-expr a ty-node names param-counts struct-names struct-fields))
+              (if-stmt (!= rc1 0) (return rc1) (do 0))
+              (let rc2 Int32 (tc-expr a val-node names param-counts struct-names struct-fields))
+              (if-stmt (!= rc2 0) (return rc2) (do 0))
+              (return (tc-expr a ptr-node names param-counts struct-names struct-fields))
+            )
+            (do 0)
+          )
+
+          (if-stmt (string-eq head-val "bitcast")
+            (do
+              (if-stmt (!= (child-count a node) 2) (return (tc-error "Arity mismatch in bitcast")) (do 0))
+              (let ty-node Int32 (second-child a node))
+              (let src-node Int32 (third-child a node))
+              (let rc1 Int32 (tc-expr a ty-node names param-counts struct-names struct-fields))
+              (if-stmt (!= rc1 0) (return rc1) (do 0))
+              (return (tc-expr a src-node names param-counts struct-names struct-fields))
+            )
+            (do 0)
+          )
+
+          (if-stmt (string-eq head-val "get-field")
+            (do
+              ;; (get-field struct-type idx ptr) - 3 children after head
+              (if-stmt (!= (child-count a node) 3) (return (tc-error "Arity mismatch in get-field")) (do 0))
+              (let struct-ty-node Int32 (second-child a node))
+              (let idx-node Int32 (third-child a node))
+              (let ptr-node Int32 (fourth-child a node))
+              ;; struct-ty-node is (struct Name), skip it for typechecking
+              ;; Just check the idx and ptr
+              (let rc2 Int32 (tc-expr a idx-node names param-counts struct-names struct-fields))
+              (if-stmt (!= rc2 0) (return rc2) (do 0))
+              ;; Get struct name from (struct Name) or just Name
+              (let sname String "")
+              (if-stmt (== (arena-kind a struct-ty-node) (node-kind-list))
+                (do
+                  ;; (struct Name) - get the second child
+                  (let name-node Int32 (second-child a struct-ty-node))
+                  (if-stmt (!= name-node (- 0 1))
+                    (set sname (arena-value a name-node))
+                    (do 0)
+                  )
+                )
+                ;; Atom - direct struct name
+                (set sname (arena-value a struct-ty-node))
+              )
+              (let fty String (struct-field-type struct-names struct-fields sname (string-to-int (arena-value a idx-node))))
+              (if-stmt (== (string-length fty) 0) (return (tc-error "Unknown struct field")) (do 0))
+              (return (tc-expr a ptr-node names param-counts struct-names struct-fields))
+            )
+            (do 0)
+          )
+
+          (if-stmt (string-eq head-val "set-field")
+            (do
+              ;; (set-field struct-type idx ptr val) - 4 children after head
+              (if-stmt (!= (child-count a node) 4) (return (tc-error "Arity mismatch in set-field")) (do 0))
+              (let struct-ty-node Int32 (second-child a node))
+              (let idx-node Int32 (third-child a node))
+              (let ptr-node Int32 (fourth-child a node))
+              (let val-node Int32 (fifth-child a node))
+              ;; Check idx and ptr and val
+              (let rc2 Int32 (tc-expr a idx-node names param-counts struct-names struct-fields))
+              (if-stmt (!= rc2 0) (return rc2) (do 0))
+              ;; Get struct name from (struct Name) or just Name
+              (let sname String "")
+              (if-stmt (== (arena-kind a struct-ty-node) (node-kind-list))
+                (do
+                  ;; (struct Name) - get the second child
+                  (let name-node Int32 (second-child a struct-ty-node))
+                  (if-stmt (!= name-node (- 0 1))
+                    (set sname (arena-value a name-node))
+                    (do 0)
+                  )
+                )
+                ;; Atom - direct struct name
+                (set sname (arena-value a struct-ty-node))
+              )
+              (let fty String (struct-field-type struct-names struct-fields sname (string-to-int (arena-value a idx-node))))
+              (if-stmt (== (string-length fty) 0) (return (tc-error "Unknown struct field")) (do 0))
+              (let rc3 Int32 (tc-expr a ptr-node names param-counts struct-names struct-fields))
+              (if-stmt (!= rc3 0) (return rc3) (do 0))
+              (let rc4 Int32 (tc-expr a val-node names param-counts struct-names struct-fields))
+              (if-stmt (!= rc4 0) (return rc4) (do 0))
+              (return rc4)
+            )
+            (do 0)
+          )
+
+          (if-stmt (string-eq head-val "ptr-add")
+            (do
+              (if-stmt (!= (child-count a node) 3) (return (tc-error "Arity mismatch in ptr-add")) (do 0))
+              (let ty-node Int32 (second-child a node))
+              (let ptr-node Int32 (third-child a node))
+              (let idx-node Int32 (fourth-child a node))
+              (let rc1 Int32 (tc-expr a ty-node names param-counts struct-names struct-fields))
+              (if-stmt (!= rc1 0) (return rc1) (do 0))
+              (let rc2 Int32 (tc-expr a ptr-node names param-counts struct-names struct-fields))
+              (if-stmt (!= rc2 0) (return rc2) (do 0))
+              (return (tc-expr a idx-node names param-counts struct-names struct-fields))
+            )
+            (do 0)
+          )
+
+          (if-stmt (string-eq head-val "make")
+            (do
+              (if-stmt (< (child-count a node) 1) (return (tc-error "Arity mismatch in make")) (do 0))
+              (let ty-node Int32 (second-child a node))
+              (let rc Int32 (tc-expr a ty-node names param-counts struct-names struct-fields))
+              (if-stmt (!= rc 0) (return rc) (do 0))
+              ;; Extract struct name from ty-node
+              ;; ty-node may be (struct Name) or atom like Struct<Name>
+              (let sname String "")
+              (if-stmt (== (arena-kind a ty-node) (node-kind-list))
+                (do
+                  ;; (struct Name) form
+                  (if-stmt (is-list-with-head a ty-node "struct")
+                    (do
+                      (let name-node Int32 (second-child a ty-node))
+                      (if-stmt (!= name-node (- 0 1))
+                        (set sname (arena-value a name-node))
+                        (do 0)
+                      )
+                    )
+                    (do 0)
+                  )
+                )
+                (do
+                  ;; atom form: Struct<Name>
+                  (let base String (arena-value a ty-node))
+                  (if-stmt (string-starts-with base "Struct<")
+                    (set sname (string-slice base 7 (- (string-length base) 8)))
+                    (set sname base)
+                  )
+                )
+              )
+              (let field Int32 (third-child a node))
+              (let idx Int32 0)
+              (while (!= field (- 0 1))
+                (do
+                  (let fty String (struct-field-type struct-names struct-fields sname idx))
+                  (if-stmt (== (string-length fty) 0) (return (tc-error "Unknown struct field")) (do 0))
+                  ;; field IS the value directly (not wrapped in a list)
+                  (let frc Int32 (tc-expr a field names param-counts struct-names struct-fields))
+                  (if-stmt (!= frc 0) (return frc) (do 0))
+                  (set idx (+ idx 1))
+                  (set field (arena-next-sibling a field))
+                )
+              )
+              (return 0)
+            )
+            (do 0)
+          )
+
+          (if-stmt (string-eq head-val "ccall")
+            (do
+              (let c Int32 (arena-first-child a node))
+              (while (!= c (- 0 1))
+                (do
+                  (let rc Int32 (tc-expr a c names param-counts struct-names struct-fields))
+                  (if-stmt (!= rc 0) (return rc) (do 0))
+                  (set c (arena-next-sibling a c))
+                )
+              )
+              (return 0)
+            )
+            (do 0)
+          )
+
+          ;; (block expr...) - sequence with implicit return of last expr
+          (if-stmt (string-eq head-val "block")
+            (do
+              (let c Int32 (arena-next-sibling a head))
+              (while (!= c (- 0 1))
+                (do
+                  (let rc Int32 (tc-expr a c names param-counts struct-names struct-fields))
+                  (if-stmt (!= rc 0) (return rc) (do 0))
+                  (set c (arena-next-sibling a c))
+                )
+              )
+              (return 0)
+            )
+            (do 0)
+          )
+
+          (if-stmt
+            (||
+              (string-eq head-val "+")
+              (||
+                (string-eq head-val "-")
+                (||
+                  (string-eq head-val "*")
+                  (||
+                    (string-eq head-val "/")
+                    (||
+                      (string-eq head-val "==")
+                      (||
+                        (string-eq head-val "!=")
+                        (||
+                          (string-eq head-val "<")
+                          (||
+                            (string-eq head-val ">")
+                            (||
+                              (string-eq head-val "<=")
+                              (||
+                                (string-eq head-val ">=")
+                                (||
+                                  (string-eq head-val "&&")
+                                  (string-eq head-val "||")
+                                )
+                              )
+                            )
+                          )
+                        )
+                      )
+                    )
+                  )
+                )
+              )
+            )
+            (do
+              (let lhs Int32 (second-child a node))
+              (let rhs Int32 (third-child a node))
+              (if-stmt (!= (child-count a node) 2) (return (tc-error "Arity mismatch in binary op")) (do 0))
+              (let rc1 Int32 (tc-expr a lhs names param-counts struct-names struct-fields))
+              (if-stmt (!= rc1 0) (return rc1) (do 0))
+              (return (tc-expr a rhs names param-counts struct-names struct-fields))
+            )
+            (do 0)
+          )
+
+          (let sig-idx Int32 (sig-find names head-val))
+          (if-stmt (== sig-idx (- 0 1))
+            (if-stmt (== (is-builtin head-val) 1)
+              (return 0)
+              (return (tc-error (string-concat "Unknown function: " head-val)))
+            )
+            (do
+              (let expected Int32 (array-i32-get param-counts sig-idx))
+              (let cnt Int32 0)
+              (let arg Int32 (arena-next-sibling a head))
+              (while (!= arg (- 0 1))
+                (do
+                  (let rc Int32 (tc-expr a arg names param-counts struct-names struct-fields))
+                  (if-stmt (!= rc 0) (return rc) (do 0))
+                  (set cnt (+ cnt 1))
+                  (set arg (arena-next-sibling a arg))
+                )
+              )
+              (if-stmt (!= cnt expected)
+                (return (tc-error "Arity mismatch in call"))
+                (return 0)
+              )
+            )
+          )
+        )
+      )
+    )
+  )

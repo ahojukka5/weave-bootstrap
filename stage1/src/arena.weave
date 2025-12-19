@@ -1,0 +1,147 @@
+(module
+  (name "stage1-arena")
+  (doc "Grow-only arena storing the parsed S-expression tree.")
+
+  (include "prelude.weave")
+
+  (type NodeKind
+    (alias Int32)
+  ) ;; type NodeKind
+
+  (fn node-kind-atom
+    (doc "Enum constant for atom nodes.")
+    (params ()) ;; params
+    (returns NodeKind)
+    (body
+      (return 0)
+    ) ;; body
+  ) ;; fn node-kind-atom
+
+  (fn node-kind-list
+    (doc "Enum constant for list nodes.")
+    (params ()) ;; params
+    (returns NodeKind)
+    (body
+      (return 1)
+    ) ;; body
+  ) ;; fn node-kind-list
+
+  (type Arena
+    (struct
+      (kinds ArrayInt32)
+      (values ArrayString)
+      (first-child ArrayInt32)
+      (next-sibling ArrayInt32)
+    ) ;; struct
+  ) ;; type Arena
+
+  (fn arena-new
+    (doc "Allocate a fresh arena with empty arrays.")
+    (params ()) ;; params
+    (returns Arena)
+    (body
+      (make Arena
+        (kinds (array-i32-new))
+        (values (array-str-new))
+        (first-child (array-i32-new))
+        (next-sibling (array-i32-new))
+      ) ;; make
+    ) ;; body
+  ) ;; fn arena-new
+
+  (fn arena-add-node
+    (doc "Append a node with kind/value; returns its id.")
+    (params
+      (a (ptr Arena))
+      (kind NodeKind)
+      (value String)
+    ) ;; params
+    (returns Int32)
+    (body
+      (let id Int32
+        (array-i32-len (get-field a kinds))
+        (do
+          (array-i32-append (get-field a kinds) kind)
+          (array-str-append (get-field a values) value)
+          (array-i32-append (get-field a first-child) (- 0 1))
+          (array-i32-append (get-field a next-sibling) (- 0 1))
+          (return id)
+        ) ;; do
+      ) ;; let id
+    ) ;; body
+  ) ;; fn arena-add-node
+
+  (fn arena-kind
+    (doc "Get the kind of node id.")
+    (params
+      (a (ptr Arena))
+      (id Int32)
+    ) ;; params
+    (returns Int32)
+    (body
+      (array-i32-get (get-field a kinds) id)
+    ) ;; body
+  ) ;; fn arena-kind
+
+  (fn arena-value
+    (doc "Get the stored atom string for node id.")
+    (params
+      (a (ptr Arena))
+      (id Int32)
+    ) ;; params
+    (returns String)
+    (body
+      (array-str-get (get-field a values) id)
+    ) ;; body
+  ) ;; fn arena-value
+
+  (fn arena-first-child
+    (doc "Return the first child id for the list node.")
+    (params
+      (a (ptr Arena))
+      (id Int32)
+    ) ;; params
+    (returns Int32)
+    (body
+      (array-i32-get (get-field a first-child) id)
+    ) ;; body
+  ) ;; fn arena-first-child
+
+  (fn arena-next-sibling
+    (doc "Return the next sibling id for the node.")
+    (params
+      (a (ptr Arena))
+      (id Int32)
+    ) ;; params
+    (returns Int32)
+    (body
+      (array-i32-get (get-field a next-sibling) id)
+    ) ;; body
+  ) ;; fn arena-next-sibling
+
+  (fn arena-set-first-child
+    (doc "Set the first child pointer for the list node.")
+    (params
+      (a (ptr Arena))
+      (id Int32)
+      (child Int32)
+    ) ;; params
+    (returns Int32)
+    (body
+      (array-i32-set (get-field a first-child) id child)
+    ) ;; body
+  ) ;; fn arena-set-first-child
+
+  (fn arena-set-next-sibling
+    (doc "Set the next sibling pointer for the node.")
+    (params
+      (a (ptr Arena))
+      (id Int32)
+      (next Int32)
+    ) ;; params
+    (returns Int32)
+    (body
+      (array-i32-set (get-field a next-sibling) id next)
+    ) ;; body
+  ) ;; fn arena-set-next-sibling
+) ;; module

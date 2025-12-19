@@ -1,0 +1,148 @@
+  ;; Emit a ccall; currently supports Int32 and String args/returns.
+  (fn compile-ccall
+    (doc "Lower (ccall ...) to a call instruction, declaring the callee if needed.")
+    (params
+      (op-node Int32)
+      (a (ptr Arena))
+      (env-names ArrayString)
+      (env-safe ArrayString)
+      (env-types ArrayInt32)
+      (declared ArrayString)
+      (struct-names ArrayString)
+      (struct-fields ArrayString)
+      (decls Buffer)
+      (str-counter (ptr Int32))
+      (out Buffer)
+      (temp (ptr Int32))
+      (fn-sig-names ArrayString)
+      (fn-sig-ret-types ArrayInt32)
+    ) ;; params
+    (returns Int32)
+    (body (do
+      ;; Layout: (ccall "sym" (returns TYPE) (args (TYPE expr)...))
+      (let sym-node Int32 (second-child a op-node))
+      (let returns-node Int32 (third-child a op-node))
+      (let args-node Int32 (fourth-child a op-node))
+      (let sym String (arena-value a sym-node))
+      (if-stmt (== (is-string-literal sym) 1)
+        (set sym (string-literal-value sym))
+        (set sym sym)
+      ) ;; if-stmt
+      (let ret-ty-node Int32 (- 0 1))
+      (if-stmt (== (arena-kind a returns-node) (node-kind-list))
+        (do
+          (let ret-head Int32 (arena-first-child a returns-node))
+          (let ret-name String (arena-value a ret-head))
+          (if-stmt (string-eq ret-name "returns")
+            (set ret-ty-node (arena-next-sibling a ret-head))
+            (do 0)
+          ) ;; if-stmt
+        )
+        (do 0)
+      ) ;; if-stmt
+
+      ;; Collect args: args-node = (args (Type expr) ...)
+      (let arg-count Int32 0)
+      (let arg-node Int32 (second-child a args-node))
+      (if-stmt (== arg-node (- 0 1))
+        (set arg-count 0)
+        (do
+          (let _ Int32 0)
+          (while (!= arg-node (- 0 1))
+            (do
+              (set arg-count (+ arg-count 1))
+              (set arg-node (arena-next-sibling a arg-node))
+            ) ;; do
+          ) ;; while
+        ) ;; do
+      ) ;; if-stmt
+
+      ;; Evaluate args and remember type nodes
+      (let i Int32 0)
+      (let evaluated ArrayInt32 (array-i32-new)) ;; store temp ids
+      (let type-nodes ArrayInt32 (array-i32-new)) ;; store type node IDs
+      (let arg-item Int32 (second-child a args-node))
+      (while (!= arg-item (- 0 1))
+        (do
+          (let aty-node Int32 (arena-first-child a arg-item))
+          (let expr-node Int32 (arena-next-sibling a aty-node))
+          (array-i32-append type-nodes aty-node)
+          (compile-expr a expr-node env-names env-safe env-types declared struct-names struct-fields decls str-counter out temp fn-sig-names fn-sig-ret-types)
+          (let reg Int32 (- (load Int32 temp) 1))
+          (array-i32-append evaluated reg)
+          (set arg-item (arena-next-sibling a arg-item))
+        ) ;; do
+      ) ;; while
+
+      ;; Declare (simple, may duplicate)
+      (if-stmt (== (array-str-contains declared sym) 0)
+        (do
+          (array-str-append declared sym)
+          (buffer-append-string decls "declare ")
+          (if-stmt (== ret-ty-node (- 0 1))
+            (buffer-append-string decls "i32")
+            (emit-type-node decls a ret-ty-node)
+          )
+          (buffer-append-string decls " @")
+          (buffer-append-string decls sym)
+          (buffer-append-string decls "(")
+          (set i 0)
+          (while (< i (array-i32-len type-nodes))
+            (do
+              (if-stmt (> i 0)
+                (buffer-append-string decls ", ")
+                (do (buffer-append-string decls ""))
+              ) ;; if-stmt
+              (emit-type-node decls a (array-i32-get type-nodes i))
+              (set i (+ i 1))
+            ) ;; do
+          ) ;; while
+          (buffer-append-string decls ")\n")
+        )
+        (do 0)
+      ) ;; if-stmt
+
+      ;; Call
+      (let t Int32 (load Int32 temp))
+      (buffer-append-string out "  ")
+      (if-stmt (== ret-ty-node (- 0 1))
+        (do
+          (emit-temp out t)
+          (buffer-append-string out " = call i32")
+        )
+        (do
+          (let ret-ty-str String (map-type-node a ret-ty-node))
+          (if-stmt (string-eq ret-ty-str "void")
+            (do
+              (buffer-append-string out "call void")
+            )
+            (do
+              (emit-temp out t)
+              (buffer-append-string out " = call ")
+              (emit-type-node out a ret-ty-node)
+            )
+          )
+        )
+      ) ;; if-stmt
+      (buffer-append-string out " @")
+      (buffer-append-string out sym)
+      (buffer-append-string out "(")
+      (set i 0)
+      (while (< i (array-i32-len type-nodes))
+        (do
+          (if-stmt (> i 0)
+            (buffer-append-string out ", ")
+            (do (buffer-append-string out ""))
+          ) ;; if-stmt
+          (emit-type-node out a (array-i32-get type-nodes i))
+          (buffer-append-string out " ")
+          (emit-temp out (array-i32-get evaluated i))
+          (set i (+ i 1))
+        ) ;; do
+      ) ;; while
+      (buffer-append-string out ")\n")
+      (store Int32 temp (+ t 1))
+      (return t)
+    )) ;; body
+  ) ;; fn compile-ccall
+

@@ -1,0 +1,206 @@
+(module
+  (name "stage1-ir-pointers")
+  (doc "Pointer-related IR helpers: addr/load/store/bitcast/get-field.")
+
+  (include "../prelude.weave")
+  (include "../arena.weave")
+  (include "./emit.weave")
+  (include "./util.weave")
+  (include "./types.weave")
+
+  (fn compile-addr
+    (doc "Compute the address of a local (alloca'd) binding.")
+    (params (node Int32) (a (ptr Arena)) (env-names ArrayString) (env-safe ArrayString) (env-types ArrayInt32) (out Buffer) (temp (ptr Int32)))
+    (returns Int32)
+    (body
+      (let name-node Int32 (second-child a node))
+      (let orig String (arena-value a name-node))
+      (let safe String (env-find-safe env-names env-safe orig))
+      (let ty-node Int32 (env-find-type env-names env-types orig))
+      ;; env-find-type requires types array; here env-expr does not pass it, so default to i32 if missing
+      (if-stmt (== ty-node (- 0 1))
+        (set ty-node (- 0 1))
+        (do 0)
+      )
+      (let t Int32 (load Int32 temp))
+      (buffer-append-string out "  ")
+      (emit-temp out t)
+      (buffer-append-string out " = bitcast ")
+      (if-stmt (== ty-node (- 0 1))
+        (buffer-append-string out "i32*")
+        (emit-pointer-type-node out a ty-node)
+      )
+      (buffer-append-string out " %")
+      (buffer-append-string out safe)
+      (buffer-append-string out " to ")
+      (if-stmt (== ty-node (- 0 1))
+        (buffer-append-string out "i32*\n")
+        (do
+          (emit-pointer-type-node out a ty-node)
+          (buffer-append-string out "\n")
+        )
+      )
+      (store Int32 temp (+ t 1))
+      (return t)
+    ) ;; body
+  ) ;; fn compile-addr
+
+  (fn compile-load-node
+    (doc "Load from ptr-reg with the given element type node.")
+    (params (a (ptr Arena)) (ty-node Int32) (ptr-reg Int32) (out Buffer) (temp (ptr Int32)))
+    (returns Int32)
+    (body
+      (let t Int32 (load Int32 temp))
+      (buffer-append-string out "  ")
+      (emit-temp out t)
+      (buffer-append-string out " = load ")
+      (emit-type-node out a ty-node)
+      (buffer-append-string out ", ")
+      (emit-pointer-type-node out a ty-node)
+      (buffer-append-string out " ")
+      (emit-temp out ptr-reg)
+      (buffer-append-string out "\n")
+      (store Int32 temp (+ t 1))
+      (return t)
+    ) ;; body
+  ) ;; fn compile-load-node
+
+  (fn compile-store-node
+    (doc "Store val-reg into ptr-reg using element type node.")
+    (params (a (ptr Arena)) (ty-node Int32) (val-reg Int32) (ptr-reg Int32) (out Buffer))
+    (returns Int32)
+    (body
+      (buffer-append-string out "  store ")
+      (emit-type-node out a ty-node)
+      (buffer-append-string out " ")
+      (emit-temp out val-reg)
+      (buffer-append-string out ", ")
+      (emit-pointer-type-node out a ty-node)
+      (buffer-append-string out " ")
+      (emit-temp out ptr-reg)
+      (buffer-append-string out "\n")
+      (return val-reg)
+    ) ;; body
+  ) ;; fn compile-store-node
+
+  (fn compile-bitcast-node
+    (doc "Bitcast i8* source to to-ty-node (which should be a pointer type).")
+    (params (a (ptr Arena)) (to-ty-node Int32) (src-reg Int32) (out Buffer) (temp (ptr Int32)))
+    (returns Int32)
+    (body
+      (let t Int32 (load Int32 temp))
+      (buffer-append-string out "  ")
+      (emit-temp out t)
+      (buffer-append-string out " = bitcast i8* ")
+      (emit-temp out src-reg)
+      (buffer-append-string out " to ")
+      (emit-type-node out a to-ty-node)
+      (buffer-append-string out "\n")
+      (store Int32 temp (+ t 1))
+      (return t)
+    ) ;; body
+  ) ;; fn compile-bitcast-node
+
+  (fn compile-get-field-node
+    (doc "GEP into a struct or raw element pointer using type node.")
+    (params
+      (a (ptr Arena))
+      (elem-ty-node Int32)
+      (idx String)
+      (ptr-reg Int32)
+      (struct-names ArrayString)
+      (struct-fields ArrayString)
+      (out Buffer)
+      (temp (ptr Int32))
+    ) ;; params
+    (returns Int32)
+    (body
+      (let t Int32 (load Int32 temp))
+      ;; Check if elem-ty-node is (struct Name)
+      (if-stmt (== (arena-kind a elem-ty-node) (node-kind-list))
+        (do
+          (let head Int32 (arena-first-child a elem-ty-node))
+          (let head-val String (arena-value a head))
+          (if-stmt (string-eq head-val "struct")
+            (do
+              (let name-node Int32 (arena-next-sibling a head))
+              (let sname String (arena-value a name-node))
+              (let _ String (struct-field-type struct-names struct-fields sname (string-to-int idx)))
+              (buffer-append-string out "  ")
+              (emit-temp out t)
+              (buffer-append-string out " = getelementptr inbounds %")
+              (buffer-append-string out (sanitize-name sname))
+              (buffer-append-string out ", %")
+              (buffer-append-string out (sanitize-name sname))
+              (buffer-append-string out "* ")
+              (emit-temp out ptr-reg)
+              (buffer-append-string out ", i32 0, i32 ")
+              (buffer-append-string out idx)
+              (buffer-append-string out "\n")
+            )
+            (do
+              ;; Non-struct list type (e.g. ptr)
+              (buffer-append-string out "  ")
+              (emit-temp out t)
+              (buffer-append-string out " = getelementptr inbounds ")
+              (emit-type-node out a elem-ty-node)
+              (buffer-append-string out ", ")
+              (emit-pointer-type-node out a elem-ty-node)
+              (buffer-append-string out " ")
+              (emit-temp out ptr-reg)
+              (buffer-append-string out ", i32 ")
+              (buffer-append-string out idx)
+              (buffer-append-string out "\n")
+            )
+          )
+        )
+        (do
+          ;; Atom type
+          (buffer-append-string out "  ")
+          (emit-temp out t)
+          (buffer-append-string out " = getelementptr inbounds ")
+          (emit-type-node out a elem-ty-node)
+          (buffer-append-string out ", ")
+          (emit-pointer-type-node out a elem-ty-node)
+          (buffer-append-string out " ")
+          (emit-temp out ptr-reg)
+          (buffer-append-string out ", i32 ")
+          (buffer-append-string out idx)
+          (buffer-append-string out "\n")
+        )
+      ) ;; if-stmt
+      (store Int32 temp (+ t 1))
+      (return t)
+    ) ;; body
+  ) ;; fn compile-get-field-node
+
+  (fn compile-ptr-add-node
+    (doc "Pointer arithmetic: compute ptr + idx * sizeof(elem-ty-node).")
+    (params
+      (a (ptr Arena))
+      (elem-ty-node Int32)
+      (ptr-reg Int32)
+      (idx-reg Int32)
+      (out Buffer)
+      (temp (ptr Int32))
+    ) ;; params
+    (returns Int32)
+    (body
+      (let t Int32 (load Int32 temp))
+      (buffer-append-string out "  ")
+      (emit-temp out t)
+      (buffer-append-string out " = getelementptr inbounds ")
+      (emit-type-node out a elem-ty-node)
+      (buffer-append-string out ", ")
+      (emit-pointer-type-node out a elem-ty-node)
+      (buffer-append-string out " ")
+      (emit-temp out ptr-reg)
+      (buffer-append-string out ", i32 ")
+      (emit-temp out idx-reg)
+      (buffer-append-string out "\n")
+      (store Int32 temp (+ t 1))
+      (return t)
+    ) ;; body
+  ) ;; fn compile-ptr-add-node
+) ;; module
+

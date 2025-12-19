@@ -1,0 +1,288 @@
+(fn struct-add
+  (doc "Register a struct with its comma-separated field list. Skips if already registered.")
+  (params
+    (names ArrayString)
+    (fields ArrayString)
+    (name String)
+    (field-list String)
+  ) ;; params
+  (returns Int32)
+  (body (do
+    ;; Check if struct already exists to avoid duplicates
+    (let i Int32 0)
+    (let n Int32 (array-str-len names))
+    (while (< i n)
+      (do
+        (if-stmt (string-eq (array-str-get names i) name)
+          (return 0) ;; Already exists, skip
+          (do 0)
+        )
+        (set i (+ i 1))
+      )
+    )
+    (array-str-append names name)
+    (array-str-append fields field-list)
+    (return 0)
+  )) ;; body
+) ;; fn struct-add
+
+(fn struct-find
+  (doc "Return index of struct name in registry or -1.")
+  (params
+    (names ArrayString)
+    (name String)
+  ) ;; params
+  (returns Int32)
+  (body (do
+    (let i Int32 0)
+    (while (< i (array-str-len names))
+      (do
+        (if-stmt (string-eq (array-str-get names i) name)
+          (return i)
+          (set i (+ i 1))
+        ) ;; if-stmt
+      ) ;; do
+    ) ;; while
+    (return (- 0 1))
+  )) ;; body
+) ;; fn struct-find
+
+(fn struct-field-type
+  (doc "Look up the type of field idx in struct name; returns \"\" on miss.")
+  (params
+    (names ArrayString)
+    (fields ArrayString)
+    (name String)
+    (idx Int32)
+  ) ;; params
+  (returns String)
+  (body (do
+    (let pos Int32 (struct-find names name))
+    (if-stmt (== pos (- 0 1))
+      (return "")
+      (do
+        (let fstr String (array-str-get fields pos))
+        (let len Int32 (string-length fstr))
+        (let i Int32 0)
+        (let start Int32 0)
+        (let current Int32 0)
+        (while (<= i len)
+          (do
+            (if-stmt (|| (== i len) (== (string-char-at fstr i) 44)) ;; ','
+              (do
+                (if-stmt (== current idx)
+                  (do
+                    ;; Field entry is "name:Type", extract the type part
+                    (let entry String (string-slice fstr start (- i start)))
+                    (let entry-len Int32 (string-length entry))
+                    ;; Find colon position manually
+                    (let colon-pos Int32 (- 0 1))
+                    (let ci Int32 0)
+                    (while (< ci entry-len)
+                      (do
+                        (if-stmt (== (string-char-at entry ci) 58) ;; ':' is 58
+                          (do
+                            (set colon-pos ci)
+                            (set ci entry-len) ;; break
+                          )
+                          (set ci (+ ci 1))
+                        )
+                      )
+                    )
+                    (if-stmt (>= colon-pos 0)
+                      (return (string-slice entry (+ colon-pos 1) (- entry-len (+ colon-pos 1))))
+                      (return entry)
+                    )
+                  )
+                  (do
+                    (set current (+ current 1))
+                    (set start (+ i 1))
+                  ) ;; do
+                ) ;; if-stmt
+              ) ;; do
+              (do 0)
+            ) ;; if-stmt
+            (set i (+ i 1))
+          ) ;; do
+        ) ;; while
+        (return "")
+      ) ;; do
+    ) ;; if-stmt
+  )) ;; body
+) ;; fn struct-field-type
+
+(fn struct-field-index
+  (doc "Look up the index of field by name in struct; returns -1 on miss.")
+  (params
+    (names ArrayString)
+    (fields ArrayString)
+    (struct-name String)
+    (fname String)
+  ) ;; params
+  (returns Int32)
+  (body (do
+    (let pos Int32 (struct-find names struct-name))
+    (if-stmt (== pos (- 0 1))
+      (return (- 0 1))
+      (do
+        (let fstr String (array-str-get fields pos))
+        (let len Int32 (string-length fstr))
+        (let i Int32 0)
+        (let start Int32 0)
+        (let current Int32 0)
+        (while (<= i len)
+          (do
+            (if-stmt (|| (== i len) (== (string-char-at fstr i) 44)) ;; ','
+              (do
+                (let field-entry String (string-slice fstr start (- i start)))
+                ;; Field entry format is "fieldname:Type" or just "Type"
+                ;; Need to parse out the field name
+                (let entry-len Int32 (string-length field-entry))
+                (let colon-pos Int32 (- 0 1))
+                (let ci Int32 0)
+                (while (< ci entry-len)
+                  (do
+                    (if-stmt (== (string-char-at field-entry ci) 58) ;; ':' is 58
+                      (do
+                        (set colon-pos ci)
+                        (set ci entry-len) ;; break
+                      )
+                      (set ci (+ ci 1))
+                    )
+                  )
+                )
+                (let parsed-fname String "")
+                (if-stmt (>= colon-pos 0)
+                  (set parsed-fname (string-slice field-entry 0 colon-pos))
+                  (set parsed-fname "")
+                )
+                (if-stmt (string-eq parsed-fname fname)
+                  (return current)
+                  (do
+                    (set current (+ current 1))
+                    (set start (+ i 1))
+                  )
+                )
+              ) ;; do
+              (do 0)
+            ) ;; if-stmt
+            (set i (+ i 1))
+          ) ;; do
+        ) ;; while
+        (return (- 0 1))
+      ) ;; do
+    ) ;; if-stmt
+  )) ;; body
+) ;; fn struct-field-index
+
+(fn collect-structs
+  (doc "Walk top-level forms, collecting struct declarations into arrays.")
+  (params
+    (a (ptr Arena))
+    (root Int32)
+    (names ArrayString)
+    (fields ArrayString)
+  ) ;; params
+  (returns Int32)
+  (body (do
+    (let top-child Int32 (arena-first-child a root))
+    (while (!= top-child (- 0 1))
+      (do
+        ;; Handle (type Name (struct ...)) forms
+        (if-stmt (is-list-with-head a top-child "type")
+          (do
+            (let type-name-node Int32 (second-child a top-child))
+            (let type-body-node Int32 (third-child a top-child))
+            (if-stmt (&& (!= type-name-node (- 0 1)) (!= type-body-node (- 0 1)))
+              (do
+                (if-stmt (is-list-with-head a type-body-node "struct")
+                  (do
+                    (let fname String (arena-value a type-name-node))
+                    ;; Fields start from second child of struct (after the 'struct' head)
+                    (let f Int32 (second-child a type-body-node))
+                    (let b Buffer (buffer-new))
+                    (let field-idx Int32 0)
+                    (while (!= f (- 0 1))
+                      (do
+                        ;; Each field is (fieldname FieldType), extract name and type
+                        (if-stmt (== (arena-kind a f) (node-kind-list))
+                          (do
+                            (let field-name-node Int32 (arena-first-child a f))
+                            (let field-type-node Int32 (arena-next-sibling a field-name-node))
+                            (if-stmt (!= field-type-node (- 0 1))
+                              (do
+                                (if-stmt (> field-idx 0)
+                                  (buffer-append-string b ",")
+                                  (do 0)
+                                ) ;; if-stmt
+                                ;; Store as "fieldname:Type"
+                                (buffer-append-string b (arena-value a field-name-node))
+                                (buffer-append-string b ":")
+                                (buffer-append-string b (arena-value a field-type-node))
+                                (set field-idx (+ field-idx 1))
+                              )
+                              (do 0)
+                            )
+                          )
+                          (do 0)
+                        ) ;; if-stmt
+                        (set f (arena-next-sibling a f))
+                      ) ;; do
+                    ) ;; while
+                    (struct-add names fields fname (buffer-to-string b))
+                  ) ;; do
+                  (do 0)
+                ) ;; if-stmt
+              )
+              (do 0)
+            )
+          ) ;; do
+          (do 0)
+        ) ;; if-stmt
+
+        ;; Handle (struct Name (fields ...)) forms
+        (if-stmt (is-list-with-head a top-child "struct")
+          (do
+            (let struct-name-node Int32 (second-child a top-child))
+            (let fields-node Int32 (third-child a top-child))
+            (if-stmt (&& (!= struct-name-node (- 0 1)) (!= fields-node (- 0 1)))
+              (do
+                (let sname String (arena-value a struct-name-node))
+                ;; fields-node should be (fields Type1 Type2 ...)
+                (if-stmt (is-list-with-head a fields-node "fields")
+                  (do
+                    (let fty-node Int32 (second-child a fields-node))
+                    (let b Buffer (buffer-new))
+                    (let fidx Int32 0)
+                    (while (!= fty-node (- 0 1))
+                      (do
+                        (if-stmt (> fidx 0)
+                          (buffer-append-string b ",")
+                          (do 0)
+                        )
+                        ;; Store as "f0:Type" for anonymous fields
+                        (buffer-append-string b "f")
+                        (buffer-append-string b (int-to-string fidx))
+                        (buffer-append-string b ":")
+                        (buffer-append-string b (arena-value a fty-node))
+                        (set fidx (+ fidx 1))
+                        (set fty-node (arena-next-sibling a fty-node))
+                      )
+                    )
+                    (struct-add names fields sname (buffer-to-string b))
+                  )
+                  (do 0)
+                )
+              )
+              (do 0)
+            )
+          )
+          (do 0)
+        ) ;; if-stmt
+
+        (set top-child (arena-next-sibling a top-child))
+      ) ;; do
+    ) ;; while
+    (return 0)
+  )) ;; body
+) ;; fn collect-structs

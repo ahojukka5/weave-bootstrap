@@ -1,0 +1,33 @@
+(program
+  (name "test-struct-make-get-return42")
+  (doc "Construct a struct and sum its fields.")
+  (version "0.1")
+
+  (type Pair
+    (struct
+      (a Int32)
+      (b Int32)
+    ) ;; struct
+  ) ;; type Pair
+
+  (type ExitCode
+    (alias Int32)
+  ) ;; type ExitCode
+
+  (entry main
+    (doc "Build Pair{40,2} and return sum.")
+    (params ())
+    (returns ExitCode)
+    (body
+      (let p Pair
+        (make Pair
+          (a 40)
+          (b 2)
+        ) ;; make
+      ) ;; let
+      (return
+        (+ (get-field (addr p) a) (get-field (addr p) b))
+      ) ;; return
+    ) ;; body
+  ) ;; entry main
+) ;; program

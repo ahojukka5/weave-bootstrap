@@ -1,0 +1,144 @@
+(module
+  (name "stage1-sexpr-parser")
+  (doc "Recursive descent that builds an arena from the token stream.")
+
+  (include "prelude.weave")
+  (include "arena.weave")
+
+  (fn token-value
+    (doc "Strip the TOKEN: prefix, returning the raw value portion.")
+    (params
+      (tok String)
+    ) ;; params
+    (returns String)
+    (body
+      (let len Int32
+        (string-length tok)
+        (let i Int32
+          0
+          (do
+            (while (&& (< i len) (!= (string-char-at tok i) 58))
+              (set i (+ i 1))
+            ) ;; while
+            (if-stmt (< i len)
+              (return
+                (string-slice
+                  tok
+                  (+ i 1)
+                  (- len (+ i 1))
+                ) ;; string-slice
+              ) ;; return
+              (return tok)
+            ) ;; if-stmt
+          ) ;; do
+        ) ;; let i
+      ) ;; let len
+    ) ;; body
+  ) ;; fn token-value
+
+  (fn parse-expr-at
+    (doc "Parse one expression at tokens[pos], storing next position.")
+    (params
+      (a (ptr Arena))
+      (tokens ArrayString)
+      (pos Int32)
+      (out-next-pos (ptr Int32))
+    ) ;; params
+    (returns Int32)
+    (body
+      (block
+        (let tok String (array-str-get tokens pos))
+        (let next-pos Int32 (+ pos 1))
+        (let result Int32 0)
+
+        (if-stmt (string-eq tok "LPAREN")
+          (do
+            (let list-id Int32 (arena-add-node a (node-kind-list) ""))
+            (let i Int32 (+ pos 1))
+            (let prev-child Int32 (- 0 1))
+
+            (while
+              (&&
+                (< i (array-str-len tokens))
+                (== (string-eq (array-str-get tokens i) "RPAREN") 0)
+              ) ;; &&
+              (do
+                (let child-id Int32
+                  (parse-expr-at a tokens i (addr i))
+                  (do
+                    (if-stmt (== prev-child (- 0 1))
+                      (do
+                        (arena-set-first-child a list-id child-id)
+                      ) ;; do
+                      (do
+                        (arena-set-next-sibling a prev-child child-id)
+                      ) ;; do
+                    ) ;; if-stmt
+                    (set prev-child child-id)
+                  ) ;; do
+                ) ;; let child-id
+              ) ;; do
+            ) ;; while
+
+            (set result list-id)
+            (set next-pos (+ i 1))
+          ) ;; do
+          (if-stmt (|| (string-eq tok "RPAREN") (string-eq tok "EOF"))
+            (do
+              (set result (arena-add-node a (node-kind-atom) ""))
+            ) ;; do
+            (do
+              (if-stmt (string-eq tok "EOF")
+                (set result (arena-add-node a (node-kind-atom) ""))
+                (do
+                  (let v String (token-value tok))
+                  (if-stmt (string-starts-with tok "STRING:")
+                    (set v (string-concat "strlit:" v))
+                    (set v v)
+                  ) ;; if-stmt
+                  (set result (arena-add-node a (node-kind-atom) v))
+                ) ;; do
+              ) ;; if-stmt
+            ) ;; do
+          ) ;; if-stmt
+        ) ;; if-stmt
+
+        (store Int32 out-next-pos next-pos)
+        result
+      ) ;; block
+    ) ;; body
+  ) ;; fn parse-expr-at
+
+  (fn parse-top
+    (doc "Parse all expressions in the token list and return a synthetic list root.")
+    (params
+      (a (ptr Arena))
+      (tokens ArrayString)
+    ) ;; params
+    (returns Int32)
+    (body
+      (block
+        (let root-id Int32 (arena-add-node a (node-kind-list) ""))
+        (let head-atom Int32 (arena-add-node a (node-kind-atom) "multi-top"))
+        (arena-set-first-child a root-id head-atom)
+        (let prev-child Int32 head-atom)
+        (let pos Int32 0)
+        (let n Int32 (array-str-len tokens))
+        (while (< pos n)
+          (do
+            (let tok String (array-str-get tokens pos))
+            (if-stmt (string-eq tok "EOF")
+              (set pos n)
+              (do
+                (let child-id Int32 (parse-expr-at a tokens pos (addr pos)))
+                (arena-set-next-sibling a prev-child child-id)
+                (set prev-child child-id)
+              )
+            )
+          )
+        )
+        root-id
+      ) ;; block
+    ) ;; body
+  ) ;; fn parse-top
+) ;; module

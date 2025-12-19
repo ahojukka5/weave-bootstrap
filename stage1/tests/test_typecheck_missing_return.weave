@@ -1,0 +1,24 @@
+(program
+  (name "test-typecheck-missing-return")
+  (doc "Should fail typecheck: non-void function without return.")
+
+  (fn bad
+    (doc "Declares Int32 return but lacks return.")
+    (params)
+    (returns Int32)
+    (body
+      (do
+        (let x Int32 1)
+      ) ;; do
+    ) ;; body
+  ) ;; fn bad
+
+  (entry main
+    (doc "Call bad; typecheck should fail before codegen.")
+    (params)
+    (returns Int32)
+    (body
+      (return (bad))
+    ) ;; body
+  ) ;; entry
+) ;; program

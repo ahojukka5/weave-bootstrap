@@ -1,0 +1,361 @@
+(module
+  (name "stage1-include-expand")
+  (doc "Expand (include ...) forms by recursively parsing included files into one arena.")
+
+  (include "prelude.weave")
+  (include "tokenizer.weave")
+  (include "sexpr_parser.weave")
+  (include "arena.weave")
+  (include "ir/util_strings.weave")
+
+  (fn log-include
+    (doc "Debug helper: print include path, current dir, and resolved path.")
+    (params (label String) (inc String) (cur String) (resolved String)) (returns Int32)
+    (body
+      (ccall "puts" (returns Int32)
+        (args (String (string-concat label (string-concat ": " (string-concat inc (string-concat " | " (string-concat cur (string-concat " -> " resolved))))))))
+      )
+      (return 0)
+    )
+  ) ;; fn log-include
+
+  (fn is-printable-path
+    (doc "Return 1 if path is non-empty, ends with .weave, and all chars are ASCII [A-Za-z0-9._/\\-].")
+    (params (path String)) (returns Int32)
+    (body
+      (let len Int32 (string-length path))
+      (if-stmt (<= len 6) (return 0) (do 0))
+      (if-stmt (!= (string-ends-with path ".weave") 1) (return 0) (do 0))
+      (let i Int32 0)
+      (while (< i len)
+        (do
+          (let ch Int32 (string-char-at path i))
+          (if-stmt
+            (||
+              (&& (>= ch 48) (<= ch 57))    ;; 0-9
+              (||
+                (&& (>= ch 65) (<= ch 90)) ;; A-Z
+                (||
+                  (&& (>= ch 97) (<= ch 122)) ;; a-z
+                  (|| (== ch 46) (|| (== ch 47) (|| (== ch 45) (== ch 95)))) ;; . / - _
+                )
+              )
+            )
+            (do 0)
+            (return 0)
+          )
+          (set i (+ i 1))
+        )
+      )
+      (return 1)
+    )
+  ) ;; fn is-printable-path
+
+  (fn dirname
+    (doc "Return directory portion of path (up to last '/'); empty if none.")
+    (params (path String)) (returns String)
+    (body
+      (let len Int32 (string-length path))
+      (let i Int32 (- len 1))
+      (while (&& (>= i 0) (!= (string-char-at path i) 47))
+        (set i (- i 1))
+      )
+      (if-stmt (< i 0)
+        (return "")
+        (return (string-slice path 0 i))
+      )
+    )
+  ) ;; fn dirname
+
+  (fn resolve-path
+    (doc "Resolve inc against current dir; absolute or explicit prefixes stay as-is.")
+    (params (inc String) (current String)) (returns String)
+    (body
+      (if-stmt
+        (||
+          (string-starts-with inc "stage0/")
+          (|| (string-starts-with inc "stage1/") (string-starts-with inc "stdlib/"))
+        )
+        (return inc)
+        (do 0)
+      )
+      (if-stmt (string-starts-with inc "/") (return inc) (do 0))
+      ;; If no current directory, just return inc.
+      (if-stmt (== (string-length current) 0) (return inc) (do 0))
+      ;; Normalize ./ prefix.
+      (if-stmt (string-starts-with inc "./")
+        (set inc (string-slice inc 2 (- (string-length inc) 2)))
+        (do 0)
+      )
+      ;; Normalize ../ and simple relative by joining to current.
+      (return (string-concat (string-concat current "/") inc))
+    )
+  ) ;; fn resolve-path
+
+  (fn parse-file-into
+    (doc "Read and parse a file into arena a; returns root node id.")
+    (params (path String) (a (ptr Arena))) (returns Int32)
+    (body
+      (let p String path)
+      (if-stmt (== (is-string-literal p) 1)
+        (set p (string-literal-value p))
+        (set p p)
+      )
+      (let src String (ccall "weave_read_file" (returns String) (args (String p))))
+      (if-stmt (== (string-length src) 0)
+        (do
+          (let alt String (string-concat "bootstrap/" p))
+          (set src (ccall "weave_read_file" (returns String) (args (String alt))))
+          (if-stmt (== (string-length src) 0)
+            (do
+              (let alt2 String (string-concat "stdlib/" p))
+              (set src (ccall "weave_read_file" (returns String) (args (String alt2))))
+              (if-stmt (== (string-length src) 0) (return (- 0 1)) (do 0))
+            )
+            (do 0)
+          )
+        )
+        (do 0)
+      )
+      (let tokens ArrayString (array-str-new))
+      (tokenize src tokens)
+      (return (parse-top a tokens))
+    )
+  ) ;; fn parse-file-into
+
+  (fn copy-subtree
+    (doc "Deep-copy node from src arena into dst arena; returns new node id.")
+    (params (src (ptr Arena)) (dst (ptr Arena)) (node Int32)) (returns Int32)
+    (body
+      (let kind Int32 (arena-kind src node))
+      (let val String (arena-value src node))
+      (let new-id Int32 (arena-add-node dst kind val))
+      (let child Int32 (arena-first-child src node))
+      (let prev Int32 (- 0 1))
+      (while (!= child (- 0 1))
+        (do
+          (let copied Int32 (copy-subtree src dst child))
+          (if-stmt (== prev (- 0 1))
+            (arena-set-first-child dst new-id copied)
+            (arena-set-next-sibling dst prev copied)
+          )
+          (set prev copied)
+          (set child (arena-next-sibling src child))
+        )
+      )
+      (return new-id)
+    )
+  ) ;; fn copy-subtree
+
+  (fn append-child
+    (doc "Append child to the end of parent's child list in arena a.")
+    (params (a (ptr Arena)) (parent Int32) (child Int32)) (returns Int32)
+    (body
+      (let first Int32 (arena-first-child a parent))
+      (if-stmt (== first (- 0 1))
+        (arena-set-first-child a parent child)
+        (do
+          (let cur Int32 first)
+          (while (!= (arena-next-sibling a cur) (- 0 1))
+            (set cur (arena-next-sibling a cur))
+          )
+          (arena-set-next-sibling a cur child)
+        )
+      )
+      (return 0)
+    )
+  ) ;; fn append-child
+
+  (fn expand-children
+    (doc "Expand children of src-root into dst-root, splicing includes; visited guards duplicates. allow-inc=1 only when expanding a file root.")
+    (params (src (ptr Arena)) (src-root Int32) (dst (ptr Arena)) (dst-root Int32) (visited ArrayString) (current-dir String) (allow-inc Int32)) (returns Int32)
+    (body
+      (let child Int32 (arena-first-child src src-root))
+      (while (!= child (- 0 1))
+        (do
+          (if-stmt
+            (&& (== (arena-kind src child) (node-kind-list)) (== allow-inc 1))
+            (do
+              (let head Int32 (arena-first-child src child))
+              (if-stmt (== head (- 0 1))
+                (do 0)
+                (do
+                  (let head-kind Int32 (arena-kind src head))
+                  (if-stmt (!= head-kind (node-kind-atom))
+                    (do
+                      (let copied Int32 (copy-subtree src dst child))
+                      (append-child dst dst-root copied)
+                    )
+                    (do
+                      (let head-val String (arena-value src head))
+                      (if-stmt (string-eq head-val "include")
+                        (do
+                          (let path-node Int32 (arena-next-sibling src head))
+                          (let extra Int32 (arena-next-sibling src path-node))
+                          (if-stmt (|| (== path-node (- 0 1)) (!= extra (- 0 1)))
+                            (do
+                              ;; Not a well-formed (include <path>) list; just copy it through.
+                              (let copied Int32 (copy-subtree src dst child))
+                              (append-child dst dst-root copied)
+                            )
+                            (do
+                              (if-stmt (!= (arena-kind src path-node) (node-kind-atom))
+                                (return (- 0 1))
+                                (do 0)
+                              )
+                              (let inc-path String (arena-value src path-node))
+                              (if-stmt (<= (string-length inc-path) 0) (return (- 0 1)) (do 0))
+                              (if-stmt (!= (is-string-literal inc-path) 1)
+                                (do
+                                  ;; Require string literal include paths.
+                                  (let copied Int32 (copy-subtree src dst child))
+                                  (append-child dst dst-root copied)
+                                )
+                                (do
+                                  (set inc-path (string-literal-value inc-path))
+                                  (if-stmt (== (is-printable-path inc-path) 1)
+                                    (do
+                                      (let resolved String (resolve-path inc-path current-dir))
+                                      (log-include "include" inc-path current-dir resolved)
+                                      (if-stmt (<= (string-length resolved) 0) (return (- 0 1)) (do 0))
+                                      (if-stmt (== (array-str-contains visited resolved) 1)
+                                        (do 0)
+                                        (do
+                                          (array-str-append visited resolved)
+                                          (let tmp Arena (arena-new))
+                                          (let inc-root Int32 (parse-file-into resolved (addr tmp)))
+                                          (if-stmt (== inc-root (- 0 1))
+                                            (do
+                                              ;; Could not load include; treat as plain node copy.
+                                              (let copied Int32 (copy-subtree src dst child))
+                                              (append-child dst dst-root copied)
+                                            )
+                                            (do
+                                              (let next-dir String (dirname resolved))
+                                              ;; Check if inc-root is (multi-top ...) - if so, expand each top-level form
+                                              (let inc-head Int32 (arena-first-child (addr tmp) inc-root))
+                                              (let is-multi Int32 0)
+                                              (if-stmt (&& (!= inc-head (- 0 1)) (== (arena-kind (addr tmp) inc-head) (node-kind-atom)))
+                                                (if-stmt (string-eq (arena-value (addr tmp) inc-head) "multi-top")
+                                                  (set is-multi 1)
+                                                  (do 0)
+                                                )
+                                                (do 0)
+                                              )
+                                              (if-stmt (== is-multi 1)
+                                                (do
+                                                  ;; Expand each child of multi-top (skip the "multi-top" atom)
+                                                  (let mt-child Int32 (arena-next-sibling (addr tmp) inc-head))
+                                                  (while (!= mt-child (- 0 1))
+                                                    (do
+                                                      ;; Check what kind of top-level form this is
+                                                      (let mt-head Int32 (arena-first-child (addr tmp) mt-child))
+                                                      (let is-mod Int32 0)
+                                                      (if-stmt (&& (!= mt-head (- 0 1)) (== (arena-kind (addr tmp) mt-head) (node-kind-atom)))
+                                                        (if-stmt (string-eq (arena-value (addr tmp) mt-head) "module")
+                                                          (set is-mod 1)
+                                                          (do 0)
+                                                        )
+                                                        (do 0)
+                                                      )
+                                                      (if-stmt (== is-mod 1)
+                                                        (do
+                                                          ;; Module: expand its children (fn, type, include, etc.)
+                                                          (let rc Int32 (expand-children (addr tmp) mt-child dst dst-root visited next-dir 1))
+                                                          (if-stmt (== rc (- 0 1)) (return (- 0 1)) (do 0))
+                                                        )
+                                                        (do
+                                                          ;; Not a module (fn, type, etc.): just copy the whole form
+                                                          (let copied Int32 (copy-subtree (addr tmp) dst mt-child))
+                                                          (append-child dst dst-root copied)
+                                                        )
+                                                      )
+                                                      (set mt-child (arena-next-sibling (addr tmp) mt-child))
+                                                    )
+                                                  )
+                                                )
+                                                (do
+                                                  ;; Not multi-top - regular expansion
+                                                  (let rc Int32 (expand-children (addr tmp) inc-root dst dst-root visited next-dir 1))
+                                                  (if-stmt (== rc (- 0 1)) (return (- 0 1)) (do 0))
+                                                )
+                                              )
+                                            )
+                                          )
+                                        )
+                                      )
+                                    )
+                                    (do
+                                      ;; Malformed include path: treat as a normal node copy.
+                                      (let copied Int32 (copy-subtree src dst child))
+                                      (append-child dst dst-root copied)
+                                    )
+                                  )
+                                )
+                              )
+                            )
+                          )
+                        )
+                        (do
+                          (let copied Int32 (copy-subtree src dst child))
+                          (append-child dst dst-root copied)
+                        )
+                      )
+                    )
+                  )
+                )
+              )
+            )
+            (do
+              (let copied Int32 (copy-subtree src dst child))
+              (append-child dst dst-root copied)
+            )
+          )
+          (set child (arena-next-sibling src child))
+        )
+      )
+      (return 0)
+    )
+  ) ;; fn expand-children
+
+  (fn expand-root
+    (doc "Parse path and return a new arena with includes expanded.")
+    (params (path String) (out-arena (ptr Arena)) (out-root (ptr Int32))) (returns Int32)
+    (body
+      (let tmp Arena (arena-new))
+      (let tmp-root Int32 (parse-file-into path (addr tmp)))
+      (if-stmt (== tmp-root (- 0 1)) (return (- 0 1)) (do 0))
+      ;; If tmp-root is (multi-top X), unwrap to get X as the actual root
+      (let actual-root Int32 tmp-root)
+      (let head Int32 (arena-first-child (addr tmp) tmp-root))
+      (if-stmt (&& (!= head (- 0 1)) (== (arena-kind (addr tmp) head) (node-kind-atom)))
+        (if-stmt (string-eq (arena-value (addr tmp) head) "multi-top")
+          (do
+            (let first-child Int32 (arena-next-sibling (addr tmp) head))
+            (if-stmt (!= first-child (- 0 1))
+              (set actual-root first-child)
+              (do 0)
+            )
+          )
+          (do 0)
+        )
+        (do 0)
+      )
+      (let root-kind Int32 (arena-kind (addr tmp) actual-root))
+      (let root-val String (arena-value (addr tmp) actual-root))
+      ;; Expand includes recursively with validation/arity checks.
+      (let new-root Int32 (arena-add-node out-arena root-kind root-val))
+      (let visited ArrayString (array-str-new))
+      (array-str-append visited path)
+      (let base String (dirname path))
+      (let rc Int32 (expand-children (addr tmp) actual-root out-arena new-root visited base 1))
+      (if-stmt (== rc (- 0 1))
+        (return (- 0 1))
+        (do
+          (store Int32 out-root new-root)
+          (return 0)
+        )
+      )
+    )
+  ) ;; fn expand-root
+) ;; module

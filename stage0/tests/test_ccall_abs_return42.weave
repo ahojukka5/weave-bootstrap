@@ -1,0 +1,25 @@
+(program
+  (name "test-ccall-abs-return42")
+  (doc "Call C abs on -42 and expect 42.")
+  (version "0.1")
+
+  (type ExitCode
+    (alias Int32)
+  ) ;; type ExitCode
+
+  (entry main
+    (doc "Return abs(-42).")
+    (params ())
+    (returns ExitCode)
+    (body
+      (return
+        (ccall "abs"
+          (returns Int32)
+          (args
+            (Int32 (- 0 42))
+          ) ;; args
+        ) ;; ccall
+      ) ;; return
+    ) ;; body
+  ) ;; entry main
+) ;; program
