@@ -16,12 +16,16 @@ typedef enum {
 typedef struct {
     TokKind kind;
     char *text; /* for ATOM/STRING */
+    int line;
+    int col;
 } Token;
 
 typedef struct {
     const char *src;
     size_t pos;
     size_t len;
+    int line;
+    int col;
 } Lexer;
 
 void lex_init(Lexer *lx, const char *src);
