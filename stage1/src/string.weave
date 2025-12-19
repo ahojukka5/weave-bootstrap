@@ -1,0 +1,41 @@
+(module
+  (name "stage1-string")
+  (doc "String utilities implemented using libc wrappers.")
+
+  (include "libc.weave")
+
+  (fn string-length
+    (doc "Return length of null-terminated string.")
+    (params (s String)) (returns Int32)
+    (body (return (c-strlen s)))
+  )
+
+  (fn string-concat
+    (doc "Concatenate two strings and return a new string.")
+    (params (a String) (b String)) (returns String)
+    (body
+      (do
+        (let la Int32 (c-strlen a))
+        (let lb Int32 (c-strlen b))
+        (let out String (c-malloc (+ (+ la lb) 1)))
+        (if-stmt (> la 0) (do (c-strcpy out a)) (do (c-strcpy out "")))
+        (if-stmt (> lb 0) (do (c-strcat out b)) (do 0))
+        (return out)
+      )
+    )
+  )
+
+  (fn string-to-int
+    (doc "Parse a decimal string to Int32; returns 0 on failure.")
+    (params (s String)) (returns Int32)
+    (body (return (c-atoi s)))
+  )
+
+  (fn string-eq
+    (doc "Return 1 if two strings are equal.")
+    (params (a String) (b String)) (returns Int32)
+    (body
+      (if-stmt (== (c-strcmp a b) 0) (return 1) (return 0))
+    )
+  )
+)
