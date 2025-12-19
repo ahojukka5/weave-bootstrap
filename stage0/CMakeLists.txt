@@ -57,7 +57,7 @@ set(STAGE0_TESTS
 foreach(test_file IN LISTS STAGE0_TESTS)
   get_filename_component(test_name ${test_file} NAME_WE)
   add_test(
-    NAME ${test_name}
+    NAME stage0_${test_name}
     COMMAND ${CMAKE_COMMAND}
       -DWEAVEC0=$<TARGET_FILE:weavec0>
       -DCLANG=${CLANG_EXE}
@@ -66,4 +66,5 @@ foreach(test_file IN LISTS STAGE0_TESTS)
       -DOUT_DIR=${CMAKE_CURRENT_BINARY_DIR}/tests/${test_name}
       -P ${CMAKE_CURRENT_SOURCE_DIR}/tests/run_test.cmake
   )
+  set_tests_properties(stage0_${test_name} PROPERTIES LABELS "stage0")
 endforeach()

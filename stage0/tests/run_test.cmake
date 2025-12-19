@@ -21,7 +21,7 @@ set(LL "${OUT_DIR}/${TEST_NAME}.ll")
 set(EXE "${OUT_DIR}/${TEST_NAME}")
 
 execute_process(
-  COMMAND "${WEAVEC0}" --input "${TEST_FILE}" --output "${LL}"
+  COMMAND "${WEAVEC0}" "${TEST_FILE}" -S -o "${LL}"
   RESULT_VARIABLE rc
 )
 if(NOT rc EQUAL 0)
@@ -29,7 +29,7 @@ if(NOT rc EQUAL 0)
 endif()
 
 execute_process(
-  COMMAND "${CLANG}" "${LL}" "${RUNTIME}" -o "${EXE}"
+  COMMAND "${CLANG}" -Wno-null-character "${LL}" "${RUNTIME}" -lm -o "${EXE}"
   RESULT_VARIABLE rc
 )
 if(NOT rc EQUAL 0)

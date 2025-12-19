@@ -161,8 +161,7 @@
                     (let name String (arena-value a name-node))
                     (let safe-name String (sanitize-name name))
                     ;; Compile init BEFORE adding name to env (prevents self-reference issues)
-                    (let _ Int32 (compile-expr a init-node env-names env-safe env-types declared struct-names struct-fields decls str-counter out temp fn-sig-names fn-sig-ret-types))
-                    (let init-reg Int32 (- (load Int32 temp) 1))
+                    (let init-reg Int32 (compile-expr a init-node env-names env-safe env-types declared struct-names struct-fields decls str-counter out temp fn-sig-names fn-sig-ret-types))
                     ;; Now add to env
                     (env-add env-names env-safe env-types name safe-name type-node)
                     (let actual-safe String (env-find-safe env-names env-safe name))

@@ -34,7 +34,7 @@
               (if-stmt (!= head (- 0 1))
                 (do
                   (let head-val String (arena-value a head))
-                  (if-stmt (|| (|| (|| (|| (|| (string-eq head-val "do") (string-eq head-val "let")) (string-eq head-val "if-stmt")) (string-eq head-val "while")) (string-eq head-val "return")) (|| (string-eq head-val "store") (string-eq head-val "set")))
+                  (if-stmt (|| (|| (|| (|| (string-eq head-val "do") (string-eq head-val "let")) (string-eq head-val "while")) (string-eq head-val "return")) (|| (string-eq head-val "store") (string-eq head-val "set")))
                     (do
                       (let ret Int32 (compile-stmt a item ret-type-node env-names env-safe env-types declared struct-names struct-fields decls str-counter out temp label-counter fn-sig-names fn-sig-ret-types))
                       (if-stmt (== ret 1)
@@ -44,8 +44,7 @@
                     )
                     ;; Non-statement list: treat as expression and auto-return
                     (do
-                      (let _ Int32 (compile-expr a item env-names env-safe env-types declared struct-names struct-fields decls str-counter out temp fn-sig-names fn-sig-ret-types))
-                      (let reg Int32 (- (load Int32 temp) 1))
+                      (let reg Int32 (compile-expr a item env-names env-safe env-types declared struct-names struct-fields decls str-counter out temp fn-sig-names fn-sig-ret-types))
                       (buffer-append-string out "  ret ")
                       (emit-type-node out a ret-type-node)
                       (buffer-append-string out " ")
@@ -60,8 +59,7 @@
             )
             (do
               ;; Atom in function body: treat as expression and auto-return
-              (let _ Int32 (compile-expr a item env-names env-safe env-types declared struct-names struct-fields decls str-counter out temp fn-sig-names fn-sig-ret-types))
-              (let reg Int32 (- (load Int32 temp) 1))
+              (let reg Int32 (compile-expr a item env-names env-safe env-types declared struct-names struct-fields decls str-counter out temp fn-sig-names fn-sig-ret-types))
               (buffer-append-string out "  ret ")
               (emit-type-node out a ret-type-node)
               (buffer-append-string out " ")
