@@ -1,0 +1,34 @@
+(module
+  (name "stage1-libc")
+  (doc "Thin libc wrappers exposed via ccall for use in other modules.")
+
+  (fn c-strlen (doc "libc strlen")
+    (params (s String)) (returns Int32)
+    (body (return (ccall "strlen" (returns Int32) (args (String s)))))
+  )
+
+  (fn c-malloc (doc "libc malloc")
+    (params (n Int32)) (returns String)
+    (body (return (ccall "malloc" (returns String) (args (Int32 n)))))
+  )
+
+  (fn c-strcpy (doc "libc strcpy")
+    (params (dest String) (src String)) (returns String)
+    (body (return (ccall "strcpy" (returns String) (args (String dest) (String src)))))
+  )
+
+  (fn c-strcat (doc "libc strcat")
+    (params (dest String) (src String)) (returns String)
+    (body (return (ccall "strcat" (returns String) (args (String dest) (String src)))))
+  )
+
+  (fn c-atoi (doc "libc atoi")
+    (params (s String)) (returns Int32)
+    (body (return (ccall "atoi" (returns Int32) (args (String s)))))
+  )
+
+  (fn c-strcmp (doc "libc strcmp == 0 means equal")
+    (params (a String) (b String)) (returns Int32)
+    (body (return (ccall "strcmp" (returns Int32) (args (String a) (String b)))))
+  )
+)
