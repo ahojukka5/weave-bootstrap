@@ -9,8 +9,16 @@ static int lex_peek(Lexer *lx) {
 }
 
 static int lex_get(Lexer *lx) {
+    int ch;
     if (lx->pos >= lx->len) return -1;
-    return (unsigned char)lx->src[lx->pos++];
+    ch = (unsigned char)lx->src[lx->pos++];
+    if (ch == '\n') {
+        lx->line++;
+        lx->col = 1;
+    } else {
+        lx->col++;
+    }
+    return ch;
 }
 
 static void lex_skip_ws_and_comments(Lexer *lx) {
@@ -76,14 +84,22 @@ void lex_init(Lexer *lx, const char *src) {
     lx->src = src;
     lx->pos = 0;
     lx->len = strlen(src);
+    lx->line = 1;
+    lx->col = 1;
 }
 
 Token lex_next(Lexer *lx) {
     Token t;
     t.kind = TOK_EOF;
     t.text = NULL;
+    t.line = lx->line;
+    t.col = lx->col;
 
     lex_skip_ws_and_comments(lx);
+    
+    t.line = lx->line;
+    t.col = lx->col;
+    
     {
         int ch = lex_peek(lx);
         if (ch < 0) {
