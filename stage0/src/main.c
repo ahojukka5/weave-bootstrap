@@ -83,6 +83,11 @@ int main(int argc, char **argv) {
     OutputMode mode = OUTPUT_EXECUTABLE;
     int use_static = 0;
     int optimize = 0;
+    int generate_tests_mode = 0;
+    StrList selected_test_names;
+    StrList selected_tags;
+    sl_init(&selected_test_names);
+    sl_init(&selected_tags);
     /* clang-style: we accept -I dir, -Idir, -o outfile, and positional input. */
     int i;
     for (i = 1; i < argc; i++) {
@@ -102,7 +107,7 @@ int main(int argc, char **argv) {
             i++;
         } else if (strncmp(a, "--input=", 8) == 0) {
             input = a + 8;
-        } else if (strcmp(a, "-S") == 0 || strcmp(a, "--emit-llvm") == 0) {
+        } else if (strcmp(a, "-S") == 0 || strcmp(a, "--emit-llvm") == 0 || strcmp(a, "-emit-llvm") == 0) {
             mode = OUTPUT_LLVM_IR;
         } else if (strcmp(a, "-c") == 0) {
             mode = OUTPUT_OBJECT;
@@ -110,11 +115,25 @@ int main(int argc, char **argv) {
             use_static = 1;
         } else if (strcmp(a, "-O") == 0 || strcmp(a, "-O2") == 0 || strcmp(a, "--optimize") == 0) {
             optimize = 1;
-        } else if (strcmp(a, "--runtime") == 0 && i + 1 < argc) {
+        } else if ((strcmp(a, "--runtime") == 0 || strcmp(a, "-runtime") == 0) && i + 1 < argc) {
             runtime_path = argv[i + 1];
             i++;
         } else if (strncmp(a, "--runtime=", 10) == 0) {
             runtime_path = a + 10;
+        } else if (strcmp(a, "--run-tests") == 0 || strcmp(a, "-run-tests") == 0 || strcmp(a, "-generate-tests") == 0) {
+            generate_tests_mode = 1;
+            /* In test generation mode, default to executable output to run tests. */
+            mode = OUTPUT_EXECUTABLE;
+        } else if (strcmp(a, "-test") == 0 && i + 1 < argc) {
+            sl_push(&selected_test_names, argv[i + 1]);
+            i++;
+        } else if (strncmp(a, "-test=", 6) == 0) {
+            sl_push(&selected_test_names, a + 6);
+        } else if (strcmp(a, "-tag") == 0 && i + 1 < argc) {
+            sl_push(&selected_tags, argv[i + 1]);
+            i++;
+        } else if (strncmp(a, "-tag=", 5) == 0) {
+            sl_push(&selected_tags, a + 5);
         } else if (a[0] != '-') {
             input = a;
         }
@@ -132,11 +151,15 @@ int main(int argc, char **argv) {
         fprintf(stderr, "       weavec [options] -o OUTPUT INPUT\n");
         fprintf(stderr, "Options:\n");
         fprintf(stderr, "  -o <file>         Output file (default: a.out)\n");
-        fprintf(stderr, "  -S, --emit-llvm   Emit LLVM IR instead of executable\n");
+        fprintf(stderr, "  -S, -emit-llvm    Emit LLVM IR instead of executable\n");
         fprintf(stderr, "  -c                Emit object file\n");
         fprintf(stderr, "  -O, --optimize    Enable optimizations\n");
         fprintf(stderr, "  --static          Produce static executable\n");
         fprintf(stderr, "  --runtime PATH    Path to runtime.c (or set WEAVE_RUNTIME env var)\n");
+        fprintf(stderr, "  -generate-tests   Generate & run embedded tests (emit synthetic main)\n");
+        fprintf(stderr, "  -run-tests        Alias for -generate-tests\n");
+        fprintf(stderr, "  -test NAME        Select test(s) by name (repeatable)\n");
+        fprintf(stderr, "  -tag TAG          Select test(s) by tag (repeatable)\n");
         fprintf(stderr, "  -I<dir>           Add include directory\n");
         fprintf(stderr, "\nEnvironment:\n");
         fprintf(stderr, "  WEAVE_RUNTIME     Default path to runtime.c\n");
@@ -149,17 +172,17 @@ int main(int argc, char **argv) {
     }
 
     src = read_file_all(input);
-    top = parse_top(src);
+    top = parse_top(src, input);
     free(src);
 
     sl_init(&included);
     parse_include_dirs(argc, argv, &include_dirs);
     base_dir = compute_base_dir(input);
-    merge_includes(top, &included, base_dir, &include_dirs);
+    merge_includes(top, &included, base_dir, &include_dirs, input);
     free(base_dir);
 
     sb_init(&ir);
-    compile_to_llvm_ir(top, &ir);
+    compile_to_llvm_ir(top, &ir, generate_tests_mode, &selected_test_names, &selected_tags);
 
     if (mode == OUTPUT_LLVM_IR) {
         /* Just write the IR */
