@@ -9,6 +9,15 @@ void die(const char *msg) {
     exit(1);
 }
 
+void die_at(const char *filename, int line, int col, const char *msg) {
+    if (filename) {
+        fprintf(stderr, "weavec0c: %s:%d:%d: %s\n", filename, line, col, msg);
+    } else {
+        fprintf(stderr, "weavec0c: %d:%d: %s\n", line, col, msg);
+    }
+    exit(1);
+}
+
 void *xmalloc(size_t n) {
     void *p = malloc(n ? n : 1);
     if (!p) die("out of memory");
