@@ -23,14 +23,20 @@ void node_list_push(Node *list, Node *child) {
     list->items[list->count++] = child;
 }
 
-static Node *parse_list(Lexer *lx) {
+static Node *parse_list(Lexer *lx, ParseCtx *ctx) {
     Node *list = node_new(N_LIST);
     for (;;) {
         Token t = lex_next(lx);
-        if (t.kind == TOK_EOF) die("unexpected EOF inside list");
+        if (t.kind == TOK_EOF) {
+            if (ctx && ctx->filename) {
+                die_at(ctx->filename, t.line, t.col, "unexpected EOF inside list");
+            } else {
+                die("unexpected EOF inside list");
+            }
+        }
         if (t.kind == TOK_RPAREN) break;
         if (t.kind == TOK_LPAREN) {
-            node_list_push(list, parse_list(lx));
+            node_list_push(list, parse_list(lx, ctx));
         } else if (t.kind == TOK_ATOM) {
             Node *a = node_new(N_ATOM);
             a->text = t.text;
@@ -40,16 +46,28 @@ static Node *parse_list(Lexer *lx) {
             s->text = t.text;
             node_list_push(list, s);
         } else {
-            die("unexpected token in list");
+            if (ctx && ctx->filename) {
+                die_at(ctx->filename, t.line, t.col, "unexpected token in list");
+            } else {
+                die("unexpected token in list");
+            }
         }
     }
     return list;
 }
 
-static Node *parse_node(Lexer *lx) {
+static Node *parse_node(Lexer *lx, ParseCtx *ctx) {
     Token t = lex_next(lx);
     if (t.kind == TOK_EOF) return NULL;
-    if (t.kind == TOK_LPAREN) return parse_list(lx);
+    if (t.kind == TOK_LPAREN) return parse_list(lx, ctx);
+    if (t.kind == TOK_RPAREN) {
+        if (ctx && ctx->filename) {
+            die_at(ctx->filename, t.line, t.col, "unexpected ')'");
+        } else {
+            die("syntax error: unexpected ')' at top-level");
+        }
+        return NULL;
+    }
     if (t.kind == TOK_ATOM) {
         Node *a = node_new(N_ATOM);
         a->text = t.text;
@@ -60,16 +78,22 @@ static Node *parse_node(Lexer *lx) {
         s->text = t.text;
         return s;
     }
-    die("unexpected token");
+    if (ctx && ctx->filename) {
+        die_at(ctx->filename, t.line, t.col, "unexpected token");
+    } else {
+        die("syntax error: unexpected token at top-level");
+    }
     return NULL;
 }
 
-Node *parse_top(const char *src) {
+Node *parse_top(const char *src, const char *filename) {
     Lexer lx;
     Node *top = node_new(N_LIST);
+    ParseCtx ctx;
+    ctx.filename = filename;
     lex_init(&lx, src);
     while (1) {
-        Node *n = parse_node(&lx);
+        Node *n = parse_node(&lx, &ctx);
         if (!n) break;
         node_list_push(top, n);
     }
