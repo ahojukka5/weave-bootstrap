@@ -97,9 +97,9 @@ static char *dir_name(const char *path) {
     return out;
 }
 
-static void merge_file_into(Node *dst_list, const char *file_path, StrList *included_files, StrList *include_dirs);
+static void merge_file_into(Node *dst_list, const char *file_path, StrList *included_files, StrList *include_dirs, const char *current_filename);
 
-static void merge_includes_in_list(Node *list, StrList *included_files, const char *base_dir, StrList *include_dirs) {
+static void merge_includes_in_list(Node *list, StrList *included_files, const char *base_dir, StrList *include_dirs, const char *current_filename) {
     int i;
     for (i = 0; i < list->count; i++) {
         Node *form = list->items[i];
@@ -122,7 +122,7 @@ static void merge_includes_in_list(Node *list, StrList *included_files, const ch
                 const char *use = canon ? canon : resolved;
                 if (!sl_contains(included_files, use)) {
                     sl_push(included_files, use);
-                    merge_file_into(list, use, included_files, include_dirs);
+                    merge_file_into(list, use, included_files, include_dirs, current_filename);
                 }
                 if (canon) free(canon);
             }
@@ -130,23 +130,23 @@ static void merge_includes_in_list(Node *list, StrList *included_files, const ch
             head->text = "";
             free(resolved);
         } else if (is_atom(head, "module") || is_atom(head, "program")) {
-            merge_includes_in_list(form, included_files, base_dir, include_dirs);
+            merge_includes_in_list(form, included_files, base_dir, include_dirs, current_filename);
         }
     }
 }
 
-void merge_includes(Node *top, StrList *included_files, const char *base_dir, StrList *include_dirs) {
-    merge_includes_in_list(top, included_files, base_dir, include_dirs);
+void merge_includes(Node *top, StrList *included_files, const char *base_dir, StrList *include_dirs, const char *current_filename) {
+    merge_includes_in_list(top, included_files, base_dir, include_dirs, current_filename);
 }
 
-static void merge_file_into(Node *dst_list, const char *file_path, StrList *included_files, StrList *include_dirs) {
+static void merge_file_into(Node *dst_list, const char *file_path, StrList *included_files, StrList *include_dirs, const char *current_filename) {
     char *src = read_file_all(file_path);
-    Node *file_top = parse_top(src);
+    Node *file_top = parse_top(src, file_path);
     char *dir = dir_name(file_path);
     int i;
     free(src);
 
-    merge_includes(file_top, included_files, dir, include_dirs);
+    merge_includes(file_top, included_files, dir, include_dirs, file_path);
     free(dir);
 
     for (i = 0; i < file_top->count; i++) {
