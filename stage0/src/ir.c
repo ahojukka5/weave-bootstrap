@@ -11,6 +11,11 @@ void ir_init(IrCtx *ir, StrBuf *out) {
     ir->type_env = NULL;
     ir->current_fn = NULL;
     sl_init(&ir->declared_ccalls);
+    ir->run_tests_mode = 0;
+    sl_init(&ir->test_funcs);
+    sl_init(&ir->test_names);
+    sl_init(&ir->selected_test_names);
+    sl_init(&ir->selected_tags);
 }
 
 int ir_fresh_temp(IrCtx *ir) {
