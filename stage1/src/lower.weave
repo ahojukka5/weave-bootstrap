@@ -9,8 +9,8 @@
   (include "ir/util_structs.weave")
 
   ;; Split modules under lower/
-  (include "./lower/type_env.weave")
-  (include "./lower/ast_builder.weave")
-  (include "./lower/struct_ops.weave")
-  (include "./lower/lowering.weave")
+  (include "lower/type_env.weave")
+  (include "lower/ast_builder.weave")
+  (include "lower/struct_ops.weave")
+  (include "lower/lowering.weave")
 ) ;; module
