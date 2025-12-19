@@ -11,6 +11,7 @@
 #include <stddef.h>
 
 void die(const char *msg);
+void die_at(const char *filename, int line, int col, const char *msg);
 void *xmalloc(size_t n);
 void *xrealloc(void *p, size_t n);
 char *xstrdup(const char *s);
