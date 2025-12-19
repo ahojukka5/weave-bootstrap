@@ -6,6 +6,10 @@
 
 typedef enum { N_ATOM, N_STRING, N_LIST } NodeKind;
 
+typedef struct {
+    const char *filename;
+} ParseCtx;
+
 typedef struct Node Node;
 struct Node {
     NodeKind kind;
@@ -15,7 +19,7 @@ struct Node {
     int cap;
 };
 
-Node *parse_top(const char *src);
+Node *parse_top(const char *src, const char *filename);
 int is_atom(Node *n, const char *s);
 Node *list_nth(Node *list, int idx);
 const char *atom_text(Node *n);
