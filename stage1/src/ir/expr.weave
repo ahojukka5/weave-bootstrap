@@ -11,5 +11,9 @@
   (include "./pointers.weave")
 
   (include "./expr_ccall.weave")
-  (include "./expr_core.weave")
+  ;; Split core expression lowering into smaller files under core/
+  (include "./core/expr_core_types.weave")
+  (include "./core/expr_core_atoms.weave")
+  (include "./core/expr_core_ptrs.weave")
+  (include "./core/expr_compile.weave")
 ) ;; module

@@ -1,0 +1,170 @@
+  (fn type-node-to-llvm-str
+    (doc "Convert a type AST node to LLVM type string.")
+    (params (a (ptr Arena)) (ty-node Int32))
+    (returns String)
+    (body
+      (if-stmt (== (arena-kind a ty-node) (node-kind-atom))
+        (do
+          (let ty-val String (arena-value a ty-node))
+          (if-stmt (string-eq ty-val "Int32")
+            (return "i32")
+            (if-stmt (string-eq ty-val "Int64")
+              (return "i64")
+              (if-stmt (string-eq ty-val "String")
+                (return "i8*")
+                (if-stmt (string-eq ty-val "Int8")
+                  (return "i8")
+                  (if-stmt (string-eq ty-val "Buffer")
+                    (return "i8*")
+                    (if-stmt (string-eq ty-val "Arena")
+                      (return "%Arena")
+                      (if-stmt (string-eq ty-val "ArrayString")
+                        (return "i8*")
+                        (if-stmt (string-eq ty-val "ArrayInt32")
+                          (return "i8*")
+                          (if-stmt (string-eq ty-val "NodeKind")
+                            (return "i32")
+                            (if-stmt (string-eq ty-val "Int64")
+                              (return "i64")
+                              ;; Assume user-defined type is i32 for now
+                              (return "i32")
+                            )
+                          )
+                        )
+                      )
+                    )
+                  )
+                )
+              )
+            )
+          )
+        )
+        ;; It's a list - could be (ptr X)
+        (do
+          (let head Int32 (arena-first-child a ty-node))
+          (if-stmt (== head (- 0 1))
+            (return "i32")
+            (do
+              (let head-val String (arena-value a head))
+              (if-stmt (string-eq head-val "ptr")
+                (do
+                  (let inner Int32 (second-child a ty-node))
+                  (let inner-ty String (type-node-to-llvm-str a inner))
+                  ;; Append * to make it a pointer
+                  (let buf Buffer (buffer-new))
+                  (buffer-append-string buf inner-ty)
+                  (buffer-append-string buf "*")
+                  (return (buffer-to-string buf))
+                )
+                (return "i32")
+              )
+            )
+          )
+        )
+      )
+    )
+  )
+
+  (fn infer-arg-type
+    (doc "Infer the LLVM type of an expression (for call arguments).")
+    (params (a (ptr Arena)) (node Int32) (env-names ArrayString) (env-types ArrayInt32) (fn-sig-names ArrayString) (fn-sig-ret-types ArrayInt32))
+    (returns String)
+    (body
+      (if-stmt (== (arena-kind a node) (node-kind-atom))
+        ;; Atom: could be integer literal, string literal, or variable
+        (do
+          (let val String (arena-value a node))
+          ;; Check if it's a string literal
+          (if-stmt (== (is-string-literal val) 1)
+            (return "i8*")
+            (do 0)
+          )
+          ;; Check if it's a number
+          (let first-char Int32 (string-char-at val 0))
+          (if-stmt (|| (&& (>= first-char 48) (<= first-char 57)) (== first-char 45))
+            (return "i32")
+            ;; It's a variable - look up its type
+            (do
+              (let ty-node Int32 (env-find-type env-names env-types val))
+              (if-stmt (== ty-node (- 0 1))
+                (return "i32")
+                (return (type-node-to-llvm-str a ty-node))
+              )
+            )
+          )
+        )
+        ;; List expression
+        (do
+          (let head Int32 (arena-first-child a node))
+          (if-stmt (== head (- 0 1))
+            (return "i32")
+            (do
+              (let head-val String (arena-value a head))
+              ;; (addr x) returns a pointer
+              (if-stmt (string-eq head-val "addr")
+                (do
+                  (let inner Int32 (second-child a node))
+                  (let inner-type String (infer-arg-type a inner env-names env-types fn-sig-names fn-sig-ret-types))
+                  (let buf Buffer (buffer-new))
+                  (buffer-append-string buf inner-type)
+                  (buffer-append-string buf "*")
+                  (return (buffer-to-string buf))
+                )
+                (do 0)
+              )
+              ;; (load ty ptr) returns ty
+              (if-stmt (string-eq head-val "load")
+                (do
+                  (let ty-node Int32 (second-child a node))
+                  (return (type-node-to-llvm-str a ty-node))
+                )
+                (do 0)
+              )
+              ;; (get-field ...) returns i8* for now (most fields are opaque handles)
+              (if-stmt (string-eq head-val "get-field")
+                (return "i8*")
+                (do 0)
+              )
+              ;; Arithmetic ops return i32
+              (if-stmt (|| (|| (|| (string-eq head-val "+") (string-eq head-val "-")) (string-eq head-val "*")) (string-eq head-val "/"))
+                (return "i32")
+                (do 0)
+              )
+              ;; Comparison ops return i32 (zext'd)
+              (if-stmt (|| (|| (|| (|| (string-eq head-val "==") (string-eq head-val "!=")) (string-eq head-val "<")) (string-eq head-val ">")) (|| (string-eq head-val "<=") (string-eq head-val ">=")))
+                (return "i32")
+                (do 0)
+              )
+              ;; Function call - look up return type
+              (return (lookup-fn-ret-type a head-val fn-sig-names fn-sig-ret-types))
+            )
+          )
+        )
+      )
+    )
+  )
+
+  (fn get-struct-name-from-type-node
+    (doc "Extract struct name from a type node (atom 'Arena' or list '(struct Arena)').")
+    (params (a (ptr Arena)) (ty-node Int32)) (returns String)
+    (body
+      (if-stmt (== (arena-kind a ty-node) (node-kind-atom))
+        ;; Atom type: just the struct name
+        (return (arena-value a ty-node))
+        (do
+          ;; List type: should be (struct Name)
+          (let head Int32 (arena-first-child a ty-node))
+          (if-stmt (== head (- 0 1)) (return "") (do 0))
+          (let head-val String (arena-value a head))
+          (if-stmt (string-eq head-val "struct")
+            (do
+              (let name-node Int32 (arena-next-sibling a head))
+              (if-stmt (== name-node (- 0 1)) (return "") (do 0))
+              (return (arena-value a name-node))
+            )
+            (return "")
+          )
+        )
+      )
+    )
+  ) ;; fn get-struct-name-from-type-node
