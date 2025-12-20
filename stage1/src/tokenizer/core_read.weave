@@ -23,6 +23,28 @@
       (return i)
     )
   )
+  (tests
+    (test skip-ws-space
+      (doc "skip leading spaces")
+      (tags unit tokenizer)
+      (body
+        (let src String "  abc")
+        (let idx Int32 (skip-ws-and-comments src 0))
+        (let ch Int32 (string-char-at src idx))
+        (expect-eq ch 97)
+      )
+    )
+    (test skip-comment-line
+      (doc "skip ';' comment then newline")
+      (tags unit tokenizer)
+      (body
+        (let src String ";comment\nabc")
+        (let idx Int32 (skip-ws-and-comments src 0))
+        (let ch Int32 (string-char-at src idx))
+        (expect-eq ch 97)
+      )
+    )
+  )
 )
 
 (fn read-while
@@ -51,6 +73,32 @@
       (return i)
     )
   )
+  (tests
+    (test read-while-digits
+      (doc "mode 0 reads digits '123'")
+      (tags unit tokenizer)
+      (body
+        (let out Buffer (buffer-new))
+        (let next Int32 (read-while "123abc" 0 out 0))
+        (let s String (buffer-to-string out))
+        (let eq Int32 (string-eq s "123"))
+        (expect-eq eq 1)
+        (expect-eq next 3)
+      )
+    )
+    (test read-while-symbols
+      (doc "mode 1 reads symbol chars 'abc123'")
+      (tags unit tokenizer)
+      (body
+        (let out Buffer (buffer-new))
+        (let next Int32 (read-while "abc123!" 0 out 1))
+        (let s String (buffer-to-string out))
+        (let eq Int32 (string-eq s "abc123"))
+        (expect-eq eq 1)
+        (expect-eq next 6)
+      )
+    )
+  )
 )
 
 (fn read-string
@@ -71,6 +119,20 @@
         )
       )
       (return i)
+    )
+  )
+  (tests
+    (test read-string-basic
+      (doc "reads 'hello' from \"hello\"")
+      (tags unit tokenizer)
+      (body
+        (let out Buffer (buffer-new))
+        (let next Int32 (read-string "\"hello\"" 0 out))
+        (let s String (buffer-to-string out))
+        (let eq Int32 (string-eq s "hello"))
+        (expect-eq eq 1)
+        (expect-eq next 7)
+      )
     )
   )
 )
