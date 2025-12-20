@@ -66,6 +66,25 @@
         )
       )
     )
+    (tests
+      (test array-str-append-basic
+        (doc "append two strings then verify length and values")
+        (tags unit prelude)
+        (body
+          (let arr ArrayString (array-str-new))
+          (array-str-append arr "foo")
+          (array-str-append arr "bar")
+          (let len Int32 (array-str-len arr))
+          (expect-eq len 2)
+          (let s0 String (array-str-get arr 0))
+          (let eq0 Int32 (string-eq s0 "foo"))
+          (expect-eq eq0 1)
+          (let s1 String (array-str-get arr 1))
+          (let eq1 Int32 (string-eq s1 "bar"))
+          (expect-eq eq1 1)
+        ) ; body
+      ) ; test
+    ) ; tests
   ) ; fn array-str-append
 
   (fn array-str-get
@@ -80,6 +99,19 @@
         )
       )
     )
+    (tests
+      (test array-str-get-basic
+        (doc "append then get should return same string")
+        (tags unit prelude)
+        (body
+          (let arr ArrayString (array-str-new))
+          (array-str-append arr "hello")
+          (let s String (array-str-get arr 0))
+          (let eq Int32 (string-eq s "hello"))
+          (expect-eq eq 1)
+        ) ; body
+      ) ; test
+    ) ; tests
   ) ; fn array-str-get
 
   (fn array-i32-new
@@ -143,6 +175,23 @@
         )
       )
     )
+    (tests
+      (test array-i32-append-basic
+        (doc "append ints then verify length and values")
+        (tags unit prelude)
+        (body
+          (let arr ArrayInt32 (array-i32-new))
+          (array-i32-append arr 1)
+          (array-i32-append arr 2)
+          (let len Int32 (array-i32-len arr))
+          (expect-eq len 2)
+          (let v0 Int32 (array-i32-get arr 0))
+          (expect-eq v0 1)
+          (let v1 Int32 (array-i32-get arr 1))
+          (expect-eq v1 2)
+        ) ; body
+      ) ; test
+    ) ; tests
   ) ; fn array-i32-append
 
   (fn array-i32-get
@@ -157,6 +206,18 @@
         )
       )
     )
+    (tests
+      (test array-i32-get-basic
+        (doc "append then get should return same int")
+        (tags unit prelude)
+        (body
+          (let arr ArrayInt32 (array-i32-new))
+          (array-i32-append arr 42)
+          (let v Int32 (array-i32-get arr 0))
+          (expect-eq v 42)
+        ) ; body
+      ) ; test
+    ) ; tests
   ) ; fn array-i32-get
 
   (fn array-i32-set
