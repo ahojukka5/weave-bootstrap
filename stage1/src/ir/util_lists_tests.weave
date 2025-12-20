@@ -1,0 +1,28 @@
+(tests
+  (test is-list-with-head-true (doc "should return 1 for matching list") (tags unit util-lists)
+    (body (let a Arena (arena-new)) (let list Int32 (arena-add-node (addr a) (node-kind-list) "")) (let head Int32 (arena-add-node (addr a) (node-kind-atom) "test")) (arena-set-first-child (addr a) list head) (let result Int32 (is-list-with-head (addr a) list "test")) (expect-eq result 1)))
+  (test is-list-with-head-false (doc "should return 0 for non-matching list") (tags unit util-lists)
+    (body (let a Arena (arena-new)) (let list Int32 (arena-add-node (addr a) (node-kind-list) "")) (let head Int32 (arena-add-node (addr a) (node-kind-atom) "test")) (arena-set-first-child (addr a) list head) (let result Int32 (is-list-with-head (addr a) list "other")) (expect-eq result 0)))
+
+  (test count-children-empty (doc "empty list should have 0 children") (tags unit util-lists)
+    (body (let a Arena (arena-new)) (let list Int32 (arena-add-node (addr a) (node-kind-list) "")) (let count Int32 (count-children (addr a) list)) (expect-eq count 0)))
+  (test count-children-two (doc "list with two children should return 2") (tags unit util-lists)
+    (body (let a Arena (arena-new)) (let list Int32 (arena-add-node (addr a) (node-kind-list) "")) (let c1 Int32 (arena-add-node (addr a) (node-kind-atom) "a")) (let c2 Int32 (arena-add-node (addr a) (node-kind-atom) "b")) (arena-set-first-child (addr a) list c1) (arena-set-next-sibling (addr a) c1 c2) (let count Int32 (count-children (addr a) list)) (expect-eq count 2)))
+
+  (test second-child-exists (doc "should return second child when it exists") (tags unit util-lists)
+    (body (let a Arena (arena-new)) (let list Int32 (arena-add-node (addr a) (node-kind-list) "")) (let c1 Int32 (arena-add-node (addr a) (node-kind-atom) "a")) (let c2 Int32 (arena-add-node (addr a) (node-kind-atom) "b")) (arena-set-first-child (addr a) list c1) (arena-set-next-sibling (addr a) c1 c2) (let result Int32 (second-child (addr a) list)) (expect-eq result c2)))
+
+  (test third-child-none (doc "should return -1 when only two children") (tags unit util-lists)
+    (body (let a Arena (arena-new)) (let list Int32 (arena-add-node (addr a) (node-kind-list) "")) (let c1 Int32 (arena-add-node (addr a) (node-kind-atom) "a")) (let c2 Int32 (arena-add-node (addr a) (node-kind-atom) "b")) (arena-set-first-child (addr a) list c1) (arena-set-next-sibling (addr a) c1 c2) (let result Int32 (third-child (addr a) list)) (expect-eq result (- 0 1))))
+
+  (test fourth-child-none (doc "should return -1 when only two children") (tags unit util-lists)
+    (body (let a Arena (arena-new)) (let list Int32 (arena-add-node (addr a) (node-kind-list) "")) (let c1 Int32 (arena-add-node (addr a) (node-kind-atom) "a")) (arena-set-first-child (addr a) list c1) (let result Int32 (fourth-child (addr a) list)) (expect-eq result (- 0 1))))
+
+  (test fifth-child-none (doc "should return -1 when only one child") (tags unit util-lists)
+    (body (let a Arena (arena-new)) (let list Int32 (arena-add-node (addr a) (node-kind-list) "")) (let c1 Int32 (arena-add-node (addr a) (node-kind-atom) "a")) (arena-set-first-child (addr a) list c1) (let result Int32 (fifth-child (addr a) list)) (expect-eq result (- 0 1))))
+
+  (test find-first-child-list-found (doc "should find matching child list") (tags unit util-lists)
+    (body (let a Arena (arena-new)) (let parent Int32 (arena-add-node (addr a) (node-kind-list) "")) (let child-list Int32 (arena-add-node (addr a) (node-kind-list) "")) (let child-head Int32 (arena-add-node (addr a) (node-kind-atom) "target")) (arena-set-first-child (addr a) parent child-list) (arena-set-first-child (addr a) child-list child-head) (let result Int32 (find-first-child-list (addr a) parent "target")) (expect-eq result child-list)))
+  (test find-first-child-list-not-found (doc "should return -1 when not found") (tags unit util-lists)
+    (body (let a Arena (arena-new)) (let parent Int32 (arena-add-node (addr a) (node-kind-list) "")) (let result Int32 (find-first-child-list (addr a) parent "notfound")) (expect-eq result (- 0 1))))
+)
