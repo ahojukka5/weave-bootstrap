@@ -3,7 +3,9 @@
   (doc "Stage1 compiler: tokenize, parse, and emit LLVM IR using stage1 runtime.")
   (version "0.1")
 
-  (include "prelude.weave")
+  (include "string.weave")
+  (include "buffers.weave")
+  (include "arrays.weave")
   (include "tokenizer.weave")
   (include "arena.weave")
   (include "sexpr_parser.weave")

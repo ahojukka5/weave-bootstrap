@@ -2,14 +2,16 @@
   (name "stage1-typecheck")
   (doc "Minimal semantic check: collect signatures and validate call arity/control flow.")
 
-  (include "../prelude.weave")
+  (include "../string.weave")
+  (include "../buffers.weave")
+  (include "../arrays.weave")
   (include "../arena.weave")
-  (include "../ir/util_lists.weave")
-  (include "../ir/util_strings.weave")
   (include "../ir/util_structs.weave")
+  (include "../ir/util_lists_tests.weave")
+  (include "../ir/util_strings_core.weave")
   (include "./tc_sigs.weave")
   (include "./tc_types.weave")
-  (include "./tc_expr.weave")
+  (include "./tc_expr_core.weave")
   (include "./tc_stmt.weave")
 
   (fn tc-error

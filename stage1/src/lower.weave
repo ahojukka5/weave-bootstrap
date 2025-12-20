@@ -2,10 +2,13 @@
   (name "stage1-lower")
   (doc "Lower high-level forms to explicit typed forms for IR generation.")
 
-  (include "prelude.weave")
+  (include "string.weave")
+  (include "buffers.weave")
+  (include "arrays.weave")
   (include "arena.weave")
-  (include "ir/util_lists.weave")
-  (include "ir/util_strings.weave")
+  (include "ir/util_lists_core.weave")
+  (include "ir/util_lists_tests.weave")
+  (include "ir/util_strings_core.weave")
   (include "ir/util_structs.weave")
 
   ;; Split modules under lower/
