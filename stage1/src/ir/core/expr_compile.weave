@@ -1,3 +1,5 @@
+;;; @weave-allow-long-file: compile-expr is a large recursive dispatcher handling all expression forms (atoms, control flow, memory ops, binary ops, function calls). Splitting would require complex mutual recursion between files or force artificial extraction that harms readability. The function naturally grows with language features.
+
   (fn compile-expr
     (doc "Dispatch expression kinds and update temp counter; returns last temp.")
     (params

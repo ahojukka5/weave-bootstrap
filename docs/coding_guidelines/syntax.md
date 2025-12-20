@@ -137,6 +137,31 @@ To encourage modular design and maintainability, file sizes are limited:
 
 - **Soft limit: 256 lines** - Compiler warns but continues. Files exceeding this should be considered for refactoring.
 - **Hard limit: 512 lines** - Compiler fails. Files must be split or refactored.
+- **Override limit: 1024 lines** - Available with explicit justification (see below).
+
+### Override Mechanism
+
+In rare cases where a file legitimately cannot be split, you can extend the hard limit to 1024 lines by adding a directive at the **very first line** of the file:
+
+```lisp
+;;; @weave-allow-long-file: <explanation why this file must be long>
+```
+
+**Requirements:**
+- The directive must be on the first line
+- A non-empty reason is **required**
+- The reason should explain why the file cannot be logically split
+- Use sparingly - most files should stay under 512 lines
+
+**Example:**
+```lisp
+;;; @weave-allow-long-file: compile-expr is a large recursive dispatcher handling all expression forms. Splitting would require complex mutual recursion or force artificial extraction.
+
+(fn compile-expr
+  (doc "Main expression compiler")
+  ...
+)
+```
 
 ### Guidelines
 
@@ -145,11 +170,15 @@ To encourage modular design and maintainability, file sizes are limited:
 - Files over 512 lines indicate a need for refactoring:
   - **Single massive function**: Extract helper functions for logical sub-tasks
   - **Multiple unrelated things**: Split into separate modules with clear responsibilities
+- Files requiring the override (512-1024 lines) must have documented justification
   
 ### Anti-patterns
 
 ❌ **Mechanical splitting**: Don't create `file_a.weave` and `file_b.weave` just to bypass the limit
+❌ **Empty override reason**: `;;; @weave-allow-long-file: ` (will be rejected)
+❌ **Lazy override use**: Using override to avoid proper refactoring
 ✅ **Logical organization**: Split by responsibility (e.g., `compile_expr.weave`, `compile_stmt.weave`, `compile_types.weave`)
+✅ **Justified override**: Large recursive dispatchers that naturally grow with language features
 
 ## Naming Conventions
 

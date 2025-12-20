@@ -20,25 +20,68 @@ char *read_file_all(const char *path) {
     buf = (char *)xmalloc((size_t)size + 1);
     nread = fread(buf, 1, (size_t)size, f);
     buf[nread] = '\0';
-    /* Linux-style line-count limits:
-       - Soft limit (256 lines): issue warning but continue
-       - Hard limit (512 lines): fail the build
-       Count lines by '\n' characters, including the last line if not
-       terminated by a newline. */
+    /* File size limits with override mechanism:
+       - Soft limit (256 lines): warning
+       - Hard limit (512 lines): error
+       - Override: Use ";;; @weave-allow-long-file: <reason>" at file start
+         to extend hard limit to 1024 lines. Reason must be non-empty.
+    */
     {
         size_t lines = 0;
+        size_t hard_limit = 512;
+        int has_override = 0;
+        const char *override_marker = ";;; @weave-allow-long-file:";
+        const size_t marker_len = strlen(override_marker);
+        
+        /* Check for override directive in first line */
+        if (nread > marker_len && strncmp(buf, override_marker, marker_len) == 0) {
+            const char *reason_start = buf + marker_len;
+            const char *newline = strchr(reason_start, '\n');
+            size_t reason_len = newline ? (size_t)(newline - reason_start) : strlen(reason_start);
+            
+            /* Skip whitespace */
+            while (reason_len > 0 && (*reason_start == ' ' || *reason_start == '\t')) {
+                reason_start++;
+                reason_len--;
+            }
+            
+            /* Verify reason is not empty */
+            if (reason_len > 0) {
+                has_override = 1;
+                hard_limit = 1024;
+                fprintf(stderr,
+                        "weavec0c: note: file has long-file override (limit extended to 1024 lines): %s\n",
+                        path);
+            } else {
+                fprintf(stderr,
+                        "weavec0c: error: @weave-allow-long-file directive requires a reason: %s\n",
+                        path);
+                exit(1);
+            }
+        }
+        
+        /* Count lines */
         if (nread > 0) {
             size_t i;
             for (i = 0; i < nread; i++) {
                 if (buf[i] == '\n') lines++;
             }
-            /* If the file does not end with a newline, count the trailing line */
             if (buf[nread - 1] != '\n') lines++;
         }
-        if (lines > 512) {
+        
+        /* Check limits */
+        if (lines > hard_limit) {
             fprintf(stderr,
-                    "weavec0c: cannot fit in it memory more than 512 things (file has %zu lines): %s\n",
-                    lines, path);
+                    "weavec0c: cannot fit in it memory more than %zu things (file has %zu lines): %s\n",
+                    hard_limit, lines, path);
+            if (!has_override) {
+                fprintf(stderr,
+                        "weavec0c: hint: If this file truly cannot be split logically, add:\n");
+                fprintf(stderr,
+                        "weavec0c:       ;;; @weave-allow-long-file: <explain why this file must be long>\n");
+                fprintf(stderr,
+                        "weavec0c:       at the very first line of the file.\n");
+            }
             exit(1);
         }
         if (lines > 256) {
