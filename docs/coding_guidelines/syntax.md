@@ -131,6 +131,26 @@ Functions must follow this exact order:
 - Document complex logic with inline comments
 - Every function must have a `(doc "...")` string
 
+## File Size Limits
+
+To encourage modular design and maintainability, file sizes are limited:
+
+- **Soft limit: 256 lines** - Compiler warns but continues. Files exceeding this should be considered for refactoring.
+- **Hard limit: 512 lines** - Compiler fails. Files must be split or refactored.
+
+### Guidelines
+
+- Files under 256 lines are ideal
+- Files between 256-512 lines should have a clear reason (e.g., multiple related functions that logically belong together)
+- Files over 512 lines indicate a need for refactoring:
+  - **Single massive function**: Extract helper functions for logical sub-tasks
+  - **Multiple unrelated things**: Split into separate modules with clear responsibilities
+  
+### Anti-patterns
+
+❌ **Mechanical splitting**: Don't create `file_a.weave` and `file_b.weave` just to bypass the limit
+✅ **Logical organization**: Split by responsibility (e.g., `compile_expr.weave`, `compile_stmt.weave`, `compile_types.weave`)
+
 ## Naming Conventions
 
 - Function names: `kebab-case` (e.g., `compile-fn-body`)
