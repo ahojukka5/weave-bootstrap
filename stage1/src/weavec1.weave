@@ -3,9 +3,7 @@
   (doc "Stage1 compiler: tokenize, parse, and emit LLVM IR using stage1 runtime.")
   (version "0.1")
 
-  (include "string.weave")
-  (include "buffers.weave")
-  (include "arrays.weave")
+  (include "prelude.weave")
   (include "tokenizer.weave")
   (include "arena.weave")
   (include "sexpr_parser.weave")
@@ -33,6 +31,11 @@
         ;; Optimization, includes and linking flags
         (let opt-O String (ccall "weave_get_option" (returns String) (args (String "O"))))
         (let opt-I String (ccall "weave_get_option" (returns String) (args (String "I"))))
+        ;; Normalize NULL options to empty strings to avoid libc NULL deref
+        (if-stmt (== (ccall "weave_string_length" (returns Int32) (args (String input-path))) 0) (set input-path "") (do 0))
+        (if-stmt (== (ccall "weave_string_length" (returns Int32) (args (String output-path))) 0) (set output-path "") (do 0))
+        (if-stmt (== (ccall "weave_string_length" (returns Int32) (args (String opt-O))) 0) (set opt-O "") (do 0))
+        (if-stmt (== (ccall "weave_string_length" (returns Int32) (args (String opt-I))) 0) (set opt-I "") (do 0))
         (let has-static Int32 (ccall "weave_has_flag" (returns Int32) (args (String "static"))))
         ;; Build extra clang flags string
         (let extra String "")
@@ -127,9 +130,12 @@
         (let rc Int32 (expand-root input-path (addr arena) (addr out-root)))
         (if-stmt (!= rc 0) (return 1) (do 0))
         (let root Int32 out-root)
+        (ccall "puts" (returns Int32) (args (String "[weavec1] lowering...")))
         (let lc Int32 (lower-program (addr arena) root))
+        (ccall "puts" (returns Int32) (args (String "[weavec1] typechecking...")))
         (let tc Int32 (typecheck_program (addr arena) root))
         (if-stmt (!= tc 0) (return 1) (do 0))
+        (ccall "puts" (returns Int32) (args (String "[weavec1] generating IR...")))
         (let ir-buf Buffer (buffer-new))
         (generate-ir (addr arena) root ir-buf 0)
         
