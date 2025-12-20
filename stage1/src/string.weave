@@ -4,6 +4,8 @@
 
   (include "libc.weave")
 
+  (type Int8 (alias Int32))
+
   (fn string-length
     (doc "Return length of null-terminated string.")
     (params (s String)) (returns Int32)
@@ -117,6 +119,103 @@
         (body
           (let result Int32 (string-eq "test" "best"))
           (expect-eq result 0)
+        )
+      )
+    )
+  )
+
+  (fn string-char-at
+    (doc "Return byte value at index or 0 if out of bounds.")
+    (params (s String) (idx Int32)) (returns Int32)
+    (body
+      (return
+        (ccall "weave_string_char_at"
+          (returns Int32)
+          (args (String s) (Int32 idx))
+        )
+      )
+    )
+    (tests
+      (test string-char-at-basic
+        (doc "first char of 'abc' is 'a' (97)")
+        (tags unit string)
+        (body
+          (let result Int32 (string-char-at "abc" 0))
+          (expect-eq result 97)
+        )
+      )
+      (test string-char-at-oob
+        (doc "out-of-bounds index returns 0")
+        (tags unit string)
+        (body
+          (let result Int32 (string-char-at "abc" 5))
+          (expect-eq result 0)
+        )
+      )
+    )
+  )
+
+  (fn string-slice
+    (doc "Return substring of length len starting at start.")
+    (params (s String) (start Int32) (len Int32)) (returns String)
+    (body
+      (return
+        (ccall "weave_string_slice"
+          (returns String)
+          (args (String s) (Int32 start) (Int32 len))
+        )
+      )
+    )
+    (tests
+      (test string-slice-basic
+        (doc "slice 'hello world' [0,5] returns 'hello'")
+        (tags unit string)
+        (body
+          (let out String (string-slice "hello world" 0 5))
+          (let eq Int32 (string-eq out "hello"))
+          (expect-eq eq 1)
+        )
+      )
+      (test string-slice-middle
+        (doc "slice 'hello world' [6,5] returns 'world'")
+        (tags unit string)
+        (body
+          (let out String (string-slice "hello world" 6 5))
+          (let eq Int32 (string-eq out "world"))
+          (expect-eq eq 1)
+        )
+      )
+    )
+  )
+
+  (fn int-to-string
+    (doc "Convert Int32 to decimal string.")
+    (params (v Int32)) (returns String)
+    (body
+      (return
+        (ccall "weave_int_to_string"
+          (returns String)
+          (args (Int32 v))
+        )
+      )
+    )
+    (tests
+      (test int-to-string-positive
+        (doc "convert 42 to string")
+        (tags unit string)
+        (body
+          (let result String (int-to-string 42))
+          (let len Int32 (string-length result))
+          (expect-eq len 2)
+        )
+      )
+      (test int-to-string-zero
+        (doc "convert 0 to string")
+        (tags unit string)
+        (body
+          (let result String (int-to-string 0))
+          (let len Int32 (string-length result))
+          (expect-eq len 1)
         )
       )
     )
