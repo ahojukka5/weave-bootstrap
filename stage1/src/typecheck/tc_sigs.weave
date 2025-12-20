@@ -69,6 +69,21 @@
       )
       (return 0)
     )
+    (tests
+      (test collect-sigs-empty
+        (doc "empty program yields no signatures and returns 0")
+        (tags unit typecheck)
+        (body
+          (let a Arena (arena-new))
+          (let root Int32 (arena-add-node (addr a) (node-kind-list) ""))
+          (let names ArrayString (array-str-new))
+          (let counts ArrayInt32 (array-i32-new))
+          (let result Int32 (collect-sigs (addr a) root names counts))
+          (expect-eq result 0)
+          (expect-eq (array-str-len names) 0)
+        )
+      )
+    )
   )
 
   (fn sig-find
@@ -89,5 +104,18 @@
         )
       )
       (return (- 0 1))
+    )
+    (tests
+      (test sig-find-hit-miss
+        (doc "returns index on hit, -1 on miss")
+        (tags unit typecheck)
+        (body
+          (let names ArrayString (array-str-new))
+          (array-str-append names "a")
+          (array-str-append names "b")
+          (expect-eq (sig-find names "b") 1)
+          (expect-eq (sig-find names "c") (- 0 1))
+        )
+      )
     )
   )
