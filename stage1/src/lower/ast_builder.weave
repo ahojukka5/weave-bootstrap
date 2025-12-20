@@ -7,6 +7,19 @@
     (params (a (ptr Arena)) (val String))
     (returns Int32)
     (body (arena-add-node a (node-kind-atom) val))
+    (tests
+      (test make-atom-basic
+        (doc "atom node has kind atom and value")
+        (tags unit lower ast)
+        (body
+          (let a (ptr Arena) (arena-create 256))
+          (let nid Int32 (make-atom a "x"))
+          (expect-eq (arena-kind a nid) (node-kind-atom))
+          (let v String (arena-value a nid))
+          (expect-eq (string-eq v "x") 1)
+        )
+      )
+    )
   )
 
   (fn make-list
@@ -18,6 +31,19 @@
       (arena-set-first-child a id first-child)
       (return id)
     ))
+    (tests
+      (test make-list-basic
+        (doc "list node uses provided first child")
+        (tags unit lower ast)
+        (body
+          (let a (ptr Arena) (arena-create 256))
+          (let ch Int32 (make-atom a "head"))
+          (let lid Int32 (make-list a ch))
+          (expect-eq (arena-kind a lid) (node-kind-list))
+          (expect-eq (arena-first-child a lid) ch)
+        )
+      )
+    )
   )
 
   (fn link-siblings
@@ -28,6 +54,19 @@
       (arena-set-next-sibling a prev next)
       (return 0)
     ))
+    (tests
+      (test link-siblings-basic
+        (doc "link next sibling connects nodes")
+        (tags unit lower ast)
+        (body
+          (let a (ptr Arena) (arena-create 256))
+          (let n0 Int32 (make-atom a "a"))
+          (let n1 Int32 (make-atom a "b"))
+          (link-siblings a n0 n1)
+          (expect-eq (arena-next-sibling a n0) n1)
+        )
+      )
+    )
   )
 
   (fn build-struct-type-node
@@ -40,4 +79,21 @@
       (link-siblings a struct-atom name-atom)
       (return (make-list a struct-atom))
     ))
+    (tests
+      (test build-struct-type-node-basic
+        (doc "builds (struct Name) list shape")
+        (tags unit lower ast)
+        (body
+          (let a (ptr Arena) (arena-create 256))
+          (let lid Int32 (build-struct-type-node a "Foo"))
+          (expect-eq (arena-kind a lid) (node-kind-list))
+          (let head Int32 (arena-first-child a lid))
+          (expect-eq (arena-kind a head) (node-kind-atom))
+          (expect-eq (string-eq (arena-value a head) "struct") 1)
+          (let name Int32 (arena-next-sibling a head))
+          (expect-eq (arena-kind a name) (node-kind-atom))
+          (expect-eq (string-eq (arena-value a name) "Foo") 1)
+        )
+      )
+    )
   )
