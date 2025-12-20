@@ -16,6 +16,19 @@
       (array-str-append env-types ty)
       (return 0)
     ))
+    (tests
+      (test type-env-add-basic
+        (doc "appends name and type to env arrays")
+        (tags unit lower)
+        (body
+          (let names ArrayString (array-str-new))
+          (let types ArrayString (array-str-new))
+          (type-env-add names types "x" "Int32")
+          (expect-eq (array-str-get names 0) "x")
+          (expect-eq (array-str-get types 0) "Int32")
+        )
+      )
+    )
   )
 
   (fn type-env-lookup
@@ -38,6 +51,24 @@
       )
       (return "")
     ))
+    (tests
+      (test type-env-lookup-basic
+        (doc "returns last binding for duplicates and empty on miss")
+        (tags unit lower)
+        (body
+          (let names ArrayString (array-str-new))
+          (let types ArrayString (array-str-new))
+          (array-str-append names "x")
+          (array-str-append types "Int32")
+          (array-str-append names "y")
+          (array-str-append types "String")
+          (array-str-append names "x")
+          (array-str-append types "String")
+          (expect-eq (type-env-lookup names types "x") "String")
+          (expect-eq (type-env-lookup names types "z") "")
+        )
+      )
+    )
   )
 
   ;; ============================================================
@@ -61,6 +92,16 @@
         (return "")
       )
     ))
+    (tests
+      (test extract-struct-type-cases
+        (doc "extracts inner type from ptr form, else empty")
+        (tags unit lower)
+        (body
+          (expect-eq (extract-struct-type "(ptr Arena)") "Arena")
+          (expect-eq (extract-struct-type "Foo") "")
+        )
+      )
+    )
   )
 
   ;; ============================================================
@@ -89,4 +130,21 @@
         )
       )
     ))
+    (tests
+      (test stringify-type-node-cases
+        (doc "returns atom value and builds ptr form strings")
+        (tags unit lower)
+        (body
+          (let a Arena (arena-new))
+          (let atom Int32 (arena-add-node (addr a) (node-kind-atom) "Int32"))
+          (expect-eq (stringify-type-node (addr a) atom) "Int32")
+          (let list Int32 (arena-add-node (addr a) (node-kind-list) ""))
+          (let head Int32 (arena-add-node (addr a) (node-kind-atom) "ptr"))
+          (let inner Int32 (arena-add-node (addr a) (node-kind-atom) "Arena"))
+          (arena-set-first-child (addr a) list head)
+          (arena-set-next-sibling (addr a) head inner)
+          (expect-eq (stringify-type-node (addr a) list) "(ptr Arena)")
+        )
+      )
+    )
   )
