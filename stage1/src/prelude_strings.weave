@@ -225,6 +225,26 @@
         )
       )
     )
+    (tests
+      (test string-slice-basic
+        (doc "slice 'hello world' [0,5] returns 'hello'")
+        (tags unit prelude)
+        (body
+          (let out String (string-slice "hello world" 0 5))
+          (let eq Int32 (string-eq out "hello"))
+          (expect-eq eq 1)
+        ) ; body
+      ) ; test
+      (test string-slice-middle
+        (doc "slice 'hello world' [6,5] returns 'world'")
+        (tags unit prelude)
+        (body
+          (let out String (string-slice "hello world" 6 5))
+          (let eq Int32 (string-eq out "world"))
+          (expect-eq eq 1)
+        ) ; body
+      ) ; test
+    ) ; tests
   ) ; fn string-slice
 
   (fn string-eq
