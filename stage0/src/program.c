@@ -150,6 +150,8 @@ static void compile_fn_form(IrCtx *ir, Node *fn_form, const char *override_name)
     int idx = 1;
     Node *name_node = list_nth(fn_form, idx++);
     Node *maybe_doc = list_nth(fn_form, idx);
+    Node *fh = list_nth(fn_form, 0);
+    int is_entry = (fh && fh->kind == N_ATOM && is_atom(fh, "entry"));
     if (maybe_doc && maybe_doc->kind == N_LIST && is_atom(list_nth(maybe_doc, 0), "doc")) {
         idx++;
     }
@@ -162,6 +164,31 @@ static void compile_fn_form(IrCtx *ir, Node *fn_form, const char *override_name)
     Node *stmt;
     Value last_expr = {0};
     int has_last = 0;
+    int has_tests = 0;
+    int i;
+
+    /* Check for required (tests ...) section - only for regular functions, not entry points */
+    if (!is_entry) {
+        for (i = idx; i < fn_form->count; i++) {
+            Node *extra = list_nth(fn_form, i);
+            Node *eh = list_nth(extra, 0);
+            if (eh && eh->kind == N_ATOM && is_atom(eh, "tests")) {
+                has_tests = 1;
+                /* Verify that tests section has at least one test */
+                if (extra->count < 2) {
+                    fprintf(stderr, "ERROR: function '%s' has empty (tests ...) section\n", name ? name : "<unknown>");
+                    fprintf(stderr, "Every function must have at least one test.\n");
+                    exit(1);
+                }
+                break;
+            }
+        }
+        if (!has_tests) {
+            fprintf(stderr, "ERROR: function '%s' is missing required (tests ...) section\n", name ? name : "<unknown>");
+            fprintf(stderr, "Every function must have at least one test.\n");
+            exit(1);
+        }
+    }
 
     if (returns_form && returns_form->kind == N_LIST && is_atom(list_nth(returns_form, 0), "returns")) {
         ret_type = parse_type_node((TypeEnv *)ir->type_env, list_nth(returns_form, 1));
