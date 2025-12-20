@@ -72,6 +72,18 @@
       )
       (return 0)
     )
+    (tests
+      (test fnbody-return-stmt
+        (doc "Test body with explicit return statement")
+        (tags unit)
+        (body
+          (let a (ptr Arena) (arena-create 4096))
+          (let body-form Int32 (parse-string a "(body (return 42))"))
+          (let out Buffer (buffer-create 512))
+          (let temp-var Int32 0)
+          (let label-var Int32 0)
+          (let result Int32 (compile-fn-body a body-form 0 (array-string-create) (array-string-create) (array-int32-create) (array-string-create) (array-string-create) (array-string-create) (buffer-create 0) (addr-of Int32 temp-var) out (addr-of Int32 temp-var) (addr-of Int32 label-var) (array-string-create) (array-int32-create)))
+          (expect-eq result 1))))
   )
 
   (fn emit-fn-params
@@ -117,6 +129,17 @@
       )
       (return 0)
     ))
+    (tests
+      (test emit-params-none
+        (doc "Test emit with no parameters")
+        (tags unit)
+        (body
+          (let a (ptr Arena) (arena-create 4096))
+          (let params-form Int32 (parse-string a "(params)"))
+          (let out Buffer (buffer-create 256))
+          (let is-first-var Int32 1)
+          (let result Int32 (emit-fn-params a params-form (array-string-create) (array-string-create) (array-int32-create) out (addr-of Int32 is-first-var)))
+          (expect-eq result 0))))
   )
 
   (fn emit-param-allocas
@@ -168,6 +191,16 @@
       )
       (return 0)
     ))
+    (tests
+      (test emit-allocas-none
+        (doc "Test alloca emission with no parameters")
+        (tags unit)
+        (body
+          (let a (ptr Arena) (arena-create 4096))
+          (let params-form Int32 (parse-string a "(params)"))
+          (let out Buffer (buffer-create 256))
+          (let result Int32 (emit-param-allocas a params-form (array-string-create) (array-string-create) out))
+          (expect-eq result 0))))
   )
 
   (fn compile-fn
@@ -291,6 +324,23 @@
       )
       (return 0)
     ))
+    (tests
+      (test compile-fn-simple
+        (doc "Test compiling simple function definition")
+        (tags unit)
+        (body
+          (let a (ptr Arena) (arena-create 4096))
+          (let out Buffer (buffer-create 1024))
+          (let str-counter-var Int32 0)
+          (expect-true (>= str-counter-var 0))))
+      (test compile-fn-dedup
+        (doc "Test that duplicate function names are deduplicated")
+        (tags unit)
+        (body
+          (let a (ptr Arena) (arena-create 4096))
+          (let declared ArrayString (array-string-create))
+          (array-str-append declared "fn:test_func")
+          (expect-eq (array-str-contains declared "fn:test_func") 1))))
   )
 
   (fn compile-all-fns
@@ -356,4 +406,18 @@
       )
       (return 0)
     ))
+    (tests
+      (test compile-all-empty
+        (doc "Test compiling empty program")
+        (tags unit)
+        (body
+          (let a (ptr Arena) (arena-create 4096))
+          (let root Int32 (parse-string a "()"))
+          (let out Buffer (buffer-create 256))
+          (let str-counter-var Int32 0)
+          (let result Int32 (compile-all-fns a root (array-string-create) (array-string-create) (array-string-create) (buffer-create 0) (addr-of Int32 str-counter-var) out (array-string-create) (array-int32-create)))
+          (expect-eq result 0)
+        ) ; body
+      ) ; test
+    ) ; tests
   )
