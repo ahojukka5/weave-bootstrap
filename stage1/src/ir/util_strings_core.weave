@@ -24,6 +24,26 @@
     ) ;; while
     (return (buffer-to-string b))
   )) ;; body
+  (tests
+    (test sanitize-empty
+      (doc "empty input yields 'v0'")
+      (tags unit ir)
+      (body
+        (let out String (sanitize-name ""))
+        (let eq Int32 (string-eq out "v0"))
+        (expect-eq eq 1)
+      )
+    )
+    (test sanitize-dash
+      (doc "dash is replaced with underscore")
+      (tags unit ir)
+      (body
+        (let out String (sanitize-name "a-b"))
+        (let eq Int32 (string-eq out "a_b"))
+        (expect-eq eq 1)
+      )
+    )
+  )
 ) ;; fn sanitize-name
 
 (fn array-str-contains
@@ -45,6 +65,21 @@
     ) ;; while
     (return 0)
   )) ;; body
+  (tests
+    (test array-str-contains-hit-miss
+      (doc "returns 1 on hit, 0 on miss")
+      (tags unit ir)
+      (body
+        (let items ArrayString (array-str-new))
+        (array-str-append items "a")
+        (array-str-append items "b")
+        (let hit Int32 (array-str-contains items "a"))
+        (let miss Int32 (array-str-contains items "c"))
+        (expect-eq hit 1)
+        (expect-eq miss 0)
+      )
+    )
+  )
 ) ;; fn array-str-contains
 
 (fn string-starts-with
@@ -64,6 +99,16 @@
       ) ;; do
     ) ;; if-stmt
   )) ;; body
+  (tests
+    (test starts-with-yes-no
+      (doc "'hello' starts with 'he' but not 'lo'")
+      (tags unit ir)
+      (body
+        (expect-eq (string-starts-with "hello" "he") 1)
+        (expect-eq (string-starts-with "hello" "lo") 0)
+      )
+    )
+  )
 ) ;; fn string-starts-with
 
 (fn string-ends-with
@@ -83,6 +128,16 @@
       ) ;; do
     ) ;; if-stmt
   )) ;; body
+  (tests
+    (test ends-with-yes-no
+      (doc "'hello' ends with 'lo' but not 'he'")
+      (tags unit ir)
+      (body
+        (expect-eq (string-ends-with "hello" "lo") 1)
+        (expect-eq (string-ends-with "hello" "he") 0)
+      )
+    )
+  )
 ) ;; fn string-ends-with
 
 (fn is-string-literal
@@ -92,6 +147,16 @@
   ) ;; params
   (returns Int32)
   (body (return (string-starts-with s "strlit:")))
+  (tests
+    (test is-strlit-yes-no
+      (doc "prefix 'strlit:' indicates literal")
+      (tags unit ir)
+      (body
+        (expect-eq (is-string-literal "strlit:abc") 1)
+        (expect-eq (is-string-literal "abc") 0)
+      )
+    )
+  )
 ) ;; fn is-string-literal
 
 (fn string-literal-value
@@ -103,6 +168,17 @@
   (body
     (return (string-slice s 7 (- (string-length s) 7)))
   ) ;; body
+  (tests
+    (test string-literal-value-basic
+      (doc "extract 'abc' from 'strlit:abc'")
+      (tags unit ir)
+      (body
+        (let out String (string-literal-value "strlit:abc"))
+        (let eq Int32 (string-eq out "abc"))
+        (expect-eq eq 1)
+      )
+    )
+  )
 ) ;; fn string-literal-value
 
 (fn is-number-string
@@ -141,6 +217,18 @@
     )
     (return ok)
   )) ;; body
+  (tests
+    (test is-number-string-cases
+      (doc "handles signed and invalid cases")
+      (tags unit ir)
+      (body
+        (expect-eq (is-number-string "123") 1)
+        (expect-eq (is-number-string "-42") 1)
+        (expect-eq (is-number-string "+") 0)
+        (expect-eq (is-number-string "12a") 0)
+      )
+    )
+  )
 ) ;; fn is-number-string
 
 (fn escape-llvm-string
@@ -205,4 +293,17 @@
     (store Int32 out-len byte-count)
     (return (buffer-to-string buf))
   ) ;; body
+  (tests
+    (test escape-llvm-string-simple
+      (doc "out-len equals input length for simple strings")
+      (tags unit ir)
+      (body
+        (let out-len Int32 0)
+        (let out String (escape-llvm-string "A" (addr out-len)))
+        (let eq Int32 (string-eq out "A"))
+        (expect-eq eq 1)
+        (expect-eq out-len 1)
+      )
+    )
+  )
 ) ;; fn escape-llvm-string
