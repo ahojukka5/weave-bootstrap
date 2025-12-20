@@ -1,6 +1,11 @@
+;;; @weave-allow-long-file: Central prelude bundling core runtime bindings (strings, slices, char access, conversions). Keeping these together improves discoverability and reduces mechanical splitting across trivial wrappers.
 (module
   (name "stage1-prelude")
   (doc "Stage1 bindings that wrap the C runtime helpers provided by stage0.")
+
+  (include "string.weave")
+  (include "buffers.weave")
+  (include "arrays.weave")
 
   ;; Minimal type aliases needed by stage1 runtime bindings
   (type Int8 (alias Int32))
@@ -8,182 +13,12 @@
   (type ArrayString (alias Int32))
   (type ArrayInt32 (alias Int32))
 
-  ;; libc bindings for string helpers
-  (fn c-strlen
-    (doc "libc strlen: length of null-terminated string")
-    (params (s String)) (returns Int32)
-    (body
-      (return
-        (ccall "strlen"
-          (returns Int32)
-          (args (String s))
-        )
-      )
-    )
-    (tests
-      (test c-strlen-empty
-        (doc "strlen of empty string is 0")
-        (tags unit prelude)
-        (body
-          (let result Int32 (c-strlen ""))
-          (expect-eq result 0)
-        )
-      )
-      (test c-strlen-hello
-        (doc "strlen of 'hello' is 5")
-        (tags unit prelude)
-        (body
-          (let result Int32 (c-strlen "hello"))
-          (expect-eq result 5)
-        )
-      )
-    )
-  ) ;; fn c-strlen
+  ;; NOTE: c-strlen, c-malloc, c-strcpy, c-strcat are now from libc.weave (via string.weave)
+  ;; NOTE: string-length, string-concat, string-to-int, string-eq are now from string.weave
+  ;; NOTE: buffer functions are now from buffers.weave -> prelude_buffer.weave
+  ;; NOTE: array functions are now from arrays.weave
 
-  (fn c-malloc
-    (doc "libc malloc: allocate byte buffer; returned as String pointer")
-    (params (n Int32)) (returns String)
-    (body
-      (return
-        (ccall "malloc"
-          (returns String)
-          (args (Int32 n))
-        )
-      )
-    )
-    (tests
-      (test c-malloc-positive
-        (doc "malloc should return non-null for positive size")
-        (tags unit prelude)
-        (body
-          (let result String (c-malloc 10))
-          (expect-true (!= result 0))
-        )
-      )
-    )
-  ) ;; fn c-malloc
-
-  (fn c-strcpy
-    (doc "libc strcpy: copy src into dest (dest must have space)")
-    (params (dest String) (src String)) (returns String)
-    (body
-      (return
-        (ccall "strcpy"
-          (returns String)
-          (args (String dest) (String src))
-        )
-      )
-    )
-    (tests
-      (test c-strcpy-simple
-        (doc "strcpy should copy string")
-        (tags unit prelude)
-        (body
-          (let buf String (c-malloc 10))
-          (c-strcpy buf "test")
-          (let len Int32 (c-strlen buf))
-          (expect-eq len 4)
-        )
-      )
-    )
-  ) ;; fn c-strcpy
-
-  (fn c-strcat
-    (doc "libc strcat: append src to dest (dest must have space)")
-    (params (dest String) (src String)) (returns String)
-    (body
-      (return
-        (ccall "strcat"
-          (returns String)
-          (args (String dest) (String src))
-        )
-      )
-    )
-    (tests
-      (test c-strcat-simple
-        (doc "strcat should append string")
-        (tags unit prelude)
-        (body
-          (let buf String (c-malloc 20))
-          (c-strcpy buf "hello")
-          (c-strcat buf "world")
-          (let len Int32 (c-strlen buf))
-          (expect-eq len 10)
-        )
-      )
-    )
-  ) ;; fn c-strcat
-
-  (fn string-length
-    (doc "Return length of null-terminated string.")
-    (params (s String)) (returns Int32)
-    (body
-      (return
-        (ccall "weave_string_length"
-          (returns Int32)
-          (args (String s))
-        )
-      )
-    )
-    (tests
-      (test string-length-empty
-        (doc "length of empty string is 0")
-        (tags unit prelude)
-        (body
-          (let result Int32 (string-length ""))
-          (expect-eq result 0)
-        )
-      )
-      (test string-length-nonempty
-        (doc "length of 'test' is 4")
-        (tags unit prelude)
-        (body
-          (let result Int32 (string-length "test"))
-          (expect-eq result 4)
-        )
-      )
-    )
-  ) ;; fn string-length
-
-  (fn string-concat
-    (doc "Concatenate two strings and return a new string.")
-    (params (a String) (b String)) (returns String)
-    (body
-      (do
-        (let la Int32 (c-strlen a))
-        (let lb Int32 (c-strlen b))
-        (let out String (c-malloc (+ (+ la lb) 1)))
-        (do (c-strcpy out a))
-        (do (c-strcat out b))
-        (return out)
-      ) ;; do
-    )
-    (tests
-      (test string-concat-both
-        (doc "concatenate 'hello' and 'world' gives length 10")
-        (tags unit prelude)
-        (body
-          (let result String (string-concat "hello" "world"))
-          (let len Int32 (string-length result))
-          (expect-eq len 10)
-        )
-      )
-    )
-  ) ;; fn string-concat
-
-  (fn string-to-int
-    (doc "Parse a decimal string to Int32; returns 0 on failure.")
-    (params (s String)) (returns Int32)
-    (body
-      (return
-        (ccall "weave_string_to_int"
-          (returns Int32)
-          (args (String s))
-        )
-      )
-    )
-  ) ;; fn string-to-int
-
+  ;; Additional string functions not in string.weave:
   (fn string-char-at
     (doc "Return byte value at index or 0 if out of bounds.")
     (params (s String) (idx Int32)) (returns Int32)
@@ -192,6 +27,24 @@
         (ccall "weave_string_char_at"
           (returns Int32)
           (args (String s) (Int32 idx))
+        )
+      )
+    )
+    (tests
+      (test string-char-at-basic
+        (doc "first char of 'abc' is 'a' (97)")
+        (tags unit prelude)
+        (body
+          (let result Int32 (string-char-at "abc" 0))
+          (expect-eq result 97)
+        )
+      )
+      (test string-char-at-out-of-bounds
+        (doc "out-of-bounds index returns 0")
+        (tags unit prelude)
+        (body
+          (let result Int32 (string-char-at "abc" 5))
+          (expect-eq result 0)
         )
       )
     )
@@ -208,38 +61,28 @@
         )
       )
     )
+    (tests
+      (test string-slice-basic
+        (doc "slice 'hello world' [0,5] returns 'hello'")
+        (tags unit prelude)
+        (body
+          (let out String (string-slice "hello world" 0 5))
+          (let eq Int32 (string-eq out "hello"))
+          (expect-eq eq 1)
+        )
+      )
+      (test string-slice-middle
+        (doc "slice 'hello world' [6,5] returns 'world'")
+        (tags unit prelude)
+        (body
+          (let out String (string-slice "hello world" 6 5))
+          (let eq Int32 (string-eq out "world"))
+          (expect-eq eq 1)
+        )
+      )
+    )
   ) ;; fn string-slice
 
-  (fn string-eq
-    (doc "Return 1 if two strings are equal.")
-    (params (a String) (b String)) (returns Int32)
-    (body
-      (return
-        (ccall "weave_string_eq"
-          (returns Int32)
-          (args (String a) (String b))
-        )
-      )
-    )
-    (tests
-      (test string-eq-equal
-        (doc "equal strings return 1")
-        (tags unit prelude)
-        (body
-          (let result Int32 (string-eq "test" "test"))
-          (expect-eq result 1)
-        )
-      )
-      (test string-eq-not-equal
-        (doc "different strings return 0")
-        (tags unit prelude)
-        (body
-          (let result Int32 (string-eq "test" "best"))
-          (expect-eq result 0)
-        )
-      )
-    )
-  ) ;; fn string-eq
 
   (fn int-to-string
     (doc "Convert Int32 to decimal string.")
@@ -274,311 +117,17 @@
     )
   ) ;; fn int-to-string
 
-  (fn buffer-new
-    (doc "Allocate a new growable byte buffer.")
-    (params ()) (returns Buffer)
-    (body
-      (return
-        (ccall "weave_buffer_new"
-          (returns Buffer)
-          (args)
-        )
-      )
-    )
-    (tests
-      (test buffer-new-creates
-        (doc "buffer-new should return non-zero")
-        (tags unit prelude)
-        (body
-          (let result Buffer (buffer-new))
-          (expect-true (!= result 0))
-        )
-      )
-    )
-  ) ;; fn buffer-new
 
-  (fn buffer-clear
-    (doc "Reset buffer length to zero, preserving capacity.")
-    (params (b Buffer)) (returns Int32)
-    (body
-      (return
-        (ccall "weave_buffer_clear"
-          (returns Int32)
-          (args (Buffer b))
-        )
-      )
-    )
-  ) ;; fn buffer-clear
 
-  (fn buffer-append-byte
-    (doc "Append a single byte to the buffer.")
-    (params (b Buffer) (byte Int32)) (returns Int32)
-    (body
-      (return
-        (ccall "weave_buffer_append_byte"
-          (returns Int32)
-          (args (Buffer b) (Int32 byte))
-        )
-      )
-    )
-  ) ;; fn buffer-append-byte
 
-  (fn buffer-append-string
-    (doc "Append a null-terminated string to the buffer.")
-    (params (b Buffer) (s String)) (returns Int32)
-    (body
-      (return
-        (ccall "weave_buffer_append_string"
-          (returns Int32)
-          (args (Buffer b) (String s))
-        )
-      )
-    )
-  ) ;; fn buffer-append-string
 
-  (fn buffer-to-string
-    (doc "Return the current contents of the buffer as a String view.")
-    (params (b Buffer)) (returns String)
-    (body
-      (return
-        (ccall "weave_buffer_to_string"
-          (returns String)
-          (args (Buffer b))
-        )
-      )
-    )
-    (tests
-      (test buffer-to-string-empty
-        (doc "empty buffer gives empty string")
-        (tags unit prelude)
-        (body
-          (let b Buffer (buffer-new))
-          (let s String (buffer-to-string b))
-          (let len Int32 (string-length s))
-          (expect-eq len 0)
-        )
-      )
-    )
-  ) ;; fn buffer-to-string
 
-  (fn array-str-new
-    (doc "Create a new dynamic array of strings.")
-    (params ()) ;; params
-    (returns ArrayString)
-    (body
-      (return
-        (ccall "weave_array_str_new"
-          (returns ArrayString)
-          (args)
-        ) ;; ccall
-      ) ;; return
-    ) ;; body
-    (tests
-      (test array-str-new-creates
-        (doc "array-str-new should return non-zero")
-        (tags unit prelude)
-        (body
-          (let result ArrayString (array-str-new))
-          (expect-true (!= result 0))
-        )
-      )
-    )
-  ) ;; fn array-str-new
 
-  (fn array-str-len
-    (doc "Return the element count of a string array.")
-    (params
-      (a ArrayString)
-    ) ;; params
-    (returns Int32)
-    (body
-      (return
-        (ccall "weave_array_str_len"
-          (returns Int32)
-          (args
-            (ArrayString a)
-          ) ;; args
-        ) ;; ccall
-      ) ;; return
-    ) ;; body
-    (tests
-      (test array-str-len-empty
-        (doc "new array has length 0")
-        (tags unit prelude)
-        (body
-          (let arr ArrayString (array-str-new))
-          (let len Int32 (array-str-len arr))
-          (expect-eq len 0)
-        )
-      )
-    )
-  ) ;; fn array-str-len
 
-  (fn array-str-append
-    (doc "Append a string to the end of the array.")
-    (params
-      (a ArrayString)
-      (v String)
-    ) ;; params
-    (returns Int32)
-    (body
-      (return
-        (ccall "weave_array_str_append"
-          (returns Int32)
-          (args
-            (ArrayString a)
-            (String v)
-          ) ;; args
-        ) ;; ccall
-      ) ;; return
-    ) ;; body
-  ) ;; fn array-str-append
 
-  (fn array-str-get
-    (doc "Get the string at idx.")
-    (params
-      (a ArrayString)
-      (idx Int32)
-    ) ;; params
-    (returns String)
-    (body
-      (return
-        (ccall "weave_array_str_get"
-          (returns String)
-          (args
-            (ArrayString a)
-            (Int32 idx)
-          ) ;; args
-        ) ;; ccall
-      ) ;; return
-    ) ;; body
-  ) ;; fn array-str-get
 
-  (fn array-i32-new
-    (doc "Create a new dynamic array of 32-bit integers.")
-    (params ()) ;; params
-    (returns ArrayInt32)
-    (body
-      (return
-        (ccall "weave_array_i32_new"
-          (returns ArrayInt32)
-          (args)
-        ) ;; ccall
-      ) ;; return
-    ) ;; body
-    (tests
-      (test array-i32-new-creates
-        (doc "array-i32-new should return non-zero")
-        (tags unit prelude)
-        (body
-          (let result ArrayInt32 (array-i32-new))
-          (expect-true (!= result 0))
-        )
-      )
-    )
-  ) ;; fn array-i32-new
 
-  (fn array-i32-len
-    (doc "Return the element count of an int array.")
-    (params
-      (a ArrayInt32)
-    ) ;; params
-    (returns Int32)
-    (body
-      (return
-        (ccall "weave_array_i32_len"
-          (returns Int32)
-          (args
-            (ArrayInt32 a)
-          ) ;; args
-        ) ;; ccall
-      ) ;; return
-    ) ;; body
-    (tests
-      (test array-i32-len-empty
-        (doc "new array has length 0")
-        (tags unit prelude)
-        (body
-          (let arr ArrayInt32 (array-i32-new))
-          (let len Int32 (array-i32-len arr))
-          (expect-eq len 0)
-        )
-      )
-    )
-  ) ;; fn array-i32-len
 
-  (fn array-i32-append
-    (doc "Append an Int32 to the end of the array.")
-    (params
-      (a ArrayInt32)
-      (v Int32)
-    ) ;; params
-    (returns Int32)
-    (body
-      (return
-        (ccall "weave_array_i32_append"
-          (returns Int32)
-          (args
-            (ArrayInt32 a)
-            (Int32 v)
-          ) ;; args
-        ) ;; ccall
-      ) ;; return
-    ) ;; body
-  ) ;; fn array-i32-append
 
-  (fn array-i32-get
-    (doc "Get the Int32 at idx.")
-    (params
-      (a ArrayInt32)
-      (idx Int32)
-    ) ;; params
-    (returns Int32)
-    (body
-      (return
-        (ccall "weave_array_i32_get"
-          (returns Int32)
-          (args
-            (ArrayInt32 a)
-            (Int32 idx)
-          ) ;; args
-        ) ;; ccall
-      ) ;; return
-    ) ;; body
-  ) ;; fn array-i32-get
 
-  (fn array-i32-set
-    (doc "Set the Int32 at idx to v.")
-    (params
-      (a ArrayInt32)
-      (idx Int32)
-      (v Int32)
-    ) ;; params
-    (returns Int32)
-    (body
-      (return
-        (ccall "weave_array_i32_set"
-          (returns Int32)
-          (args
-            (ArrayInt32 a)
-            (Int32 idx)
-            (Int32 v)
-          ) ;; args
-        ) ;; ccall
-      ) ;; return
-    ) ;; body
-    (tests
-      (test array-i32-set-and-get
-        (doc "set and get should roundtrip")
-        (tags unit prelude)
-        (body
-          (let arr ArrayInt32 (array-i32-new))
-          (array-i32-append arr 0)
-          (array-i32-set arr 0 42)
-          (let result Int32 (array-i32-get arr 0))
-          (expect-eq result 42)
-        )
-      )
-    )
-  ) ;; fn array-i32-set
 ) ;; module
