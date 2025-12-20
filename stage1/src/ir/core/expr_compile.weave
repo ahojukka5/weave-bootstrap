@@ -843,4 +843,58 @@
         ) ;; do
       ) ;; if-stmt
     ) ;; body
+    (tests
+      (test compile-expr-number
+        (doc "compiles number literal")
+        (tags unit ir)
+        (body
+          (let a (ptr Arena) (arena-create 256))
+          (let node Int32 (parse-string a "42"))
+          (let out Buffer (buffer-new))
+          (let temp Int32 0)
+          (let str-counter Int32 0)
+          (let reg Int32 (compile-expr a node (array-str-new) (array-str-new) (array-i32-new) (array-str-new) (array-str-new) (array-str-new) (buffer-new) (addr str-counter) out (addr temp) (array-str-new) (array-i32-new)))
+          (expect-eq reg 0)
+          (expect-eq temp 1)
+        )
+      )
+      (test compile-expr-string
+        (doc "compiles string literal to GEP")
+        (tags unit ir)
+        (body
+          (let a (ptr Arena) (arena-create 256))
+          (let node Int32 (parse-string a "\"hi\""))
+          (let decls Buffer (buffer-new))
+          (let out Buffer (buffer-new))
+          (let temp Int32 0)
+          (let str-counter Int32 0)
+          (let reg Int32 (compile-expr a node (array-str-new) (array-str-new) (array-i32-new) (array-str-new) (array-str-new) (array-str-new) decls (addr str-counter) out (addr temp) (array-str-new) (array-i32-new)))
+          (expect-eq reg 0)
+          (expect-eq str-counter 1)
+        )
+      )
+      (test compile-expr-binary
+        (doc "compiles addition")
+        (tags unit ir)
+        (body
+          (let a (ptr Arena) (arena-create 256))
+          (let node Int32 (parse-string a "(+ 1 2)"))
+          (let out Buffer (buffer-new))
+          (let temp Int32 0)
+          (let reg Int32 (compile-expr a node (array-str-new) (array-str-new) (array-i32-new) (array-str-new) (array-str-new) (array-str-new) (buffer-new) (addr 0) out (addr temp) (array-str-new) (array-i32-new)))
+          (expect-eq reg 2)
+        )
+      )
+      (test compile-expr-do
+        (doc "do returns last reg")
+        (tags unit ir)
+        (body
+          (let a (ptr Arena) (arena-create 256))
+          (let node Int32 (parse-string a "(do 1 2 3)"))
+          (let temp Int32 0)
+          (let reg Int32 (compile-expr a node (array-str-new) (array-str-new) (array-i32-new) (array-str-new) (array-str-new) (array-str-new) (buffer-new) (addr 0) (buffer-new) (addr temp) (array-str-new) (array-i32-new)))
+          (expect-eq reg 2)
+        )
+      )
+    )
   ) ;; fn compile-expr
