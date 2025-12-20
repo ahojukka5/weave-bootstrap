@@ -33,6 +33,26 @@
       )
       (return out)
     )
+    (tests
+      (test dedupe-none
+        (doc "Test buffer with no duplicates")
+        (tags unit)
+        (body
+          (let buf Buffer (buffer-create 64))
+          (buffer-append-string buf "line1\n")
+          (buffer-append-string buf "line2\n")
+          (let result Buffer (dedupe-lines buf))
+          (expect-true (> (string-length (buffer-to-string result)) 0))))
+      (test dedupe-duplicates
+        (doc "Test buffer with duplicate lines")
+        (tags unit)
+        (body
+          (let buf Buffer (buffer-create 64))
+          (buffer-append-string buf "same\n")
+          (buffer-append-string buf "same\n")
+          (let result Buffer (dedupe-lines buf))
+          (let result-str String (buffer-to-string result))
+          (expect-true (> (string-length result-str) 0)))))
   )
 
   (fn collect-fn-sigs
@@ -89,6 +109,17 @@
       )
       (return 0)
     ))
+    (tests
+      (test collect-sigs-empty
+        (doc "Test collecting from empty program")
+        (tags unit)
+        (body
+          (let a (ptr Arena) (arena-create 4096))
+          (let root Int32 (parse-string a "()"))
+          (let names ArrayString (array-string-create))
+          (let types ArrayInt32 (array-int32-create))
+          (let result Int32 (collect-fn-sigs a root names types))
+          (expect-eq result 0))))
   )
 
   (fn lookup-fn-ret-type
@@ -121,4 +152,23 @@
       ;; Not found - default to i32
       (return "i32")
     ))
+    (tests
+      (test lookup-not-found
+        (doc "Test lookup of non-existent function returns i32")
+        (tags unit)
+        (body
+          (let a (ptr Arena) (arena-create 4096))
+          (let result String (lookup-fn-ret-type a "unknown" (array-string-create) (array-int32-create)))
+          (expect-true (string-eq result "i32"))))
+      (test lookup-default-i32
+        (doc "Test lookup with -1 node returns i32")
+        (tags unit)
+        (body
+          (let a (ptr Arena) (arena-create 4096))
+          (let names ArrayString (array-string-create))
+          (let types ArrayInt32 (array-int32-create))
+          (array-str-append names "test_fn")
+          (array-i32-append types (- 0 1))
+          (let result String (lookup-fn-ret-type a "test_fn" names types))
+          (expect-true (string-eq result "i32")))))
   )
