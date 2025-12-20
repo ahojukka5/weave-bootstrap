@@ -16,6 +16,22 @@
     (body
       (return s)
     ) ;; body
+    (tests
+      (test "echo-prints-input"
+        (body
+          (do
+            ;; Call echo with a sample string and print it; return 0
+            (ccall "puts"
+              (returns Int32)
+              (args
+                (String (echo "embedded test"))
+              )
+            )
+            (return 0)
+          )
+        )
+      )
+    )
   ) ;; fn echo
 
   (entry main
