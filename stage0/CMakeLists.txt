@@ -68,3 +68,19 @@ foreach(test_file IN LISTS STAGE0_TESTS)
   )
   set_tests_properties(stage0_${test_name} PROPERTIES LABELS "stage0")
 endforeach()
+
+# Embedded tests: run with -generate-tests for each test file
+foreach(test_file IN LISTS STAGE0_TESTS)
+  get_filename_component(test_name ${test_file} NAME_WE)
+  add_test(
+    NAME stage0_embedded_${test_name}
+    COMMAND ${CMAKE_COMMAND}
+      -DWEAVEC0=$<TARGET_FILE:weavec0>
+      -DCLANG=${CLANG_EXE}
+      -DSRC_FILE=${CMAKE_CURRENT_SOURCE_DIR}/${test_file}
+      -DRUNTIME=${CMAKE_CURRENT_SOURCE_DIR}/runtime/runtime.c
+      -DOUT_DIR=${CMAKE_CURRENT_BINARY_DIR}/tests/${test_name}_embedded
+      -P ${CMAKE_CURRENT_SOURCE_DIR}/tests/run_embedded_tests.cmake
+  )
+  set_tests_properties(stage0_embedded_${test_name} PROPERTIES LABELS "stage0;embedded")
+endforeach()
