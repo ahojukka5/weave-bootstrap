@@ -403,6 +403,37 @@
             )
             (do 0)
           )
+          ;; Traverse module contents to compile nested functions/entries
+          (if-stmt (is-list-with-head a child "module")
+            (do
+              (let mchild Int32 (arena-first-child a child))
+              (buffer-append-string out "; debug: scanning module children\n")
+              (while (!= mchild (- 0 1))
+                (do
+                  (if-stmt (is-list-with-head a mchild "fn")
+                    (do
+                      (let name-node Int32 (second-child a mchild))
+                      (let fn-name String (arena-value a name-node))
+                      (buffer-append-string out "; debug: fn ")
+                      (buffer-append-string out fn-name)
+                      (buffer-append-string out "\n")
+                      (compile-fn a mchild fn-name declared struct-names struct-fields decls str-counter out fn-sig-names fn-sig-ret-types)
+                    )
+                    (do 0)
+                  )
+                  (if-stmt (is-list-with-head a mchild "entry")
+                    (do
+                      (buffer-append-string out "; debug: entry found\n")
+                      (compile-fn a mchild "weave_main" declared struct-names struct-fields decls str-counter out fn-sig-names fn-sig-ret-types)
+                    )
+                    (do 0)
+                  )
+                  (set mchild (arena-next-sibling a mchild))
+                )
+              )
+            )
+            (do 0)
+          )
           (if-stmt (is-list-with-head a child "fn")
             (do
               (let name-node Int32 (second-child a child))
