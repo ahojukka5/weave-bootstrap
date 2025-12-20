@@ -95,6 +95,18 @@
       
       (return 0)
     ))
+    (tests
+      (test lower-expr-atoms
+        (doc "atoms return 0")
+        (tags unit lower)
+        (body
+          (let a (ptr Arena) (arena-create 256))
+          (let node Int32 (parse-string a "42"))
+          (let rc Int32 (lower-expr a node (array-str-new) (array-str-new) (array-str-new) (array-str-new)))
+          (expect-eq rc 0)
+        )
+      )
+    )
   )
 
   ;; ============================================================
@@ -223,6 +235,23 @@
       (lower-expr a node env-names env-types struct-names struct-fields)
       (return 0)
     ))
+    (tests
+      (test lower-stmt-let
+        (doc "let adds type binding")
+        (tags unit lower)
+        (body
+          (let a (ptr Arena) (arena-create 256))
+          (let node Int32 (parse-string a "(let x Int32 42)"))
+          (let env-names ArrayString (array-str-new))
+          (let env-types ArrayString (array-str-new))
+          (let rc Int32 (lower-stmt a node env-names env-types (array-str-new) (array-str-new)))
+          (expect-eq rc 0)
+          (expect-eq (array-str-len env-names) 1)
+          (expect-eq (string-eq (array-str-get env-names 0) "x") 1)
+          (expect-eq (string-eq (array-str-get env-types 0) "Int32") 1)
+        )
+      )
+    )
   )
   ;; ============================================================
   ;; Lower function body
@@ -318,6 +347,18 @@
       
       (return 0)
     ))
+    (tests
+      (test lower-fn-body-basic
+        (doc "lowers a simple fn body")
+        (tags unit lower)
+        (body
+          (let a (ptr Arena) (arena-create 256))
+          (let fn-node Int32 (parse-string a "(fn test (params (x Int32)) (body (return x)))"))
+          (let rc Int32 (lower-fn-body a fn-node (array-str-new) (array-str-new)))
+          (expect-eq rc 0)
+        )
+      )
+    )
   )
 
   ;; ============================================================
@@ -364,4 +405,16 @@
       
       (return 0)
     ))
+    (tests
+      (test lower-program-basic
+        (doc "lowers a program")
+        (tags unit lower)
+        (body
+          (let a (ptr Arena) (arena-create 256))
+          (let root Int32 (parse-string a "((fn test (params) (body (return 0))))"))
+          (let rc Int32 (lower-program a root))
+          (expect-eq rc 0)
+        )
+      )
+    )
   )
