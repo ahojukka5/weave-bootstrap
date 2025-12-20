@@ -33,6 +33,29 @@
       (store Int32 temp (+ t 1))
       (return t)
     )
+    (tests
+      (test compile-addr-basic
+        (doc "Generates bitcast for address-of local")
+        (tags unit ir pointers)
+        (body
+          (let a (ptr Arena) (arena-create 256))
+          (let node Int32 (parse-string a "(addr x)"))
+          (let env-names ArrayString (array-str-new))
+          (let env-safe ArrayString (array-str-new))
+          (let env-types ArrayInt32 (array-i32-new))
+          (array-str-append env-names "x")
+          (array-str-append env-safe "x_safe")
+          (array-i32-append env-types (- 0 1))
+          (let buf Buffer (buffer-new))
+          (let temp-var Int32 0)
+          (let result Int32 (compile-addr node a env-names env-safe env-types buf (addr-of Int32 temp-var)))
+          (expect-eq result 0)
+          (expect-eq temp-var 1)
+          (let out String (buffer-to-string buf))
+          (expect-eq (string-starts-with out "  %t0 = bitcast") 1)
+        )
+      )
+    )
   )
 
   (fn compile-load-node
@@ -53,6 +76,23 @@
       (store Int32 temp (+ t 1))
       (return t)
     )
+    (tests
+      (test compile-load-node-basic
+        (doc "Generates load instruction")
+        (tags unit ir pointers)
+        (body
+          (let a (ptr Arena) (arena-create 256))
+          (let ty-node Int32 (parse-string a "Int32"))
+          (let buf Buffer (buffer-new))
+          (let temp-var Int32 5)
+          (let result Int32 (compile-load-node a ty-node 3 buf (addr-of Int32 temp-var)))
+          (expect-eq result 5)
+          (expect-eq temp-var 6)
+          (let out String (buffer-to-string buf))
+          (expect-eq (string-starts-with out "  %t5 = load i32") 1)
+        )
+      )
+    )
   )
 
   (fn compile-store-node
@@ -71,6 +111,21 @@
       (buffer-append-string out "\n")
       (return val-reg)
     )
+    (tests
+      (test compile-store-node-basic
+        (doc "Generates store instruction")
+        (tags unit ir pointers)
+        (body
+          (let a (ptr Arena) (arena-create 256))
+          (let ty-node Int32 (parse-string a "Int32"))
+          (let buf Buffer (buffer-new))
+          (let result Int32 (compile-store-node a ty-node 2 3 buf))
+          (expect-eq result 2)
+          (let out String (buffer-to-string buf))
+          (expect-eq (string-starts-with out "  store i32 %t2") 1)
+        )
+      )
+    )
   )
 
   (fn compile-bitcast-node
@@ -88,6 +143,23 @@
       (buffer-append-string out "\n")
       (store Int32 temp (+ t 1))
       (return t)
+    )
+    (tests
+      (test compile-bitcast-node-basic
+        (doc "Generates bitcast instruction")
+        (tags unit ir pointers)
+        (body
+          (let a (ptr Arena) (arena-create 256))
+          (let to-ty Int32 (parse-string a "(ptr Int32)"))
+          (let buf Buffer (buffer-new))
+          (let temp-var Int32 10)
+          (let result Int32 (compile-bitcast-node a to-ty 7 buf (addr-of Int32 temp-var)))
+          (expect-eq result 10)
+          (expect-eq temp-var 11)
+          (let out String (buffer-to-string buf))
+          (expect-eq (string-starts-with out "  %t10 = bitcast i8*") 1)
+        )
+      )
     )
   )
 
@@ -162,6 +234,44 @@
       (store Int32 temp (+ t 1))
       (return t)
     )
+    (tests
+      (test compile-get-field-node-struct
+        (doc "Generates GEP for struct field access")
+        (tags unit ir pointers)
+        (body
+          (let a (ptr Arena) (arena-create 256))
+          (let elem-ty Int32 (parse-string a "(struct Point)"))
+          (let buf Buffer (buffer-new))
+          (let temp-var Int32 15)
+          (let names ArrayString (array-str-new))
+          (let fields ArrayString (array-str-new))
+          (array-str-append names "Point")
+          (array-str-append fields "x:Int32,y:Int32")
+          (let result Int32 (compile-get-field-node a elem-ty "1" 8 names fields buf (addr-of Int32 temp-var)))
+          (expect-eq result 15)
+          (expect-eq temp-var 16)
+          (let out String (buffer-to-string buf))
+          (expect-eq (string-starts-with out "  %t15 = getelementptr") 1)
+        )
+      )
+      (test compile-get-field-node-atom
+        (doc "Generates GEP for atom element type")
+        (tags unit ir pointers)
+        (body
+          (let a (ptr Arena) (arena-create 256))
+          (let elem-ty Int32 (parse-string a "Int32"))
+          (let buf Buffer (buffer-new))
+          (let temp-var Int32 20)
+          (let names ArrayString (array-str-new))
+          (let fields ArrayString (array-str-new))
+          (let result Int32 (compile-get-field-node a elem-ty "0" 5 names fields buf (addr-of Int32 temp-var)))
+          (expect-eq result 20)
+          (expect-eq temp-var 21)
+          (let out String (buffer-to-string buf))
+          (expect-eq (string-starts-with out "  %t20 = getelementptr") 1)
+        )
+      )
+    )
   )
 
   (fn compile-ptr-add-node
@@ -190,5 +300,23 @@
       (buffer-append-string out "\n")
       (store Int32 temp (+ t 1))
       (return t)
+    )
+    (tests
+      (test compile-ptr-add-node-basic
+        (doc "Generates pointer arithmetic GEP")
+        (tags unit ir pointers)
+        (body
+          (let a (ptr Arena) (arena-create 256))
+          (let elem-ty Int32 (parse-string a "Int32"))
+          (let buf Buffer (buffer-new))
+          (let temp-var Int32 25)
+          (let result Int32 (compile-ptr-add-node a elem-ty 10 11 buf (addr-of Int32 temp-var)))
+          (expect-eq result 25)
+          (expect-eq temp-var 26)
+          (let out String (buffer-to-string buf))
+          (expect-eq (string-starts-with out "  %t25 = getelementptr") 1)
+          (expect-eq (> (string-length out) 30) 1)
+        )
+      )
     )
   )
