@@ -38,4 +38,51 @@
         )
       )
     )
+    (tests
+      (test is-pointer-expr-addr
+        (doc "addr expression recognized as pointer")
+        (tags unit ir ptrs)
+        (body
+          (let a (ptr Arena) (arena-create 256))
+          (let node Int32 (parse-string a "(addr x)"))
+          (let result Int32 (is-pointer-expr a node (array-str-new) (array-i32-new)))
+          (expect-eq result 1)
+        )
+      )
+      (test is-pointer-expr-get-field
+        (doc "get-field expression recognized as pointer")
+        (tags unit ir ptrs)
+        (body
+          (let a (ptr Arena) (arena-create 256))
+          (let node Int32 (parse-string a "(get-field p x)"))
+          (let result Int32 (is-pointer-expr a node (array-str-new) (array-i32-new)))
+          (expect-eq result 1)
+        )
+      )
+      (test is-pointer-expr-variable-ptr-type
+        (doc "Variable with ptr type recognized as pointer")
+        (tags unit ir ptrs)
+        (body
+          (let a (ptr Arena) (arena-create 256))
+          (let node Int32 (parse-string a "p"))
+          (let env-names ArrayString (array-str-new))
+          (let env-types ArrayInt32 (array-i32-new))
+          (array-str-append env-names "p")
+          (let ty-node Int32 (parse-string a "(ptr Int32)"))
+          (array-i32-append env-types ty-node)
+          (let result Int32 (is-pointer-expr a node env-names env-types))
+          (expect-eq result 1)
+        )
+      )
+      (test is-pointer-expr-non-pointer
+        (doc "Non-pointer expression returns 0")
+        (tags unit ir ptrs)
+        (body
+          (let a (ptr Arena) (arena-create 256))
+          (let node Int32 (parse-string a "(+ 1 2)"))
+          (let result Int32 (is-pointer-expr a node (array-str-new) (array-i32-new)))
+          (expect-eq result 0)
+        )
+      )
+    )
   ) ;; fn is-pointer-expr
