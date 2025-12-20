@@ -64,6 +64,45 @@ git commit -m "<type>(<scope>): <subject>
 <detailed body explaining the change>"
 ```
 
+### Multiline Commit Messages in CLI
+
+Use a single `-m` with a literal multiline string. Do not embed `\n`
+escapes. Write the body on new lines inside the same quoted `-m`
+argument. Commit files one at a time.
+
+```bash
+# Style commit for IR formatting
+git add stage1/src/ir/ir_fns.weave
+git commit stage1/src/ir/ir_fns.weave -m "style(stage1): split closing parens and add blank line before tests in ir_fns
+
+Reformat stage1/src/ir/ir_fns.weave to follow Syntax Guidelines.
+
+- Split multi-parenthesis closings into one-per-line with end-of-line comments
+- Insert a blank line between closing body and opening tests blocks
+- Updated functions: compile-fn-body, emit-fn-params, emit-param-allocas, compile-fn, compile-all-fns
+
+Reason: improve readability and prevent accidental multi-`)` runs."
+
+# Documentation commit for spacing rule
+git add docs/coding_guidelines/syntax.md
+git commit docs/coding_guidelines/syntax.md -m "docs(coding_guidelines): emphasize blank line between body and tests
+
+Add a Section Spacing rule requiring a blank line between closing
+body and opening tests blocks.
+
+Reason: improves readability and avoids compact multi-parenthesis closings."
+
+# Prompt guidance update
+git add .github/prompt/commit-changes.prompt.md
+git commit .github/prompt/commit-changes.prompt.md -m "docs(prompt): commit message template using single -m with literal newlines
+
+Update guidance to show the preferred multiline template and to
+discourage \n escapes. Include repository-tailored examples." 
+```
+
+Tip: For complex messages, using `git commit` (editor) or `git commit -F <file>`
+is also acceptable, but avoid `\n` escapes and overusing multiple `-m` flags.
+
 ### 3. Examples
 
 **Feature commit:**
