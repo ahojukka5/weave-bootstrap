@@ -22,6 +22,34 @@
         )
       )
     )
+    (tests
+      (test get-struct-name-from-type-node-atom
+        (doc "should extract name from atom type node")
+        (tags unit ir literals)
+        (body
+          (let a Arena (arena-new))
+          (let node Int32 (arena-add-node (addr a) (node-kind-atom) "Arena"))
+          (let name String (get-struct-name-from-type-node (addr a) node))
+          (let eq Int32 (string-eq name "Arena"))
+          (expect-eq eq 1)
+        )
+      )
+      (test get-struct-name-from-type-node-struct-list
+        (doc "should extract name from (struct Name) list")
+        (tags unit ir literals)
+        (body
+          (let a Arena (arena-new))
+          (let list Int32 (arena-add-node (addr a) (node-kind-list) ""))
+          (let head Int32 (arena-add-node (addr a) (node-kind-atom) "struct"))
+          (let name-node Int32 (arena-add-node (addr a) (node-kind-atom) "Buffer"))
+          (arena-set-first-child (addr a) list head)
+          (arena-set-next-sibling (addr a) head name-node)
+          (let name String (get-struct-name-from-type-node (addr a) list))
+          (let eq Int32 (string-eq name "Buffer"))
+          (expect-eq eq 1)
+        )
+      )
+    )
   )
 
   (fn compile-int-lit
@@ -40,6 +68,27 @@
         (buffer-append-string out value)
         (buffer-append-string out "\n")
         (return temp)
+      )
+    )
+    (tests
+      (test compile-int-lit-positive
+        (doc "should emit add instruction for positive integer")
+        (tags unit ir literals)
+        (body
+          (let b Buffer (buffer-new))
+          (let result Int32 (compile-int-lit b "42" 10))
+          (let s String (buffer-to-string b))
+          (expect-true (> (string-length s) 10))
+        )
+      )
+      (test compile-int-lit-zero
+        (doc "should emit add instruction for zero")
+        (tags unit ir literals)
+        (body
+          (let b Buffer (buffer-new))
+          (let result Int32 (compile-int-lit b "0" 5))
+          (expect-eq result 5)
+        )
       )
     )
   )
@@ -71,6 +120,31 @@
         (buffer-append-string out nm)
         (buffer-append-string out "\n")
         (return temp)
+      )
+    )
+    (tests
+      (test compile-var-named
+        (doc "should emit load instruction for named variable")
+        (tags unit ir literals)
+        (body
+          (let a Arena (arena-new))
+          (let ty Int32 (arena-add-node (addr a) (node-kind-atom) "Int32"))
+          (let b Buffer (buffer-new))
+          (let result Int32 (compile-var (addr a) b "myvar" ty 7))
+          (let s String (buffer-to-string b))
+          (expect-true (> (string-length s) 10))
+        )
+      )
+      (test compile-var-empty-name
+        (doc "should use tmp for empty variable name")
+        (tags unit ir literals)
+        (body
+          (let a Arena (arena-new))
+          (let ty Int32 (arena-add-node (addr a) (node-kind-atom) "Int32"))
+          (let b Buffer (buffer-new))
+          (let result Int32 (compile-var (addr a) b "" ty 8))
+          (expect-eq result 8)
+        )
       )
     )
   )

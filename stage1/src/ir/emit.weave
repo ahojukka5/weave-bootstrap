@@ -18,6 +18,19 @@
         (return 0)
       ) ;; do
     ) ;; body
+    (tests
+      (test emit-line-appends
+        (doc "emit-line should append string with newline")
+        (tags unit ir emit)
+        (body
+          (let b Buffer (buffer-new))
+          (emit-line b "test")
+          (let s String (buffer-to-string b))
+          (let len Int32 (string-length s))
+          (expect-eq len 5)
+        )
+      )
+    )
   ) ;; fn emit-line
 
   (fn emit-temp
@@ -34,6 +47,19 @@
         (return 0)
       ) ;; do
     ) ;; body
+    (tests
+      (test emit-temp-format
+        (doc "emit-temp should format as %tN")
+        (tags unit ir emit)
+        (body
+          (let b Buffer (buffer-new))
+          (emit-temp b 42)
+          (let s String (buffer-to-string b))
+          (let eq Int32 (string-eq s "%t42"))
+          (expect-eq eq 1)
+        )
+      )
+    )
   ) ;; fn emit-temp
 
   (fn emit-label-ref
@@ -50,6 +76,19 @@
         (return 0)
       ) ;; do
     ) ;; body
+    (tests
+      (test emit-label-ref-format
+        (doc "emit-label-ref should format as %LN")
+        (tags unit ir emit)
+        (body
+          (let b Buffer (buffer-new))
+          (emit-label-ref b 5)
+          (let s String (buffer-to-string b))
+          (let eq Int32 (string-eq s "%L5"))
+          (expect-eq eq 1)
+        )
+      )
+    )
   ) ;; fn emit-label-ref
 
   (fn emit-label-def
@@ -67,5 +106,18 @@
         (return 0)
       ) ;; do
     ) ;; body
+    (tests
+      (test emit-label-def-format
+        (doc "emit-label-def should format as LN:")
+        (tags unit ir emit)
+        (body
+          (let b Buffer (buffer-new))
+          (emit-label-def b 3)
+          (let s String (buffer-to-string b))
+          (let eq Int32 (string-eq s "L3:\n"))
+          (expect-eq eq 1)
+        )
+      )
+    )
   ) ;; fn emit-label-def
 ) ;; module
