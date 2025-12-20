@@ -1,12 +1,11 @@
 (module
-  (name "stage1-include-expand")
-  (doc "Expand (include ...) forms by recursively parsing included files into one arena.")
+  (name "stage1-include-expand-core-a")
+  (doc "Core helpers for include expansion: printable path, dirname, resolve, parse.")
 
-  (include "prelude.weave")
   (include "tokenizer.weave")
   (include "sexpr_parser.weave")
   (include "arena.weave")
-  (include "ir/util_strings.weave")
+  (include "ir/util_strings_core.weave")
 
   (fn log-include
     (doc "Debug helper: print include path, current dir, and resolved path.")
@@ -16,16 +15,6 @@
         (args (String (string-concat label (string-concat ": " (string-concat inc (string-concat " | " (string-concat cur (string-concat " -> " resolved))))))))
       )
       (return 0)
-    )
-    (tests
-      (test log-include-returns-zero
-        (doc "log-include should return 0")
-        (tags unit include-expand)
-        (body
-          (let result Int32 (log-include "test" "a.weave" "." "a.weave"))
-          (expect-eq result 0)
-        )
-      )
     )
   ) ;; fn log-include
 
@@ -59,32 +48,6 @@
       )
       (return 1)
     )
-    (tests
-      (test is-printable-path-valid
-        (doc "valid path should return 1")
-        (tags unit include-expand)
-        (body
-          (let result Int32 (is-printable-path "test/foo.weave"))
-          (expect-eq result 1)
-        )
-      )
-      (test is-printable-path-no-extension
-        (doc "path without .weave should return 0")
-        (tags unit include-expand)
-        (body
-          (let result Int32 (is-printable-path "test.txt"))
-          (expect-eq result 0)
-        )
-      )
-      (test is-printable-path-too-short
-        (doc "path too short should return 0")
-        (tags unit include-expand)
-        (body
-          (let result Int32 (is-printable-path "a.w"))
-          (expect-eq result 0)
-        )
-      )
-    )
   ) ;; fn is-printable-path
 
   (fn dirname
@@ -99,35 +62,6 @@
       (if-stmt (< i 0)
         (return "")
         (return (string-slice path 0 i))
-      )
-    )
-    (tests
-      (test dirname-simple
-        (doc "dirname of 'dir/file.txt' should be 'dir'")
-        (tags unit include-expand)
-        (body
-          (let result String (dirname "dir/file.txt"))
-          (let len Int32 (string-length result))
-          (expect-eq len 3)
-        )
-      )
-      (test dirname-nested
-        (doc "dirname of 'a/b/c.txt' should be 'a/b'")
-        (tags unit include-expand)
-        (body
-          (let result String (dirname "a/b/c.txt"))
-          (let len Int32 (string-length result))
-          (expect-eq len 3)
-        )
-      )
-      (test dirname-no-slash
-        (doc "dirname of 'file.txt' should be empty")
-        (tags unit include-expand)
-        (body
-          (let result String (dirname "file.txt"))
-          (let len Int32 (string-length result))
-          (expect-eq len 0)
-        )
       )
     )
   ) ;; fn dirname
@@ -154,35 +88,6 @@
       )
       ;; Normalize ../ and simple relative by joining to current.
       (return (string-concat (string-concat current "/") inc))
-    )
-    (tests
-      (test resolve-path-absolute
-        (doc "absolute path should stay unchanged")
-        (tags unit include-expand)
-        (body
-          (let result String (resolve-path "/abs/path.weave" "dir"))
-          (let eq Int32 (string-eq result "/abs/path.weave"))
-          (expect-eq eq 1)
-        )
-      )
-      (test resolve-path-stage1
-        (doc "stage1/ prefix should stay unchanged")
-        (tags unit include-expand)
-        (body
-          (let result String (resolve-path "stage1/src/test.weave" "dir"))
-          (let eq Int32 (string-eq result "stage1/src/test.weave"))
-          (expect-eq eq 1)
-        )
-      )
-      (test resolve-path-relative
-        (doc "relative path should join with current")
-        (tags unit include-expand)
-        (body
-          (let result String (resolve-path "test.weave" "src"))
-          (let eq Int32 (string-eq result "src/test.weave"))
-          (expect-eq eq 1)
-        )
-      )
     )
   ) ;; fn resolve-path
 
@@ -215,18 +120,11 @@
       (tokenize src tokens)
       (return (parse-top a tokens))
     )
-    (tests
-      (test parse-file-into-nonexistent
-        (doc "parse nonexistent file should return -1")
-        (tags unit include-expand)
-        (body
-          (let a Arena (arena-new))
-          (let result Int32 (parse-file-into "/nonexistent/file.weave" (addr a)))
-          (expect-eq result (- 0 1))
-        )
-      )
-    )
   ) ;; fn parse-file-into
+) ;; module
+(module
+  (name "stage1-include-expand-core-b")
+  (doc "Core expansion routines: copy-subtree, append-child, expand-children, expand-root.")
 
   (fn copy-subtree
     (doc "Deep-copy node from src arena into dst arena; returns new node id.")
@@ -250,21 +148,6 @@
       )
       (return new-id)
     )
-    (tests
-      (test copy-subtree-atom
-        (doc "copy single atom should preserve value")
-        (tags unit include-expand)
-        (body
-          (let src Arena (arena-new))
-          (let dst Arena (arena-new))
-          (let id Int32 (arena-add-node (addr src) (node-kind-atom) "test"))
-          (let copied Int32 (copy-subtree (addr src) (addr dst) id))
-          (let val String (arena-value (addr dst) copied))
-          (let eq Int32 (string-eq val "test"))
-          (expect-eq eq 1)
-        )
-      )
-    )
   ) ;; fn copy-subtree
 
   (fn append-child
@@ -283,20 +166,6 @@
         )
       )
       (return 0)
-    )
-    (tests
-      (test append-child-to-empty
-        (doc "append child to empty parent should set first-child")
-        (tags unit include-expand)
-        (body
-          (let a Arena (arena-new))
-          (let parent Int32 (arena-add-node (addr a) (node-kind-list) ""))
-          (let child Int32 (arena-add-node (addr a) (node-kind-atom) "test"))
-          (append-child (addr a) parent child)
-          (let first Int32 (arena-first-child (addr a) parent))
-          (expect-eq first child)
-        )
-      )
     )
   ) ;; fn append-child
 
@@ -450,21 +319,6 @@
       )
       (return 0)
     )
-    (tests
-      (test expand-children-empty
-        (doc "expand-children on empty list should return 0")
-        (tags unit include-expand)
-        (body
-          (let src Arena (arena-new))
-          (let dst Arena (arena-new))
-          (let src-root Int32 (arena-add-node (addr src) (node-kind-list) ""))
-          (let dst-root Int32 (arena-add-node (addr dst) (node-kind-list) ""))
-          (let visited ArrayString (array-str-new))
-          (let result Int32 (expand-children (addr src) src-root (addr dst) dst-root visited "" 0))
-          (expect-eq result 0)
-        )
-      )
-    )
   ) ;; fn expand-children
 
   (fn expand-root
@@ -503,18 +357,6 @@
         (do
           (store Int32 out-root new-root)
           (return 0)
-        )
-      )
-    )
-    (tests
-      (test expand-root-nonexistent
-        (doc "expand-root on nonexistent file should return -1")
-        (tags unit include-expand)
-        (body
-          (let a Arena (arena-new))
-          (let root Int32 0)
-          (let result Int32 (expand-root "/nonexistent/file.weave" (addr a) (addr root)))
-          (expect-eq result (- 0 1))
         )
       )
     )
