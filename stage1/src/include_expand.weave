@@ -16,6 +16,15 @@
       )
       (return 0)
     )
+    (tests
+      (test log-include-basic
+        (doc "returns 0 after printing composed path string")
+        (tags unit include)
+        (body
+          (expect-eq (log-include "inc" "foo.weave" "/tmp" "/tmp/foo.weave") 0)
+        )
+      )
+    )
   ) ;; fn log-include
 
   (fn is-printable-path
@@ -48,6 +57,17 @@
       )
       (return 1)
     )
+    (tests
+      (test printable-path-cases
+        (doc "accepts ASCII paths ending in .weave, rejects others")
+        (tags unit include)
+        (body
+          (expect-eq (is-printable-path "foo/bar.weave") 1)
+          (expect-eq (is-printable-path "bad?.weave") 0)
+          (expect-eq (is-printable-path "a.weave") 0)
+        )
+      )
+    )
   ) ;; fn is-printable-path
 
   (fn dirname
@@ -62,6 +82,17 @@
       (if-stmt (< i 0)
         (return "")
         (return (string-slice path 0 i))
+      )
+    )
+    (tests
+      (test dirname-cases
+        (doc "extracts directory or empty when none")
+        (tags unit include)
+        (body
+          (expect-eq (dirname "path/to/file.weave") "path/to")
+          (expect-eq (dirname "file.weave") "")
+          (expect-eq (dirname "/abs/path/file.weave") "/abs/path")
+        )
       )
     )
   ) ;; fn dirname
@@ -89,6 +120,18 @@
       ;; Normalize ../ and simple relative by joining to current.
       (return (string-concat (string-concat current "/") inc))
     )
+    (tests
+      (test resolve-path-cases
+        (doc "handles explicit prefixes, absolute, and relative resolution")
+        (tags unit include)
+        (body
+          (expect-eq (resolve-path "stage1/foo.weave" "dir") "stage1/foo.weave")
+          (expect-eq (resolve-path "/abs/foo.weave" "dir") "/abs/foo.weave")
+          (expect-eq (resolve-path "./bar.weave" "dir") "dir/bar.weave")
+          (expect-eq (resolve-path "baz.weave" "dir") "dir/baz.weave")
+        )
+      )
+    )
   ) ;; fn resolve-path
 
   (fn parse-file-into
@@ -101,24 +144,37 @@
         (set p p)
       )
       (let src String (ccall "weave_read_file" (returns String) (args (String p))))
-      (if-stmt (== (string-length src) 0)
+      (ccall "puts" (returns Int32) (args (String "[include_expand] read file attempted")))
+      (if-stmt (== (ccall "weave_string_length" (returns Int32) (args (String src))) 0)
         (do
           (let alt String (string-concat "bootstrap/" p))
           (set src (ccall "weave_read_file" (returns String) (args (String alt))))
-          (if-stmt (== (string-length src) 0)
+           (if-stmt (== (ccall "weave_string_length" (returns Int32) (args (String src))) 0)
             (do
               (let alt2 String (string-concat "stdlib/" p))
               (set src (ccall "weave_read_file" (returns String) (args (String alt2))))
-              (if-stmt (== (string-length src) 0) (return (- 0 1)) (do 0))
+               (if-stmt (== (ccall "weave_string_length" (returns Int32) (args (String src))) 0) (return (- 0 1)) (do 0))
             )
             (do 0)
           )
         )
         (do 0)
       )
+      (ccall "puts" (returns Int32) (args (String "[include_expand] read file ok")))
       (let tokens ArrayString (array-str-new))
       (tokenize src tokens)
+      (ccall "puts" (returns Int32) (args (String "[include_expand] tokenized ok")))
       (return (parse-top a tokens))
+    )
+    (tests
+      (test parse-file-into-missing
+        (doc "returns -1 when file not found in any location")
+        (tags unit include)
+        (body
+          (let a Arena (arena-new))
+          (expect-eq (parse-file-into "not_exist.weave" (addr a)) (- 0 1))
+        )
+      )
     )
   ) ;; fn parse-file-into
 ) ;; module
@@ -148,6 +204,28 @@
       )
       (return new-id)
     )
+    (tests
+      (test copy-subtree-basic
+        (doc "copies node kind/value and child chain to dst")
+        (tags unit include)
+        (body
+          (let src Arena (arena-new))
+          (let dst Arena (arena-new))
+          (let list Int32 (arena-add-node (addr src) (node-kind-list) ""))
+          (let h Int32 (arena-add-node (addr src) (node-kind-atom) "x"))
+          (let c1 Int32 (arena-add-node (addr src) (node-kind-atom) "y"))
+          (arena-set-first-child (addr src) list h)
+          (arena-set-next-sibling (addr src) h c1)
+          (let new Int32 (copy-subtree (addr src) (addr dst) list))
+          (expect-eq (arena-kind (addr dst) new) (node-kind-list))
+          (let dh Int32 (arena-first-child (addr dst) new))
+          (expect-eq (arena-kind (addr dst) dh) (node-kind-atom))
+          (expect-eq (arena-value (addr dst) dh) "x")
+          (let dc1 Int32 (arena-next-sibling (addr dst) dh))
+          (expect-eq (arena-value (addr dst) dc1) "y")
+        )
+      )
+    )
   ) ;; fn copy-subtree
 
   (fn append-child
@@ -166,6 +244,23 @@
         )
       )
       (return 0)
+    )
+    (tests
+      (test append-child-cases
+        (doc "sets first child when empty and appends at end when not")
+        (tags unit include)
+        (body
+          (let a Arena (arena-new))
+          (let parent Int32 (arena-add-node (addr a) (node-kind-list) ""))
+          (let c1 Int32 (arena-add-node (addr a) (node-kind-atom) "h"))
+          (let c2 Int32 (arena-add-node (addr a) (node-kind-atom) "t"))
+          (expect-eq (arena-first-child (addr a) parent) (- 0 1))
+          (append-child (addr a) parent c1)
+          (expect-eq (arena-first-child (addr a) parent) c1)
+          (append-child (addr a) parent c2)
+          (expect-eq (arena-next-sibling (addr a) c1) c2)
+        )
+      )
     )
   ) ;; fn append-child
 
@@ -220,6 +315,7 @@
                                     (do
                                       (let resolved String (resolve-path inc-path current-dir))
                                       (log-include "include" inc-path current-dir resolved)
+                                      (ccall "puts" (returns Int32) (args (String "[include_expand] parsing include...")))
                                       (if-stmt (<= (string-length resolved) 0) (return (- 0 1)) (do 0))
                                       (if-stmt (== (array-str-contains visited resolved) 1)
                                         (do 0)
@@ -227,6 +323,7 @@
                                           (array-str-append visited resolved)
                                           (let tmp Arena (arena-new))
                                           (let inc-root Int32 (parse-file-into resolved (addr tmp)))
+                                          (ccall "puts" (returns Int32) (args (String "[include_expand] include parsed.")))
                                           (if-stmt (== inc-root (- 0 1))
                                             (do
                                               ;; Could not load include; treat as plain node copy.
@@ -237,6 +334,7 @@
                                               (let next-dir String (dirname resolved))
                                               ;; Check if inc-root is (multi-top ...) - if so, expand each top-level form
                                               (let inc-head Int32 (arena-first-child (addr tmp) inc-root))
+                                              (ccall "puts" (returns Int32) (args (String "[include_expand] expanding children of include...")))
                                               (let is-multi Int32 0)
                                               (if-stmt (&& (!= inc-head (- 0 1)) (== (arena-kind (addr tmp) inc-head) (node-kind-atom)))
                                                 (if-stmt (string-eq (arena-value (addr tmp) inc-head) "multi-top")
@@ -278,9 +376,10 @@
                                                   )
                                                 )
                                                 (do
-                                                  ;; Not multi-top - regular expansion
-                                                  (let rc Int32 (expand-children (addr tmp) inc-root dst dst-root visited next-dir 1))
-                                                  (if-stmt (== rc (- 0 1)) (return (- 0 1)) (do 0))
+                                                  ;; Not multi-top - copy included root (e.g., module) into destination
+                                                  (let copied Int32 (copy-subtree (addr tmp) dst inc-root))
+                                                  (append-child dst dst-root copied)
+                                                  (ccall "puts" (returns Int32) (args (String "[include_expand] appended included root")))
                                                 )
                                               )
                                             )
@@ -318,6 +417,31 @@
         )
       )
       (return 0)
+    )
+    (tests
+      (test expand-children-copy-through
+        (doc "copies non-include forms when allow-inc=0")
+        (tags unit include)
+        (body
+          (let src Arena (arena-new))
+          (let dst Arena (arena-new))
+          (let srcRoot Int32 (arena-add-node (addr src) (node-kind-list) ""))
+          (let form Int32 (arena-add-node (addr src) (node-kind-list) ""))
+          (let head Int32 (arena-add-node (addr src) (node-kind-atom) "foo"))
+          (let arg Int32 (arena-add-node (addr src) (node-kind-atom) "bar"))
+          (arena-set-first-child (addr src) srcRoot form)
+          (arena-set-first-child (addr src) form head)
+          (arena-set-next-sibling (addr src) head arg)
+          (let dstRoot Int32 (arena-add-node (addr dst) (node-kind-list) ""))
+          (let visited ArrayString (array-str-new))
+          (let rc Int32 (expand-children (addr src) srcRoot (addr dst) dstRoot visited "" 0))
+          (expect-eq rc 0)
+          (let copied Int32 (arena-first-child (addr dst) dstRoot))
+          (expect-eq (arena-kind (addr dst) copied) (node-kind-list))
+          (let chead Int32 (arena-first-child (addr dst) copied))
+          (expect-eq (arena-value (addr dst) chead) "foo")
+        )
+      )
     )
   ) ;; fn expand-children
 
@@ -357,6 +481,17 @@
         (do
           (store Int32 out-root new-root)
           (return 0)
+        )
+      )
+    )
+    (tests
+      (test expand-root-missing
+        (doc "returns -1 when parse-file-into fails to read path")
+        (tags unit include)
+        (body
+          (let out Arena (arena-new))
+          (let outRoot Int32 0)
+          (expect-eq (expand-root "not_exist.weave" (addr out) (addr outRoot)) (- 0 1))
         )
       )
     )
