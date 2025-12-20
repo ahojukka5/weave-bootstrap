@@ -69,18 +69,44 @@ foreach(test_file IN LISTS STAGE0_TESTS)
   set_tests_properties(stage0_${test_name} PROPERTIES LABELS "stage0")
 endforeach()
 
-# Embedded tests: run with -generate-tests for each test file
+# Embedded tests: one CTest per test name discovered by weavec0.
 foreach(test_file IN LISTS STAGE0_TESTS)
   get_filename_component(test_name ${test_file} NAME_WE)
-  add_test(
-    NAME stage0_embedded_${test_name}
-    COMMAND ${CMAKE_COMMAND}
-      -DWEAVEC0=$<TARGET_FILE:weavec0>
-      -DCLANG=${CLANG_EXE}
-      -DSRC_FILE=${CMAKE_CURRENT_SOURCE_DIR}/${test_file}
-      -DRUNTIME=${CMAKE_CURRENT_SOURCE_DIR}/runtime/runtime.c
-      -DOUT_DIR=${CMAKE_CURRENT_BINARY_DIR}/tests/${test_name}_embedded
-      -P ${CMAKE_CURRENT_SOURCE_DIR}/tests/run_embedded_tests.cmake
+  # Discover test names via weavec0 -list-tests
+  execute_process(
+    COMMAND $<TARGET_FILE:weavec0> -list-tests ${CMAKE_CURRENT_SOURCE_DIR}/${test_file}
+    OUTPUT_VARIABLE EMBED_TESTS_RAW
+    RESULT_VARIABLE EMBED_DISCOVERY_RC
+    OUTPUT_STRIP_TRAILING_WHITESPACE
   )
-  set_tests_properties(stage0_embedded_${test_name} PROPERTIES LABELS "stage0;embedded")
+  if (EMBED_DISCOVERY_RC EQUAL 0 AND EMBED_TESTS_RAW)
+    string(REPLACE "\n" ";" EMBED_TESTS ${EMBED_TESTS_RAW})
+    foreach(tname IN LISTS EMBED_TESTS)
+      add_test(
+        NAME stage0_embedded_${test_name}_${tname}
+        COMMAND ${CMAKE_COMMAND}
+          -DWEAVEC0=$<TARGET_FILE:weavec0>
+          -DCLANG=${CLANG_EXE}
+          -DSRC_FILE=${CMAKE_CURRENT_SOURCE_DIR}/${test_file}
+          -DTEST_NAME=${tname}
+          -DRUNTIME=${CMAKE_CURRENT_SOURCE_DIR}/runtime/runtime.c
+          -DOUT_DIR=${CMAKE_CURRENT_BINARY_DIR}/tests/${test_name}_embedded
+          -P ${CMAKE_CURRENT_SOURCE_DIR}/tests/run_embedded_tests.cmake
+      )
+      set_tests_properties(stage0_embedded_${test_name}_${tname} PROPERTIES LABELS "stage0;embedded")
+    endforeach()
+  else()
+    # Fallback: coarse per-file embedded test
+    add_test(
+      NAME stage0_embedded_${test_name}
+      COMMAND ${CMAKE_COMMAND}
+        -DWEAVEC0=$<TARGET_FILE:weavec0>
+        -DCLANG=${CLANG_EXE}
+        -DSRC_FILE=${CMAKE_CURRENT_SOURCE_DIR}/${test_file}
+        -DRUNTIME=${CMAKE_CURRENT_SOURCE_DIR}/runtime/runtime.c
+        -DOUT_DIR=${CMAKE_CURRENT_BINARY_DIR}/tests/${test_name}_embedded
+        -P ${CMAKE_CURRENT_SOURCE_DIR}/tests/run_embedded_tests.cmake
+    )
+    set_tests_properties(stage0_embedded_${test_name} PROPERTIES LABELS "stage0;embedded")
+  endif()
 endforeach()
