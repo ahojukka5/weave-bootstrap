@@ -14,6 +14,22 @@
     (body
       (return "hello typed call")
     ) ;; body
+    (tests
+      (test "hello-returns-string"
+        (body
+          (do
+            ;; Call hello and print the result; return 0
+            (ccall "puts"
+              (returns Int32)
+              (args
+                (String (hello))
+              )
+            )
+            (return 0)
+          )
+        )
+      )
+    )
   ) ;; fn hello
 
   (entry main
