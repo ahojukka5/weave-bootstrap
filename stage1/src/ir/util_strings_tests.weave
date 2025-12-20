@@ -1,0 +1,13 @@
+(do
+  (assert-eq (sanitize-name "") "v0")
+  (assert-eq (sanitize-name "hello-world") "hello_world")
+  (assert-eq (array-str-contains (array-str-new ["a", "b", "c"]) "b") 1)
+  (assert-eq (array-str-contains (array-str-new ["a", "b", "c"]) "d") 0)
+  (assert-eq (string-starts-with "abcdef" "abc") 1)
+  (assert-eq (string-starts-with "abc" "abcdef") 0)
+  (assert-eq (string-ends-with "abcdef" "def") 1)
+  (assert-eq (string-ends-with "abc" "abcdef") 0)
+  (assert-eq (is-string-literal "strlit:foo") 1)
+  (assert-eq (is-string-literal "foo") 0)
+  (assert-eq (string-literal-value "strlit:hello") "hello")
+)
