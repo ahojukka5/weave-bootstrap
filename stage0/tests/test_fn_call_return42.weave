@@ -14,6 +14,19 @@
     (body
       (return 42)
     ) ;; body
+    (tests
+      (test "get42-returns-42"
+        (body
+          (do
+            (let r Int32 (get42))
+            (if-stmt (== r 42)
+              (return 0)
+              (return 1)
+            )
+          )
+        )
+      )
+    )
   ) ;; fn get42
 
   (entry main
