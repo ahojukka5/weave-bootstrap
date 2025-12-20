@@ -74,14 +74,17 @@
         ) ;; do
       ) ;; while
 
-      ;; Declare (simple, may duplicate)
+      ;; Declare (simple, may duplicate). Special-case malloc to unify as i8* return.
       (if-stmt (== (array-str-contains declared sym) 0)
         (do
           (array-str-append declared sym)
           (buffer-append-string decls "declare ")
-          (if-stmt (== ret-ty-node (- 0 1))
-            (buffer-append-string decls "i32")
-            (emit-type-node decls a ret-ty-node)
+          (if-stmt (string-eq sym "malloc")
+            (buffer-append-string decls "i8*")
+            (if-stmt (== ret-ty-node (- 0 1))
+              (buffer-append-string decls "i32")
+              (emit-type-node decls a ret-ty-node)
+            )
           )
           (buffer-append-string decls " @")
           (buffer-append-string decls sym)
@@ -105,28 +108,44 @@
       ;; Call
       (let t Int32 (load Int32 temp))
       (buffer-append-string out "  ")
-      (if-stmt (== ret-ty-node (- 0 1))
+      (let ret-ty-str String (map-type-node a ret-ty-node))
+      (let ret-reg Int32 t)
+      (if-stmt (string-eq sym "malloc")
         (do
+          ;; Always call malloc as i8* and bitcast if needed
           (emit-temp out t)
-          (buffer-append-string out " = call i32")
+          (buffer-append-string out " = call i8* @")
+          (buffer-append-string out sym)
+          (buffer-append-string out "(")
         )
         (do
-          (let ret-ty-str String (map-type-node a ret-ty-node))
-          (if-stmt (string-eq ret-ty-str "void")
-            (do
-              (buffer-append-string out "call void")
-            )
+          (if-stmt (== ret-ty-node (- 0 1))
             (do
               (emit-temp out t)
-              (buffer-append-string out " = call ")
-              (emit-type-node out a ret-ty-node)
+              (buffer-append-string out " = call i32 @")
+              (buffer-append-string out sym)
+              (buffer-append-string out "(")
+            )
+            (do
+              (if-stmt (string-eq ret-ty-str "void")
+                (do
+                  (buffer-append-string out "call void @")
+                  (buffer-append-string out sym)
+                  (buffer-append-string out "(")
+                )
+                (do
+                  (emit-temp out t)
+                  (buffer-append-string out " = call ")
+                  (emit-type-node out a ret-ty-node)
+                  (buffer-append-string out " @")
+                  (buffer-append-string out sym)
+                  (buffer-append-string out "(")
+                )
+              )
             )
           )
         )
       ) ;; if-stmt
-      (buffer-append-string out " @")
-      (buffer-append-string out sym)
-      (buffer-append-string out "(")
       (set i 0)
       (while (< i (array-i32-len type-nodes))
         (do
@@ -141,8 +160,32 @@
         ) ;; do
       ) ;; while
       (buffer-append-string out ")\n")
-      (store Int32 temp (+ t 1))
-      (return t)
+      ;; If malloc and desired return is pointer not i8*, bitcast
+      (if-stmt (string-eq sym "malloc")
+        (do
+          (if-stmt (== ret-ty-node (- 0 1))
+            (store Int32 temp (+ t 1))
+            (do
+              (if-stmt (string-eq ret-ty-str "i8*")
+                (store Int32 temp (+ t 1))
+                (do
+                  (buffer-append-string out "  ")
+                  (emit-temp out (+ t 1))
+                  (buffer-append-string out " = bitcast i8* ")
+                  (emit-temp out t)
+                  (buffer-append-string out " to ")
+                  (emit-type-node out a ret-ty-node)
+                  (buffer-append-string out "\n")
+                  (store Int32 temp (+ t 2))
+                  (set ret-reg (+ t 1))
+                )
+              )
+            )
+          )
+        )
+        (store Int32 temp (+ t 1))
+      )
+      (return ret-reg)
     )) ;; body
     (tests
       (test compile-ccall-basic
