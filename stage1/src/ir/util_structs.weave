@@ -24,6 +24,22 @@
     (array-str-append fields field-list)
     (return 0)
   )) ;; body
+  (tests
+    (test struct-add-basic
+      (doc "adds struct then lookup returns index and field list")
+      (tags unit ir)
+      (body
+        (let names ArrayString (array-str-new))
+        (let fields ArrayString (array-str-new))
+        (struct-add names fields "Foo" "x:Int32,y:String")
+        (let idx Int32 (struct-find names "Foo"))
+        (expect-eq idx 0)
+        (let stored String (array-str-get fields idx))
+        (let eq Int32 (string-eq stored "x:Int32,y:String"))
+        (expect-eq eq 1)
+      )
+    )
+  )
 ) ;; fn struct-add
 
 (fn struct-find
@@ -45,6 +61,21 @@
     ) ;; while
     (return (- 0 1))
   )) ;; body
+  (tests
+    (test struct-find-hit-and-miss
+      (doc "find returns index on hit, -1 on miss")
+      (tags unit ir)
+      (body
+        (let names ArrayString (array-str-new))
+        (array-str-append names "Foo")
+        (array-str-append names "Bar")
+        (let idx Int32 (struct-find names "Bar"))
+        (expect-eq idx 1)
+        (let miss Int32 (struct-find names "Baz"))
+        (expect-eq miss (- 0 1))
+      )
+    )
+  )
 ) ;; fn struct-find
 
 (fn struct-field-type
@@ -109,6 +140,24 @@
       ) ;; do
     ) ;; if-stmt
   )) ;; body
+  (tests
+    (test struct-field-type-basic
+      (doc "extract types from field list")
+      (tags unit ir)
+      (body
+        (let names ArrayString (array-str-new))
+        (let fields ArrayString (array-str-new))
+        (array-str-append names "Foo")
+        (array-str-append fields "a:Int32,b:String")
+        (let t0 String (struct-field-type names fields "Foo" 0))
+        (let t1 String (struct-field-type names fields "Foo" 1))
+        (let eq0 Int32 (string-eq t0 "Int32"))
+        (let eq1 Int32 (string-eq t1 "String"))
+        (expect-eq eq0 1)
+        (expect-eq eq1 1)
+      )
+    )
+  )
 ) ;; fn struct-field-type
 
 (fn struct-field-index
@@ -173,6 +222,22 @@
       ) ;; do
     ) ;; if-stmt
   )) ;; body
+  (tests
+    (test struct-field-index-basic
+      (doc "find field index by name")
+      (tags unit ir)
+      (body
+        (let names ArrayString (array-str-new))
+        (let fields ArrayString (array-str-new))
+        (array-str-append names "Foo")
+        (array-str-append fields "a:Int32,b:String")
+        (let idx Int32 (struct-field-index names fields "Foo" "b"))
+        (expect-eq idx 1)
+        (let miss Int32 (struct-field-index names fields "Foo" "c"))
+        (expect-eq miss (- 0 1))
+      )
+    )
+  )
 ) ;; fn struct-field-index
 
 (fn collect-structs
@@ -285,4 +350,20 @@
     ) ;; while
     (return 0)
   )) ;; body
+  (tests
+    (test collect-structs-empty
+      (doc "empty program yields no structs and returns 0")
+      (tags unit ir)
+      (body
+        (let a Arena (arena-new))
+        (let root Int32 (arena-add-node (addr a) (node-kind-list) ""))
+        (let names ArrayString (array-str-new))
+        (let fields ArrayString (array-str-new))
+        (let result Int32 (collect-structs (addr a) root names fields))
+        (expect-eq result 0)
+        (let count Int32 (array-str-len names))
+        (expect-eq count 0)
+      )
+    )
+  )
 ) ;; fn collect-structs
