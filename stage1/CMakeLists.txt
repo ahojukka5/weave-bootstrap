@@ -60,3 +60,33 @@ foreach(test_file IN LISTS STAGE1_TESTS)
   
   set_tests_properties(stage1_${test_name} PROPERTIES LABELS "stage1")
 endforeach()
+
+# Embedded tests for Stage1 source aggregated via weavec0
+# Discover test names from source files using CMake regex (no Python).
+set(STAGE1_EMBED_TESTS)
+foreach(src IN LISTS STAGE1_ALL_SRC)
+  file(READ ${src} SRC_CONTENT)
+  # Match occurrences like: (test name
+  string(REGEX MATCHALL "[\(]test[ \t\n]+[A-Za-z0-9_\-]+" TEST_MATCHES "${SRC_CONTENT}")
+  foreach(m IN LISTS TEST_MATCHES)
+    string(REGEX REPLACE "^[\(]test[ \t\n]+" "" tname "${m}")
+    list(APPEND STAGE1_EMBED_TESTS "${tname}")
+  endforeach()
+endforeach()
+# Deduplicate
+list(REMOVE_DUPLICATES STAGE1_EMBED_TESTS)
+foreach(tname IN LISTS STAGE1_EMBED_TESTS)
+  add_test(
+    NAME stage1_embedded_${tname}
+    COMMAND ${CMAKE_COMMAND}
+      -DWEAVEC0=$<TARGET_FILE:weavec0>
+      -DCLANG=${CLANG_EXE}
+      -DSRC_FILE=${STAGE1_SRC}
+      -DTEST_NAME=${tname}
+      -DWEAVEC_ARGS=-I${CMAKE_CURRENT_SOURCE_DIR}/src\;-I${CMAKE_SOURCE_DIR}/stdlib
+      -DRUNTIME=${WEAVE_RUNTIME}
+      -DOUT_DIR=${CMAKE_BINARY_DIR}/tests/stage1_embedded
+      -P ${CMAKE_SOURCE_DIR}/stage0/tests/run_embedded_tests.cmake
+  )
+  set_tests_properties(stage1_embedded_${tname} PROPERTIES LABELS "stage1;embedded")
+endforeach()
