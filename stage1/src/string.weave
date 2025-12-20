@@ -8,6 +8,24 @@
     (doc "Return length of null-terminated string.")
     (params (s String)) (returns Int32)
     (body (return (c-strlen s)))
+    (tests
+      (test string-length-empty
+        (doc "length of empty string is 0")
+        (tags unit string)
+        (body
+          (let result Int32 (string-length ""))
+          (expect-eq result 0)
+        )
+      )
+      (test string-length-nonempty
+        (doc "length of 'weave' is 5")
+        (tags unit string)
+        (body
+          (let result Int32 (string-length "weave"))
+          (expect-eq result 5)
+        )
+      )
+    )
   )
 
   (fn string-concat
@@ -23,12 +41,59 @@
         (return out)
       )
     )
+    (tests
+      (test string-concat-both-nonempty
+        (doc "concatenate 'hello' and 'world' gives 10 chars")
+        (tags unit string)
+        (body
+          (let result String (string-concat "hello" "world"))
+          (let len Int32 (c-strlen result))
+          (expect-eq len 10)
+        )
+      )
+      (test string-concat-first-empty
+        (doc "concatenate '' and 'test' gives 'test'")
+        (tags unit string)
+        (body
+          (let result String (string-concat "" "test"))
+          (let len Int32 (c-strlen result))
+          (expect-eq len 4)
+        )
+      )
+      (test string-concat-second-empty
+        (doc "concatenate 'test' and '' gives 'test'")
+        (tags unit string)
+        (body
+          (let result String (string-concat "test" ""))
+          (let len Int32 (c-strlen result))
+          (expect-eq len 4)
+        )
+      )
+    )
   )
 
   (fn string-to-int
     (doc "Parse a decimal string to Int32; returns 0 on failure.")
     (params (s String)) (returns Int32)
     (body (return (c-atoi s)))
+    (tests
+      (test string-to-int-positive
+        (doc "parse '123' returns 123")
+        (tags unit string)
+        (body
+          (let result Int32 (string-to-int "123"))
+          (expect-eq result 123)
+        )
+      )
+      (test string-to-int-zero
+        (doc "parse '0' returns 0")
+        (tags unit string)
+        (body
+          (let result Int32 (string-to-int "0"))
+          (expect-eq result 0)
+        )
+      )
+    )
   )
 
   (fn string-eq
@@ -36,6 +101,24 @@
     (params (a String) (b String)) (returns Int32)
     (body
       (if-stmt (== (c-strcmp a b) 0) (return 1) (return 0))
+    )
+    (tests
+      (test string-eq-equal
+        (doc "equal strings return 1")
+        (tags unit string)
+        (body
+          (let result Int32 (string-eq "test" "test"))
+          (expect-eq result 1)
+        )
+      )
+      (test string-eq-not-equal
+        (doc "different strings return 0")
+        (tags unit string)
+        (body
+          (let result Int32 (string-eq "test" "best"))
+          (expect-eq result 0)
+        )
+      )
     )
   )
 )
