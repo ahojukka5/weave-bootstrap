@@ -1,0 +1,6 @@
+(module
+  (name "stage1-arrays")
+  (doc "Array helpers: thin wrapper that includes the array runtime bindings.")
+
+  (include "prelude_arrays.weave")
+)

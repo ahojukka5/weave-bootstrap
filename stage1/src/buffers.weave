@@ -1,0 +1,6 @@
+(module
+  (name "stage1-buffers")
+  (doc "Buffer helpers: thin wrapper that includes the buffer runtime bindings.")
+
+  (include "prelude_buffer.weave")
+)
