@@ -144,5 +144,15 @@
       (store Int32 temp (+ t 1))
       (return t)
     )) ;; body
+    (tests
+      (test compile-ccall-basic
+        (doc "should compile simple ccall and return temp")
+        (tags unit ir ccall)
+        (body
+          (let result Int32 0)
+          (expect-eq result 0)
+        )
+      )
+    )
   ) ;; fn compile-ccall
 

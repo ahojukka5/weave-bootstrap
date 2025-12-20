@@ -84,5 +84,18 @@
         (return 0)
       )
     )
+    (tests
+      (test generate-ir-empty
+        (doc "should handle empty arena")
+        (tags unit ir main)
+        (body
+          (let a Arena (arena-new))
+          (let root Int32 (arena-add-node (addr a) (node-kind-list) ""))
+          (let out Buffer (buffer-new))
+          (let result Int32 (generate-ir (addr a) root out 0))
+          (expect-eq result 0)
+        )
+      )
+    )
   )
 )
