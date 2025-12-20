@@ -2,10 +2,30 @@
 
 (fn node-kind-atom (doc "Enum constant for atom nodes.") (params ()) (returns NodeKind)
   (body (return 0))
+  (tests
+    (test node-kind-atom-value
+      (doc "node-kind-atom returns 0")
+      (tags unit arena)
+      (body
+        (let result NodeKind (node-kind-atom))
+        (expect-eq result 0)
+      )
+    )
+  )
 )
 
 (fn node-kind-list (doc "Enum constant for list nodes.") (params ()) (returns NodeKind)
   (body (return 1))
+  (tests
+    (test node-kind-list-value
+      (doc "node-kind-list returns 1")
+      (tags unit arena)
+      (body
+        (let result NodeKind (node-kind-list))
+        (expect-eq result 1)
+      )
+    )
+  )
 )
 
 (type Arena (struct (kinds ArrayInt32) (values ArrayString) (first-child ArrayInt32) (next-sibling ArrayInt32)))
