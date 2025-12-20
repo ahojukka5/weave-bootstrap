@@ -68,6 +68,88 @@
         )
       )
     )) ;; body
+    (tests
+      (test map-type-node-builtin-int32
+        (doc "Int32 atom maps to i32")
+        (tags unit ir types)
+        (body
+          (let a (ptr Arena) (arena-create 256))
+          (let node Int32 (parse-string a "Int32"))
+          (let result String (map-type-node a node))
+          (expect-eq (string-eq result "i32") 1)
+        )
+      )
+      (test map-type-node-builtin-string
+        (doc "String atom maps to i8*")
+        (tags unit ir types)
+        (body
+          (let a (ptr Arena) (arena-create 256))
+          (let node Int32 (parse-string a "String"))
+          (let result String (map-type-node a node))
+          (expect-eq (string-eq result "i8*") 1)
+        )
+      )
+      (test map-type-node-builtin-void
+        (doc "Void atom maps to void")
+        (tags unit ir types)
+        (body
+          (let a (ptr Arena) (arena-create 256))
+          (let node Int32 (parse-string a "Void"))
+          (let result String (map-type-node a node))
+          (expect-eq (string-eq result "void") 1)
+        )
+      )
+      (test map-type-node-custom-type
+        (doc "Unknown atom treated as struct with % prefix")
+        (tags unit ir types)
+        (body
+          (let a (ptr Arena) (arena-create 256))
+          (let node Int32 (parse-string a "MyStruct"))
+          (let result String (map-type-node a node))
+          (expect-eq (string-eq result "%MyStruct") 1)
+        )
+      )
+      (test map-type-node-ptr-int32
+        (doc "Pointer to Int32 maps to i32*")
+        (tags unit ir types)
+        (body
+          (let a (ptr Arena) (arena-create 256))
+          (let node Int32 (parse-string a "(ptr Int32)"))
+          (let result String (map-type-node a node))
+          (expect-eq (string-eq result "i32*") 1)
+        )
+      )
+      (test map-type-node-ptr-ptr-int32
+        (doc "Nested pointer maps to i32**")
+        (tags unit ir types)
+        (body
+          (let a (ptr Arena) (arena-create 256))
+          (let node Int32 (parse-string a "(ptr (ptr Int32))"))
+          (let result String (map-type-node a node))
+          (expect-eq (string-eq result "i32**") 1)
+        )
+      )
+      (test map-type-node-struct-form
+        (doc "Struct form maps to %Name")
+        (tags unit ir types)
+        (body
+          (let a (ptr Arena) (arena-create 256))
+          (let node Int32 (parse-string a "(struct Arena)"))
+          (let result String (map-type-node a node))
+          (expect-eq (string-eq result "%Arena") 1)
+        )
+      )
+      (test map-type-node-ptr-struct
+        (doc "Pointer to struct maps to %Struct*")
+        (tags unit ir types)
+        (body
+          (let a (ptr Arena) (arena-create 256))
+          (let node Int32 (parse-string a "(ptr (struct Node))"))
+          (let result String (map-type-node a node))
+          (expect-eq (string-eq result "%Node*") 1)
+        )
+      )
+    )
   ) ;; fn map-type-node
 
   (fn emit-type-node
@@ -77,6 +159,32 @@
       (buffer-append-string out (map-type-node a node))
       (return 0)
     )) ;; body
+    (tests
+      (test emit-type-node-basic
+        (doc "Emits mapped type to buffer")
+        (tags unit ir types)
+        (body
+          (let a (ptr Arena) (arena-create 256))
+          (let node Int32 (parse-string a "Int32"))
+          (let buf Buffer (buffer-new))
+          (emit-type-node buf a node)
+          (let result String (buffer-to-string buf))
+          (expect-eq (string-eq result "i32") 1)
+        )
+      )
+      (test emit-type-node-pointer
+        (doc "Emits pointer type to buffer")
+        (tags unit ir types)
+        (body
+          (let a (ptr Arena) (arena-create 256))
+          (let node Int32 (parse-string a "(ptr String)"))
+          (let buf Buffer (buffer-new))
+          (emit-type-node buf a node)
+          (let result String (buffer-to-string buf))
+          (expect-eq (string-eq result "i8**") 1)
+        )
+      )
+    )
   ) ;; fn emit-type-node
 
   (fn emit-pointer-type-node
@@ -87,6 +195,32 @@
       (buffer-append-string out "*")
       (return 0)
     )) ;; body
+    (tests
+      (test emit-pointer-type-node-basic
+        (doc "Adds * to type emission")
+        (tags unit ir types)
+        (body
+          (let a (ptr Arena) (arena-create 256))
+          (let node Int32 (parse-string a "Int32"))
+          (let buf Buffer (buffer-new))
+          (emit-pointer-type-node buf a node)
+          (let result String (buffer-to-string buf))
+          (expect-eq (string-eq result "i32*") 1)
+        )
+      )
+      (test emit-pointer-type-node-already-pointer
+        (doc "Adds * to existing pointer type")
+        (tags unit ir types)
+        (body
+          (let a (ptr Arena) (arena-create 256))
+          (let node Int32 (parse-string a "(ptr Int32)"))
+          (let buf Buffer (buffer-new))
+          (emit-pointer-type-node buf a node)
+          (let result String (buffer-to-string buf))
+          (expect-eq (string-eq result "i32**") 1)
+        )
+      )
+    )
   ) ;; fn emit-pointer-type-node
 
   (fn map-simple-type-name
@@ -109,6 +243,32 @@
       (buffer-append-string b (sanitize-name name))
       (return (buffer-to-string b))
     )) ;; body
+    (tests
+      (test map-simple-type-name-int32
+        (doc "Int32 maps to i32")
+        (tags unit ir types)
+        (body
+          (let result String (map-simple-type-name "Int32"))
+          (expect-eq (string-eq result "i32") 1)
+        )
+      )
+      (test map-simple-type-name-string
+        (doc "String maps to i8*")
+        (tags unit ir types)
+        (body
+          (let result String (map-simple-type-name "String"))
+          (expect-eq (string-eq result "i8*") 1)
+        )
+      )
+      (test map-simple-type-name-custom
+        (doc "Unknown type gets % prefix")
+        (tags unit ir types)
+        (body
+          (let result String (map-simple-type-name "CustomType"))
+          (expect-eq (string-eq result "%CustomType") 1)
+        )
+      )
+    )
   ) ;; fn map-simple-type-name
 
   (fn emit-struct-defs
@@ -173,5 +333,33 @@
       ) ;; while
       (return 0)
     )) ;; body
+    (tests
+      (test emit-struct-defs-single
+        (doc "Emits single struct definition")
+        (tags unit ir types)
+        (body
+          (let buf Buffer (buffer-new))
+          (let names ArrayString (array-str-new))
+          (let fields ArrayString (array-str-new))
+          (array-str-append names "Point")
+          (array-str-append fields "x:Int32,y:Int32")
+          (emit-struct-defs buf names fields)
+          (let result String (buffer-to-string buf))
+          (expect-eq (string-starts-with result "%Point = type { ") 1)
+        )
+      )
+      (test emit-struct-defs-empty
+        (doc "Empty arrays produce no output")
+        (tags unit ir types)
+        (body
+          (let buf Buffer (buffer-new))
+          (let names ArrayString (array-str-new))
+          (let fields ArrayString (array-str-new))
+          (emit-struct-defs buf names fields)
+          (let result String (buffer-to-string buf))
+          (expect-eq (string-eq result "") 1)
+        )
+      )
+    )
   ) ;; fn emit-struct-defs
 ) ;; module
