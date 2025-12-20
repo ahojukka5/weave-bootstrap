@@ -24,6 +24,16 @@
         (return 1)
       )
     )
+    (tests
+      (test tc-error-returns-one
+        (doc "tc-error returns 1")
+        (tags unit typecheck)
+        (body
+          (let result Int32 (tc-error "oops"))
+          (expect-eq result 1)
+        )
+      )
+    )
   )
 
   (fn typecheck_program
@@ -133,6 +143,18 @@
         )
       )
       (return 0)
+    )
+    (tests
+      (test typecheck-program-empty
+        (doc "empty program typechecks with result 0")
+        (tags unit typecheck)
+        (body
+          (let a Arena (arena-new))
+          (let root Int32 (arena-add-node (addr a) (node-kind-list) ""))
+          (let result Int32 (typecheck_program (addr a) root))
+          (expect-eq result 0)
+        )
+      )
     )
   )
 )
