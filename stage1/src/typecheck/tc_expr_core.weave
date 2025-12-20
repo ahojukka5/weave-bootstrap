@@ -19,6 +19,84 @@
         ;; Skip pure type expressions
         (if-stmt (|| (string-eq head-val "params") (string-eq head-val "returns")) (return 0) (do 0))
         (if-stmt (|| (string-eq head-val "ptr") (string-eq head-val "struct")) (return 0) (do 0))
+        ;; Special cases: field access and simple calls
+        (if-stmt (string-eq head-val "get-field")
+          (do
+            ;; get-field form: (get-field (struct Name) IDX PTR)
+            (let type-form Int32 (second-child a node))
+            (let idx-node Int32 (third-child a node))
+            (if-stmt (|| (== type-form (- 0 1)) (== idx-node (- 0 1)))
+              (return (tc-error "get-field missing type or index"))
+              (do
+                (let t-head Int32 (arena-first-child a type-form))
+                (if-stmt (== t-head (- 0 1)) (return (tc-error "get-field type malformed")) (do 0))
+                (if-stmt (!= (string-eq (arena-value a t-head) "struct") 1)
+                  (return (tc-error "get-field requires struct type"))
+                  (do
+                    (let name-node Int32 (arena-next-sibling a t-head))
+                    (if-stmt (== name-node (- 0 1)) (return (tc-error "get-field missing struct name")) (do 0))
+                    (let sname String (arena-value a name-node))
+                    (let sidx Int32 0)
+                    ;; parse idx-node as integer literal if possible; fallback to 0
+                    (let idx-str String (arena-value a idx-node))
+                    (if-stmt (> (string-length idx-str) 0)
+                      (do
+                        ;; naive atoi via ccall
+                        (set sidx (ccall "atoi" (returns Int32) (args (String idx-str))))
+                      )
+                      (do 0)
+                    )
+                    (let fty String (struct-field-type struct-names struct-fields sname sidx))
+                    (if-stmt (== (string-length fty) 0)
+                      (return (tc-error "Invalid field index or unknown struct"))
+                      (do 0)
+                    )
+                  )
+                )
+              )
+            )
+          )
+          (do 0)
+        )
+        ;; Simple function call: head is a name, children are args
+        (if-stmt (&& (== (arena-kind a node) (node-kind-list)) (== (arena-kind a head) (node-kind-atom)))
+          (do
+            ;; Skip known non-call heads
+            (if-stmt
+              (|| (string-eq head-val "ccall")
+                (|| (string-eq head-val "return")
+                  (|| (string-eq head-val "let")
+                    (|| (string-eq head-val "set")
+                      (|| (string-eq head-val "do")
+                        (|| (string-eq head-val "block")
+                          (|| (string-eq head-val "if-stmt")
+                            (string-eq head-val "while")
+                          )
+                        )
+                      )
+                    )
+                  )
+                )
+              )
+              (do 0)
+              (do
+                (let idx Int32 (sig-find names head-val))
+                (if-stmt (== idx (- 0 1))
+                  (do 0) ;; Unknown call; allow for now
+                  (do
+                    (let argc Int32 (child-count a node))
+                    (let expected Int32 (array-i32-get param-counts idx))
+                    (if-stmt (!= argc expected)
+                      (return (tc-error "Bad call arity"))
+                      (do 0)
+                    )
+                  )
+                )
+              )
+            )
+          )
+          (do 0)
+        )
         ;; Recursively validate children
         (let c Int32 (arena-first-child a node))
         (while (!= c (- 0 1))
@@ -32,4 +110,23 @@
       )
     )
   ))
+  (tests
+    (test tc-expr-core-type-skip
+      (doc "ignores type forms like ptr/struct")
+      (tags unit typecheck)
+      (body
+        (let a Arena (arena-new))
+        (let list Int32 (arena-add-node (addr a) (node-kind-list) ""))
+        (let head Int32 (arena-add-node (addr a) (node-kind-atom) "ptr"))
+        (let inner Int32 (arena-add-node (addr a) (node-kind-atom) "Int32"))
+        (arena-set-first-child (addr a) list head)
+        (arena-set-next-sibling (addr a) head inner)
+        (let names ArrayString (array-str-new))
+        (let pcs ArrayInt32 (array-i32-new))
+        (let sn ArrayString (array-str-new))
+        (let sf ArrayString (array-str-new))
+        (expect-eq (tc-expr (addr a) list names pcs sn sf) 0)
+      )
+    )
+  )
 )
