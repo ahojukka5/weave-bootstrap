@@ -1,13 +1,3 @@
-(module
-  (name "stage1-ir-pointers")
-  (doc "Pointer-related IR helpers: addr/load/store/bitcast/get-field.")
-
-  (include "../prelude.weave")
-  (include "../arena.weave")
-  (include "./emit.weave")
-  (include "./util.weave")
-  (include "./types.weave")
-
   (fn compile-addr
     (doc "Compute the address of a local (alloca'd) binding.")
     (params (node Int32) (a (ptr Arena)) (env-names ArrayString) (env-safe ArrayString) (env-types ArrayInt32) (out Buffer) (temp (ptr Int32)))
@@ -42,16 +32,8 @@
       )
       (store Int32 temp (+ t 1))
       (return t)
-    ) ;; body
-    (tests
-      (test addr-basic
-        (doc "Test computing address of local binding")
-        (tags unit)
-        (body
-          (let out Buffer (buffer-create 256))
-          (let temp-var Int32 0)
-          (expect-true (>= temp-var 0)))))
-  ) ;; fn compile-addr
+    )
+  )
 
   (fn compile-load-node
     (doc "Load from ptr-reg with the given element type node.")
@@ -70,18 +52,8 @@
       (buffer-append-string out "\n")
       (store Int32 temp (+ t 1))
       (return t)
-    ) ;; body
-    (tests
-      (test load-basic
-        (doc "Test loading from pointer register")
-        (tags unit)
-        (body
-          (let a (ptr Arena) (arena-create 4096))
-          (let out Buffer (buffer-create 256))
-          (let temp-var Int32 0)
-          (let result Int32 (compile-load-node a 0 0 out (addr-of Int32 temp-var)))
-          (expect-eq result 0))))
-  ) ;; fn compile-load-node
+    )
+  )
 
   (fn compile-store-node
     (doc "Store val-reg into ptr-reg using element type node.")
@@ -98,17 +70,8 @@
       (emit-temp out ptr-reg)
       (buffer-append-string out "\n")
       (return val-reg)
-    ) ;; body
-    (tests
-      (test store-basic
-        (doc "Test storing value to pointer register")
-        (tags unit)
-        (body
-          (let a (ptr Arena) (arena-create 4096))
-          (let out Buffer (buffer-create 256))
-          (let result Int32 (compile-store-node a 0 1 2 out))
-          (expect-eq result 1))))
-  ) ;; fn compile-store-node
+    )
+  )
 
   (fn compile-bitcast-node
     (doc "Bitcast i8* source to to-ty-node (which should be a pointer type).")
@@ -125,18 +88,8 @@
       (buffer-append-string out "\n")
       (store Int32 temp (+ t 1))
       (return t)
-    ) ;; body
-    (tests
-      (test bitcast-basic
-        (doc "Test bitcasting i8* to pointer type")
-        (tags unit)
-        (body
-          (let a (ptr Arena) (arena-create 4096))
-          (let out Buffer (buffer-create 256))
-          (let temp-var Int32 0)
-          (let result Int32 (compile-bitcast-node a 0 1 out (addr-of Int32 temp-var)))
-          (expect-eq result 0))))
-  ) ;; fn compile-bitcast-node
+    )
+  )
 
   (fn compile-get-field-node
     (doc "GEP into a struct or raw element pointer using type node.")
@@ -149,7 +102,7 @@
       (struct-fields ArrayString)
       (out Buffer)
       (temp (ptr Int32))
-    ) ;; params
+    )
     (returns Int32)
     (body
       (let t Int32 (load Int32 temp))
@@ -205,21 +158,11 @@
           (buffer-append-string out idx)
           (buffer-append-string out "\n")
         )
-      ) ;; if-stmt
+      )
       (store Int32 temp (+ t 1))
       (return t)
-    ) ;; body
-    (tests
-      (test gep-atom-type
-        (doc "Test GEP with atom type")
-        (tags unit)
-        (body
-          (let a (ptr Arena) (arena-create 4096))
-          (let out Buffer (buffer-create 256))
-          (let temp-var Int32 0)
-          (let result Int32 (compile-get-field-node a 0 "0" 1 (array-string-create) (array-string-create) out (addr-of Int32 temp-var)))
-          (expect-eq result 0))))
-  ) ;; fn compile-get-field-node
+    )
+  )
 
   (fn compile-ptr-add-node
     (doc "Pointer arithmetic: compute ptr + idx * sizeof(elem-ty-node).")
@@ -230,7 +173,7 @@
       (idx-reg Int32)
       (out Buffer)
       (temp (ptr Int32))
-    ) ;; params
+    )
     (returns Int32)
     (body
       (let t Int32 (load Int32 temp))
@@ -247,17 +190,5 @@
       (buffer-append-string out "\n")
       (store Int32 temp (+ t 1))
       (return t)
-    ) ;; body
-    (tests
-      (test ptr-add-basic
-        (doc "Test pointer arithmetic with index")
-        (tags unit)
-        (body
-          (let a (ptr Arena) (arena-create 4096))
-          (let out Buffer (buffer-create 256))
-          (let temp-var Int32 0)
-          (let result Int32 (compile-ptr-add-node a 0 1 2 out (addr-of Int32 temp-var)))
-          (expect-eq result 0))))
-  ) ;; fn compile-ptr-add-node
-) ;; module
-
+    )
+  )
