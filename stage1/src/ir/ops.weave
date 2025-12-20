@@ -2,7 +2,9 @@
   (name "stage1-ir-ops")
   (doc "Arithmetic and comparison helpers for IR emission.")
 
-  (include "../prelude.weave")
+  (include "../string.weave")
+  (include "../buffers.weave")
+  (include "../arrays.weave")
   (include "./emit.weave")
 
   (fn compile-binary-arith

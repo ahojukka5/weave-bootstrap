@@ -2,7 +2,9 @@
   (name "stage1-ir-emit")
   (doc "Tiny helpers to append common LLVM IR fragments.")
 
-  (include "../prelude.weave")
+  (include "../string.weave")
+  (include "../buffers.weave")
+  (include "../arrays.weave")
 
   (fn emit-line
     (doc "Append a full line with newline to the buffer.")

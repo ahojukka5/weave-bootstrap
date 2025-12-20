@@ -2,7 +2,9 @@
   (name "stage1-sexpr-parser")
   (doc "Recursive descent that builds an arena from the token stream.")
 
-  (include "prelude.weave")
+  (include "string.weave")
+  (include "buffers.weave")
+  (include "arrays.weave")
   (include "arena.weave")
 
   (fn token-value

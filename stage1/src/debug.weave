@@ -2,7 +2,9 @@
   (name "stage1-debug")
   (doc "Arena inspection helpers for debugging and tests.")
 
-  (include "prelude.weave")
+  (include "string.weave")
+  (include "buffers.weave")
+  (include "arrays.weave")
   (include "arena.weave")
 
   ;; Simple tree dump for debugging the arena contents.

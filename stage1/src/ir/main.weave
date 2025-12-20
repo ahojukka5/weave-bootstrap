@@ -2,7 +2,9 @@
   (name "stage1-ir-main")
   (doc "Entry point that lowers parsed S-expressions into LLVM IR.")
 
-  (include "../prelude.weave")
+  (include "../string.weave")
+  (include "../buffers.weave")
+  (include "../arrays.weave")
   (include "../arena.weave")
   (include "../debug.weave")
   (include "./emit.weave")

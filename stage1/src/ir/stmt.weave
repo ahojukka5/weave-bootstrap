@@ -2,7 +2,9 @@
   (name "stage1-ir-stmt")
   (doc "Statement lowering to LLVM IR; handles let/set/do/if/while/return.")
 
-  (include "../prelude.weave")
+  (include "../string.weave")
+  (include "../buffers.weave")
+  (include "../arrays.weave")
   (include "../arena.weave")
   (include "./emit.weave")
   (include "./util.weave")

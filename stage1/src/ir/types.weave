@@ -2,7 +2,9 @@
   (name "stage1-ir-types")
   (doc "Type mapping and struct layout emission helpers used by IR generation.")
 
-  (include "../prelude.weave")
+  (include "../string.weave")
+  (include "../buffers.weave")
+  (include "../arrays.weave")
   (include "./util.weave")
 
   (fn map-type-node

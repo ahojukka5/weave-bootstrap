@@ -2,7 +2,9 @@
   (name "stage1-ir-expr")
   (doc "Expression lowering to LLVM IR temps and instructions.")
 
-  (include "../prelude.weave")
+  (include "../string.weave")
+  (include "../buffers.weave")
+  (include "../arrays.weave")
   (include "../arena.weave")
   (include "./emit.weave")
   (include "./util.weave")
