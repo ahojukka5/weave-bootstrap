@@ -76,6 +76,37 @@
       
       (return 1)
     ))
+    (tests
+      (test lower-get-field-basic
+        (doc "lowers to (get-field (struct T) idx ptr)")
+        (tags unit lower)
+        (body
+          (let a (ptr Arena) (arena-create 256))
+          (let node Int32 (parse-string a "(get-field p b)"))
+          (let env-names ArrayString (array-str-new))
+          (let env-types ArrayString (array-str-new))
+          (let struct-names ArrayString (array-str-new))
+          (let struct-fields ArrayString (array-str-new))
+          (array-str-append env-names "p")
+          (array-str-append env-types "(ptr Foo)")
+          (array-str-append struct-names "Foo")
+          (array-str-append struct-fields "a:Int32,b:String")
+          (let rc Int32 (lower-get-field a node env-names env-types struct-names struct-fields))
+          (expect-eq rc 1)
+          (let head Int32 (arena-first-child a node))
+          (let s Int32 (arena-next-sibling a head))
+          (expect-eq (arena-kind a s) (node-kind-list))
+          (let sh Int32 (arena-first-child a s))
+          (expect-eq (string-eq (arena-value a sh) "struct") 1)
+          (let sname Int32 (arena-next-sibling a sh))
+          (expect-eq (string-eq (arena-value a sname) "Foo") 1)
+          (let idx Int32 (arena-next-sibling a s))
+          (expect-eq (string-eq (arena-value a idx) "1") 1)
+          (let ptr Int32 (arena-next-sibling a idx))
+          (expect-eq (string-eq (arena-value a ptr) "p") 1)
+        )
+      )
+    )
   )
 
   ;; ============================================================
@@ -138,6 +169,26 @@
       
       (return 1)
     ))
+    (tests
+      (test lower-set-field-basic
+        (doc "lowers to (set-field (struct T) idx ptr val)")
+        (tags unit lower)
+        (body
+          (let a (ptr Arena) (arena-create 256))
+          (let node Int32 (parse-string a "(set-field p b x)"))
+          (let env-names ArrayString (array-str-new))
+          (let env-types ArrayString (array-str-new))
+          (let struct-names ArrayString (array-str-new))
+          (let struct-fields ArrayString (array-str-new))
+          (array-str-append env-names "p")
+          (array-str-append env-types "(ptr Foo)")
+          (array-str-append struct-names "Foo")
+          (array-str-append struct-fields "a:Int32,b:String")
+          (let rc Int32 (lower-set-field a node env-names env-types struct-names struct-fields))
+          (expect-eq rc 1)
+        )
+      )
+    )
   )
 
   ;; ============================================================
@@ -220,4 +271,23 @@
       
       (return 1)
     ))
+    (tests
+      (test lower-make-basic
+        (doc "lowers to (make (struct T) v1 v2 ...)")
+        (tags unit lower)
+        (body
+          (let a (ptr Arena) (arena-create 256))
+          (let node Int32 (parse-string a "(make Foo (a 1) (b x))"))
+          (let struct-names ArrayString (array-str-new))
+          (let struct-fields ArrayString (array-str-new))
+          (array-str-append struct-names "Foo")
+          (array-str-append struct-fields "a:Int32,b:String")
+          (let rc Int32 (lower-make a node struct-names struct-fields))
+          (expect-eq rc 1)
+          (let head Int32 (arena-first-child a node))
+          (let s Int32 (arena-next-sibling a head))
+          (expect-eq (arena-kind a s) (node-kind-list))
+        )
+      )
+    )
   )
