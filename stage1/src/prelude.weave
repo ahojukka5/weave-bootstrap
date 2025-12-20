@@ -20,6 +20,24 @@
         )
       )
     )
+    (tests
+      (test c-strlen-empty
+        (doc "strlen of empty string is 0")
+        (tags unit prelude)
+        (body
+          (let result Int32 (c-strlen ""))
+          (expect-eq result 0)
+        )
+      )
+      (test c-strlen-hello
+        (doc "strlen of 'hello' is 5")
+        (tags unit prelude)
+        (body
+          (let result Int32 (c-strlen "hello"))
+          (expect-eq result 5)
+        )
+      )
+    )
   ) ;; fn c-strlen
 
   (fn c-malloc
@@ -30,6 +48,16 @@
         (ccall "malloc"
           (returns String)
           (args (Int32 n))
+        )
+      )
+    )
+    (tests
+      (test c-malloc-positive
+        (doc "malloc should return non-null for positive size")
+        (tags unit prelude)
+        (body
+          (let result String (c-malloc 10))
+          (expect-true (!= result 0))
         )
       )
     )
@@ -46,6 +74,18 @@
         )
       )
     )
+    (tests
+      (test c-strcpy-simple
+        (doc "strcpy should copy string")
+        (tags unit prelude)
+        (body
+          (let buf String (c-malloc 10))
+          (c-strcpy buf "test")
+          (let len Int32 (c-strlen buf))
+          (expect-eq len 4)
+        )
+      )
+    )
   ) ;; fn c-strcpy
 
   (fn c-strcat
@@ -59,6 +99,19 @@
         )
       )
     )
+    (tests
+      (test c-strcat-simple
+        (doc "strcat should append string")
+        (tags unit prelude)
+        (body
+          (let buf String (c-malloc 20))
+          (c-strcpy buf "hello")
+          (c-strcat buf "world")
+          (let len Int32 (c-strlen buf))
+          (expect-eq len 10)
+        )
+      )
+    )
   ) ;; fn c-strcat
 
   (fn string-length
@@ -69,6 +122,24 @@
         (ccall "weave_string_length"
           (returns Int32)
           (args (String s))
+        )
+      )
+    )
+    (tests
+      (test string-length-empty
+        (doc "length of empty string is 0")
+        (tags unit prelude)
+        (body
+          (let result Int32 (string-length ""))
+          (expect-eq result 0)
+        )
+      )
+      (test string-length-nonempty
+        (doc "length of 'test' is 4")
+        (tags unit prelude)
+        (body
+          (let result Int32 (string-length "test"))
+          (expect-eq result 4)
         )
       )
     )
@@ -86,6 +157,17 @@
         (do (c-strcat out b))
         (return out)
       ) ;; do
+    )
+    (tests
+      (test string-concat-both
+        (doc "concatenate 'hello' and 'world' gives length 10")
+        (tags unit prelude)
+        (body
+          (let result String (string-concat "hello" "world"))
+          (let len Int32 (string-length result))
+          (expect-eq len 10)
+        )
+      )
     )
   ) ;; fn string-concat
 
@@ -139,6 +221,24 @@
         )
       )
     )
+    (tests
+      (test string-eq-equal
+        (doc "equal strings return 1")
+        (tags unit prelude)
+        (body
+          (let result Int32 (string-eq "test" "test"))
+          (expect-eq result 1)
+        )
+      )
+      (test string-eq-not-equal
+        (doc "different strings return 0")
+        (tags unit prelude)
+        (body
+          (let result Int32 (string-eq "test" "best"))
+          (expect-eq result 0)
+        )
+      )
+    )
   ) ;; fn string-eq
 
   (fn int-to-string
@@ -152,6 +252,26 @@
         )
       )
     )
+    (tests
+      (test int-to-string-positive
+        (doc "convert 42 to string")
+        (tags unit prelude)
+        (body
+          (let result String (int-to-string 42))
+          (let len Int32 (string-length result))
+          (expect-eq len 2)
+        )
+      )
+      (test int-to-string-zero
+        (doc "convert 0 to string")
+        (tags unit prelude)
+        (body
+          (let result String (int-to-string 0))
+          (let len Int32 (string-length result))
+          (expect-eq len 1)
+        )
+      )
+    )
   ) ;; fn int-to-string
 
   (fn buffer-new
@@ -162,6 +282,16 @@
         (ccall "weave_buffer_new"
           (returns Buffer)
           (args)
+        )
+      )
+    )
+    (tests
+      (test buffer-new-creates
+        (doc "buffer-new should return non-zero")
+        (tags unit prelude)
+        (body
+          (let result Buffer (buffer-new))
+          (expect-true (!= result 0))
         )
       )
     )
@@ -217,6 +347,18 @@
         )
       )
     )
+    (tests
+      (test buffer-to-string-empty
+        (doc "empty buffer gives empty string")
+        (tags unit prelude)
+        (body
+          (let b Buffer (buffer-new))
+          (let s String (buffer-to-string b))
+          (let len Int32 (string-length s))
+          (expect-eq len 0)
+        )
+      )
+    )
   ) ;; fn buffer-to-string
 
   (fn array-str-new
@@ -231,6 +373,16 @@
         ) ;; ccall
       ) ;; return
     ) ;; body
+    (tests
+      (test array-str-new-creates
+        (doc "array-str-new should return non-zero")
+        (tags unit prelude)
+        (body
+          (let result ArrayString (array-str-new))
+          (expect-true (!= result 0))
+        )
+      )
+    )
   ) ;; fn array-str-new
 
   (fn array-str-len
@@ -249,6 +401,17 @@
         ) ;; ccall
       ) ;; return
     ) ;; body
+    (tests
+      (test array-str-len-empty
+        (doc "new array has length 0")
+        (tags unit prelude)
+        (body
+          (let arr ArrayString (array-str-new))
+          (let len Int32 (array-str-len arr))
+          (expect-eq len 0)
+        )
+      )
+    )
   ) ;; fn array-str-len
 
   (fn array-str-append
@@ -303,6 +466,16 @@
         ) ;; ccall
       ) ;; return
     ) ;; body
+    (tests
+      (test array-i32-new-creates
+        (doc "array-i32-new should return non-zero")
+        (tags unit prelude)
+        (body
+          (let result ArrayInt32 (array-i32-new))
+          (expect-true (!= result 0))
+        )
+      )
+    )
   ) ;; fn array-i32-new
 
   (fn array-i32-len
@@ -321,6 +494,17 @@
         ) ;; ccall
       ) ;; return
     ) ;; body
+    (tests
+      (test array-i32-len-empty
+        (doc "new array has length 0")
+        (tags unit prelude)
+        (body
+          (let arr ArrayInt32 (array-i32-new))
+          (let len Int32 (array-i32-len arr))
+          (expect-eq len 0)
+        )
+      )
+    )
   ) ;; fn array-i32-len
 
   (fn array-i32-append
@@ -383,5 +567,18 @@
         ) ;; ccall
       ) ;; return
     ) ;; body
+    (tests
+      (test array-i32-set-and-get
+        (doc "set and get should roundtrip")
+        (tags unit prelude)
+        (body
+          (let arr ArrayInt32 (array-i32-new))
+          (array-i32-append arr 0)
+          (array-i32-set arr 0 42)
+          (let result Int32 (array-i32-get arr 0))
+          (expect-eq result 42)
+        )
+      )
+    )
   ) ;; fn array-i32-set
 ) ;; module
