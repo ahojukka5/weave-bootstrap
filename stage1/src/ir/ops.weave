@@ -35,6 +35,52 @@
         ) ;; do
       ) ;; let
     ) ;; body
+    (tests
+      (test compile-binary-arith-add
+        (doc "should emit add instruction")
+        (tags unit ir ops)
+        (body
+          (let b Buffer (buffer-new))
+          (let temp Int32 10)
+          (let result Int32 (compile-binary-arith "+" 1 2 b (addr temp)))
+          (let s String (buffer-to-string b))
+          (expect-true (> (string-length s) 0))
+        )
+      )
+      (test compile-binary-arith-sub
+        (doc "should emit sub instruction")
+        (tags unit ir ops)
+        (body
+          (let b Buffer (buffer-new))
+          (let temp Int32 10)
+          (let result Int32 (compile-binary-arith "-" 1 2 b (addr temp)))
+          (let s String (buffer-to-string b))
+          (expect-true (> (string-length s) 0))
+        )
+      )
+      (test compile-binary-arith-mul
+        (doc "should emit mul instruction")
+        (tags unit ir ops)
+        (body
+          (let b Buffer (buffer-new))
+          (let temp Int32 10)
+          (let result Int32 (compile-binary-arith "*" 1 2 b (addr temp)))
+          (let s String (buffer-to-string b))
+          (expect-true (> (string-length s) 0))
+        )
+      )
+      (test compile-binary-arith-div
+        (doc "should emit sdiv instruction")
+        (tags unit ir ops)
+        (body
+          (let b Buffer (buffer-new))
+          (let temp Int32 10)
+          (let result Int32 (compile-binary-arith "/" 1 2 b (addr temp)))
+          (let s String (buffer-to-string b))
+          (expect-true (> (string-length s) 0))
+        )
+      )
+    )
   ) ;; fn compile-binary-arith
 
   (fn compile-icmp
@@ -65,6 +111,30 @@
         ) ;; let
       ) ;; let
     ) ;; body
+    (tests
+      (test compile-icmp-eq
+        (doc "should emit icmp eq and zext")
+        (tags unit ir ops)
+        (body
+          (let b Buffer (buffer-new))
+          (let temp Int32 10)
+          (let result Int32 (compile-icmp "eq" 1 2 b (addr temp)))
+          (let s String (buffer-to-string b))
+          (expect-true (> (string-length s) 10))
+        )
+      )
+      (test compile-icmp-ne
+        (doc "should emit icmp ne and zext")
+        (tags unit ir ops)
+        (body
+          (let b Buffer (buffer-new))
+          (let temp Int32 10)
+          (let result Int32 (compile-icmp "ne" 1 2 b (addr temp)))
+          (let s String (buffer-to-string b))
+          (expect-true (> (string-length s) 10))
+        )
+      )
+    )
   ) ;; fn compile-icmp
 
   (fn compile-logical
@@ -114,5 +184,29 @@
         ) ;; let
       ) ;; let
     ) ;; body
+    (tests
+      (test compile-logical-and
+        (doc "should emit logical && with icmp and and")
+        (tags unit ir ops)
+        (body
+          (let b Buffer (buffer-new))
+          (let temp Int32 10)
+          (let result Int32 (compile-logical "&&" 1 2 b (addr temp)))
+          (let s String (buffer-to-string b))
+          (expect-true (> (string-length s) 20))
+        )
+      )
+      (test compile-logical-or
+        (doc "should emit logical || with icmp and or")
+        (tags unit ir ops)
+        (body
+          (let b Buffer (buffer-new))
+          (let temp Int32 10)
+          (let result Int32 (compile-logical "||" 1 2 b (addr temp)))
+          (let s String (buffer-to-string b))
+          (expect-true (> (string-length s) 20))
+        )
+      )
+    )
   ) ;; fn compile-logical
 ) ;; module

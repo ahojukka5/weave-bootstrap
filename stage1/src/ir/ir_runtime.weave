@@ -15,4 +15,31 @@
         )
       )
     )
+    (tests
+      (test emit-runtime-decl-first-time
+        (doc "first declaration should add to buffer and declared list")
+        (tags unit ir runtime)
+        (body
+          (let decls Buffer (buffer-new))
+          (let declared ArrayString (array-str-new))
+          (emit-runtime-decl "test_fn" "declare i32 @test_fn()" decls declared)
+          (let s String (buffer-to-string decls))
+          (let len Int32 (string-length s))
+          (expect-true (> len 0))
+        )
+      )
+      (test emit-runtime-decl-duplicate
+        (doc "duplicate declaration should be skipped")
+        (tags unit ir runtime)
+        (body
+          (let decls Buffer (buffer-new))
+          (let declared ArrayString (array-str-new))
+          (emit-runtime-decl "test_fn" "declare i32 @test_fn()" decls declared)
+          (let len1 Int32 (string-length (buffer-to-string decls)))
+          (emit-runtime-decl "test_fn" "declare i32 @test_fn()" decls declared)
+          (let len2 Int32 (string-length (buffer-to-string decls)))
+          (expect-eq len1 len2)
+        )
+      )
+    )
   )
