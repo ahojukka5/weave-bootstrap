@@ -51,6 +51,28 @@ Every closing parenthesis MUST be on its own line, aligned with the indentation 
 2. **Clarity:** Comments (e.g., `; body`, `; test`, `; tests`) make it immediately clear what each parenthesis closes
 3. **Consistency:** Apply this rule uniformly across all code
 
+### Error Patterns
+
+- Multiple closing parentheses on the same line (e.g., `))))`), or compact
+  closings like `))` at the end of a block, are near-certain syntax errors.
+- Fix by splitting into one closing parenthesis per line and add an end-of-line
+  comment indicating what is being closed.
+
+❌ Incorrect:
+
+```lisp
+      (expect-eq result 0))))
+```
+
+✅ Correct:
+
+```lisp
+      (expect-eq result 0)
+    ) ; body
+  ) ; test
+) ; tests
+```
+
 ### Exceptions
 
 Short, simple expressions on a single line are acceptable:
