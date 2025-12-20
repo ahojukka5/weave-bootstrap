@@ -34,6 +34,35 @@
         ) ;; let i
       ) ;; let len
     ) ;; body
+    (tests
+      (test token-value-symbol
+        (doc "token-value strips SYMBOL: prefix")
+        (tags unit sexpr-parser)
+        (body
+          (let result String (token-value "SYMBOL:test"))
+          (let eq Int32 (string-eq result "test"))
+          (expect-eq eq 1)
+        )
+      )
+      (test token-value-number
+        (doc "token-value strips NUMBER: prefix")
+        (tags unit sexpr-parser)
+        (body
+          (let result String (token-value "NUMBER:42"))
+          (let eq Int32 (string-eq result "42"))
+          (expect-eq eq 1)
+        )
+      )
+      (test token-value-no-prefix
+        (doc "token-value returns whole string if no colon")
+        (tags unit sexpr-parser)
+        (body
+          (let result String (token-value "LPAREN"))
+          (let eq Int32 (string-eq result "LPAREN"))
+          (expect-eq eq 1)
+        )
+      )
+    )
   ) ;; fn token-value
 
   (fn parse-expr-at
@@ -107,6 +136,37 @@
         result
       ) ;; block
     ) ;; body
+    (tests
+      (test parse-expr-at-atom
+        (doc "parse-expr-at should parse a simple symbol")
+        (tags unit sexpr-parser)
+        (body
+          (let tokens ArrayString (array-str-new))
+          (array-str-append tokens "SYMBOL:test")
+          (array-str-append tokens "EOF")
+          (let a Arena (arena-new))
+          (let next-pos Int32 0)
+          (let id Int32 (parse-expr-at (addr a) tokens 0 (addr next-pos)))
+          (let kind Int32 (arena-kind (addr a) id))
+          (expect-eq kind 0)
+        )
+      )
+      (test parse-expr-at-list
+        (doc "parse-expr-at should parse a list")
+        (tags unit sexpr-parser)
+        (body
+          (let tokens ArrayString (array-str-new))
+          (array-str-append tokens "LPAREN")
+          (array-str-append tokens "RPAREN")
+          (array-str-append tokens "EOF")
+          (let a Arena (arena-new))
+          (let next-pos Int32 0)
+          (let id Int32 (parse-expr-at (addr a) tokens 0 (addr next-pos)))
+          (let kind Int32 (arena-kind (addr a) id))
+          (expect-eq kind 1)
+        )
+      )
+    )
   ) ;; fn parse-expr-at
 
   (fn parse-top
@@ -140,5 +200,32 @@
         root-id
       ) ;; block
     ) ;; body
+    (tests
+      (test parse-top-empty
+        (doc "parse-top should handle empty token list")
+        (tags unit sexpr-parser)
+        (body
+          (let tokens ArrayString (array-str-new))
+          (array-str-append tokens "EOF")
+          (let a Arena (arena-new))
+          (let root Int32 (parse-top (addr a) tokens))
+          (let kind Int32 (arena-kind (addr a) root))
+          (expect-eq kind 1)
+        )
+      )
+      (test parse-top-single-atom
+        (doc "parse-top should parse single atom")
+        (tags unit sexpr-parser)
+        (body
+          (let tokens ArrayString (array-str-new))
+          (array-str-append tokens "SYMBOL:test")
+          (array-str-append tokens "EOF")
+          (let a Arena (arena-new))
+          (let root Int32 (parse-top (addr a) tokens))
+          (let kind Int32 (arena-kind (addr a) root))
+          (expect-eq kind 1)
+        )
+      )
+    )
   ) ;; fn parse-top
 ) ;; module
