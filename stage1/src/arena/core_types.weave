@@ -1,0 +1,11 @@
+(type NodeKind (alias Int32))
+
+(fn node-kind-atom (doc "Enum constant for atom nodes.") (params ()) (returns NodeKind)
+  (body (return 0))
+)
+
+(fn node-kind-list (doc "Enum constant for list nodes.") (params ()) (returns NodeKind)
+  (body (return 1))
+)
+
+(type Arena (struct (kinds ArrayInt32) (values ArrayString) (first-child ArrayInt32) (next-sibling ArrayInt32)))
