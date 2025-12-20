@@ -68,27 +68,19 @@
       (let child Int32 (arena-first-child a root))
       (while (!= child (- 0 1))
         (do
+          ;; Top-level fn
           (if-stmt (is-list-with-head a child "fn")
             (do
               (let name-node Int32 (second-child a child))
               (let fn-name String (arena-value a name-node))
-              ;; Find returns form
               (let sib Int32 (arena-next-sibling a name-node))
-              ;; Skip doc if present
-              (if-stmt (is-list-with-head a sib "doc")
-                (set sib (arena-next-sibling a sib))
-                (do 0)
-              )
-              ;; Skip params if present
-              (if-stmt (is-list-with-head a sib "params")
-                (set sib (arena-next-sibling a sib))
-                (do 0)
-              )
-              ;; sib should now be returns
+              (if-stmt (is-list-with-head a sib "doc") (set sib (arena-next-sibling a sib)) (do 0))
+              (if-stmt (is-list-with-head a sib "params") (set sib (arena-next-sibling a sib)) (do 0))
               (if-stmt (is-list-with-head a sib "returns")
                 (do
                   (let ret-type Int32 (second-child a sib))
                   (array-str-append fn-sig-names fn-name)
+                  (ccall "puts" (returns Int32) (args (String (string-concat "[collect] fn: " fn-name))))
                   (array-i32-append fn-sig-ret-types ret-type)
                 )
                 (do 0)
@@ -96,11 +88,49 @@
             )
             (do 0)
           )
+          ;; Top-level entry
           (if-stmt (is-list-with-head a child "entry")
             (do
-              ;; entry always returns ExitCode -> Int32
               (array-str-append fn-sig-names "weave_main")
-              (array-i32-append fn-sig-ret-types (- 0 1)) ;; -1 means Int32
+              (array-i32-append fn-sig-ret-types (- 0 1))
+            )
+            (do 0)
+          )
+          ;; Module: scan nested children for fn/entry
+          (if-stmt (is-list-with-head a child "module")
+            (do
+              (let mchild Int32 (arena-first-child a child))
+              (while (!= mchild (- 0 1))
+                (do
+                  (if-stmt (is-list-with-head a mchild "fn")
+                    (do
+                      (let name-node Int32 (second-child a mchild))
+                      (let fn-name String (arena-value a name-node))
+                      (let sib Int32 (arena-next-sibling a name-node))
+                      (if-stmt (is-list-with-head a sib "doc") (set sib (arena-next-sibling a sib)) (do 0))
+                      (if-stmt (is-list-with-head a sib "params") (set sib (arena-next-sibling a sib)) (do 0))
+                      (if-stmt (is-list-with-head a sib "returns")
+                        (do
+                          (let ret-type Int32 (second-child a sib))
+                          (array-str-append fn-sig-names fn-name)
+                          (ccall "puts" (returns Int32) (args (String (string-concat "[collect] fn: " fn-name))))
+                          (array-i32-append fn-sig-ret-types ret-type)
+                        )
+                        (do 0)
+                      )
+                    )
+                    (do 0)
+                  )
+                  (if-stmt (is-list-with-head a mchild "entry")
+                    (do
+                      (array-str-append fn-sig-names "weave_main")
+                      (array-i32-append fn-sig-ret-types (- 0 1))
+                    )
+                    (do 0)
+                  )
+                  (set mchild (arena-next-sibling a mchild))
+                )
+              )
             )
             (do 0)
           )
@@ -149,7 +179,12 @@
           (set i (+ i 1))
         )
       )
-      ;; Not found - default to i32
+      ;; Not found - fallback for known runtime helpers, else default to i32
+      (if-stmt (string-eq fn-name "string-concat") (return "i8*") (do 0))
+      (if-stmt (string-eq fn-name "int-to-string") (return "i8*") (do 0))
+      (if-stmt (string-eq fn-name "string-length") (return "i32") (do 0))
+      (if-stmt (string-eq fn-name "string-eq") (return "i32") (do 0))
+      (if-stmt (string-eq fn-name "buffer-to-string") (return "i8*") (do 0))
       (return "i32")
     ))
     (tests
