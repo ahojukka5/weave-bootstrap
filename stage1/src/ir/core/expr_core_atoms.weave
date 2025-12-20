@@ -16,6 +16,30 @@
         (return temp)
       ) ;; do
     ) ;; body
+    (tests
+      (test compile-int-lit-basic
+        (doc "Generates add instruction for integer literal")
+        (tags unit ir literals)
+        (body
+          (let buf Buffer (buffer-new))
+          (let result Int32 (compile-int-lit buf "42" 5))
+          (expect-eq result 5)
+          (let out String (buffer-to-string buf))
+          (expect-eq (string-starts-with out "  %t5 = add i32 0, 42") 1)
+        )
+      )
+      (test compile-int-lit-negative
+        (doc "Handles negative integers")
+        (tags unit ir literals)
+        (body
+          (let buf Buffer (buffer-new))
+          (let result Int32 (compile-int-lit buf "-10" 3))
+          (expect-eq result 3)
+          (let out String (buffer-to-string buf))
+          (expect-eq (string-starts-with out "  %t3 = add i32 0, -10") 1)
+        )
+      )
+    )
   ) ;; fn compile-int-lit
 
   (fn compile-var
@@ -47,4 +71,32 @@
         (return temp)
       ) ;; do
     ) ;; body
+    (tests
+      (test compile-var-basic
+        (doc "Generates load for variable")
+        (tags unit ir vars)
+        (body
+          (let a (ptr Arena) (arena-create 256))
+          (let ty-node Int32 (parse-string a "Int32"))
+          (let buf Buffer (buffer-new))
+          (let result Int32 (compile-var a buf "myvar" ty-node 7))
+          (expect-eq result 7)
+          (let out String (buffer-to-string buf))
+          (expect-eq (string-starts-with out "  %t7 = load i32") 1)
+          (expect-eq (> (string-length out) 20) 1)
+        )
+      )
+      (test compile-var-empty-name
+        (doc "Empty name defaults to tmp")
+        (tags unit ir vars)
+        (body
+          (let a (ptr Arena) (arena-create 256))
+          (let ty-node Int32 (parse-string a "Int32"))
+          (let buf Buffer (buffer-new))
+          (compile-var a buf "" ty-node 2)
+          (let out String (buffer-to-string buf))
+          (expect-eq (string-starts-with out "  %t2 = load") 1)
+        )
+      )
+    )
   ) ;; fn compile-var
