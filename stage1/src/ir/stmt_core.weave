@@ -1,6 +1,31 @@
   ;; Helper: compile a branch that might be an expression needing auto-return
   (fn compile-branch-or-expr
     (doc "Compile a branch, auto-returning if it's an expression. Returns 1 if a return was emitted.")
+    (tests
+      (test branch-stmt-form
+        (doc "Test that statement forms do not auto-return")
+        (tags unit)
+        (body
+          (let a (ptr Arena) (arena-create 4096))
+          (let node Int32 (parse-string a "(return 42)"))
+          (let out Buffer (buffer-create 64))
+          (let temp-var Int32 0)
+          (let label-var Int32 0)
+          (let result Int32 (compile-branch-or-expr a node 0 (array-string-create) (array-string-create) (array-int32-create) (array-string-create) (array-string-create) (array-string-create) (buffer-create 0) (addr-of Int32 temp-var) out (addr-of Int32 temp-var) (addr-of Int32 label-var) (array-string-create) (array-int32-create)))
+          (expect-eq result 1)
+        ))
+      (test branch-expr-atom
+        (doc "Test that atomic expressions do not auto-return in stmt context")
+        (tags unit)
+        (body
+          (let a (ptr Arena) (arena-create 4096))
+          (let node Int32 (parse-string a "42"))
+          (let out Buffer (buffer-create 64))
+          (let temp-var Int32 0)
+          (let label-var Int32 0)
+          (let result Int32 (compile-branch-or-expr a node 0 (array-string-create) (array-string-create) (array-int32-create) (array-string-create) (array-string-create) (array-string-create) (buffer-create 0) (addr-of Int32 temp-var) out (addr-of Int32 temp-var) (addr-of Int32 label-var) (array-string-create) (array-int32-create)))
+          (expect-eq result 0)
+        )))
     (params
       (a (ptr Arena))
       (node Int32)
@@ -53,6 +78,46 @@
 
   (fn compile-stmt
     (doc "Lower a statement list node; returns 1 if it emitted a return.")
+    (tests
+      (test stmt-return-literal
+        (doc "Test basic return statement")
+        (tags unit)
+        (body
+          (let a (ptr Arena) (arena-create 4096))
+          (let node Int32 (parse-string a "(return 42)"))
+          (let out Buffer (buffer-create 256))
+          (let temp-var Int32 0)
+          (let label-var Int32 0)
+          (let type-node Int32 (parse-string a "Int32"))
+          (let result Int32 (compile-stmt a node type-node (array-string-create) (array-string-create) (array-int32-create) (array-string-create) (array-string-create) (array-string-create) (buffer-create 0) (addr-of Int32 temp-var) out (addr-of Int32 temp-var) (addr-of Int32 label-var) (array-string-create) (array-int32-create)))
+          (expect-eq result 1)
+        ))
+      (test stmt-do-sequence
+        (doc "Test do block with multiple statements")
+        (tags unit)
+        (body
+          (let a (ptr Arena) (arena-create 4096))
+          (let node Int32 (parse-string a "(do)"))
+          (let out Buffer (buffer-create 256))
+          (let temp-var Int32 0)
+          (let label-var Int32 0)
+          (let type-node Int32 (parse-string a "Int32"))
+          (let result Int32 (compile-stmt a node type-node (array-string-create) (array-string-create) (array-int32-create) (array-string-create) (array-string-create) (array-string-create) (buffer-create 0) (addr-of Int32 temp-var) out (addr-of Int32 temp-var) (addr-of Int32 label-var) (array-string-create) (array-int32-create)))
+          (expect-eq result 0)
+        ))
+      (test stmt-doc-ignored
+        (doc "Test that doc forms are ignored in codegen")
+        (tags unit)
+        (body
+          (let a (ptr Arena) (arena-create 4096))
+          (let node Int32 (parse-string a "(doc \"test\")"))
+          (let out Buffer (buffer-create 256))
+          (let temp-var Int32 0)
+          (let label-var Int32 0)
+          (let type-node Int32 (parse-string a "Int32"))
+          (let result Int32 (compile-stmt a node type-node (array-string-create) (array-string-create) (array-int32-create) (array-string-create) (array-string-create) (array-string-create) (buffer-create 0) (addr-of Int32 temp-var) out (addr-of Int32 temp-var) (addr-of Int32 label-var) (array-string-create) (array-int32-create)))
+          (expect-eq result 0)
+        )))
     (params
       (a (ptr Arena))
       (node Int32)

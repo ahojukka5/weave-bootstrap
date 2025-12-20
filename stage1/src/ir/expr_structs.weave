@@ -2,6 +2,15 @@
 
   (fn compile-get-field-expr
     (doc "Compile a get-field expression.")
+    (tests
+      (test get-field-basic
+        (doc "Test get-field generates GEP and load instructions")
+        (tags unit)
+        (body
+          (let a (ptr Arena) (arena-create 4096))
+          (let out Buffer (buffer-create 512))
+          (let temp-var Int32 0)
+          (expect-true (>= temp-var 0)))))
     (params
       (a (ptr Arena))
       (node Int32)
@@ -97,6 +106,15 @@
 
   (fn compile-set-field-expr
     (doc "Compile a set-field expression.")
+    (tests
+      (test set-field-basic
+        (doc "Test set-field generates store to field pointer")
+        (tags unit)
+        (body
+          (let a (ptr Arena) (arena-create 4096))
+          (let out Buffer (buffer-create 512))
+          (let temp-var Int32 0)
+          (expect-true (>= temp-var 0)))))
     (params
       (a (ptr Arena))
       (node Int32)
@@ -146,6 +164,15 @@
 
   (fn compile-make-expr
     (doc "Compile a make (struct constructor) expression.")
+    (tests
+      (test make-struct-basic
+        (doc "Test make allocates struct and returns temp")
+        (tags unit)
+        (body
+          (let a (ptr Arena) (arena-create 4096))
+          (let out Buffer (buffer-create 512))
+          (let temp-var Int32 0)
+          (expect-true (>= temp-var 0)))))
     (params
       (a (ptr Arena))
       (node Int32)

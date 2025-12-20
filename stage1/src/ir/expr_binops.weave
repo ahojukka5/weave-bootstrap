@@ -2,6 +2,27 @@
 
   (fn compile-binary-ops
     (doc "Check if head-val is a binary operator.")
+    (tests
+      (test arith-plus
+        (doc "Test that + is recognized as binary operator")
+        (tags unit)
+        (body (expect-eq (compile-binary-ops "+") 1)))
+      (test arith-mul
+        (doc "Test that * is recognized as binary operator")
+        (tags unit)
+        (body (expect-eq (compile-binary-ops "*") 1)))
+      (test cmp-eq
+        (doc "Test that == is recognized as binary operator")
+        (tags unit)
+        (body (expect-eq (compile-binary-ops "==") 1)))
+      (test logical-and
+        (doc "Test that && is recognized as binary operator")
+        (tags unit)
+        (body (expect-eq (compile-binary-ops "&&") 1)))
+      (test non-binop
+        (doc "Test that non-operators return 0")
+        (tags unit)
+        (body (expect-eq (compile-binary-ops "foo") 0))))
     (params (head-val String))
     (returns Int32)
     (body
@@ -48,6 +69,27 @@
 
   (fn is-comparison-op
     (doc "Check if head-val is a comparison or logical operator.")
+    (tests
+      (test cmp-eq-check
+        (doc "Test that == is a comparison operator")
+        (tags unit)
+        (body (expect-eq (is-comparison-op "==") 1)))
+      (test cmp-ne-check
+        (doc "Test that != is a comparison operator")
+        (tags unit)
+        (body (expect-eq (is-comparison-op "!=") 1)))
+      (test logical-or-check
+        (doc "Test that || is a comparison operator")
+        (tags unit)
+        (body (expect-eq (is-comparison-op "||") 1)))
+      (test arith-not-cmp
+        (doc "Test that + is not a comparison operator")
+        (tags unit)
+        (body (expect-eq (is-comparison-op "+") 0)))
+      (test non-op-not-cmp
+        (doc "Test that non-operators return 0")
+        (tags unit)
+        (body (expect-eq (is-comparison-op "foo") 0))))
     (params (head-val String))
     (returns Int32)
     (body
@@ -82,6 +124,27 @@
 
   (fn compile-binary-expr
     (doc "Compile a binary expression.")
+    (tests
+      (test binexpr-arith
+        (doc "Test arithmetic binary expression generates temp")
+        (tags unit)
+        (body
+          (let a (ptr Arena) (arena-create 4096))
+          (let node Int32 (parse-string a "(+ 1 2)"))
+          (let out Buffer (buffer-create 256))
+          (let temp-var Int32 0)
+          (let result Int32 (compile-binary-expr a node "+" (array-string-create) (array-string-create) (array-int32-create) (array-string-create) (array-string-create) (array-string-create) (buffer-create 0) (addr-of Int32 temp-var) out (addr-of Int32 temp-var) (array-string-create) (array-int32-create)))
+          (expect-true (> result 0))))
+      (test binexpr-cmp
+        (doc "Test comparison binary expression generates temp")
+        (tags unit)
+        (body
+          (let a (ptr Arena) (arena-create 4096))
+          (let node Int32 (parse-string a "(== 1 2)"))
+          (let out Buffer (buffer-create 256))
+          (let temp-var Int32 0)
+          (let result Int32 (compile-binary-expr a node "==" (array-string-create) (array-string-create) (array-int32-create) (array-string-create) (array-string-create) (array-string-create) (buffer-create 0) (addr-of Int32 temp-var) out (addr-of Int32 temp-var) (array-string-create) (array-int32-create)))
+          (expect-true (> result 0)))))
     (params
       (a (ptr Arena))
       (node Int32)
