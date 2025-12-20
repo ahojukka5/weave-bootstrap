@@ -68,17 +68,61 @@
         (let fn-sig-names ArrayString (array-str-new))
         (let fn-sig-ret-types ArrayInt32 (array-i32-new))
         (collect-fn-sigs a root fn-sig-names fn-sig-ret-types)
+        (let declared ArrayString (array-str-new))
+        ;; Skip emitting declarations for string helpers; wrappers below cover missing cases
+        ;; Provide simple IR definitions for common string helpers when not compiled from modules
+        (if-stmt (== (array-str-contains fn-sig-names "string-length") 0)
+          (do
+            (emit-runtime-decl "strlen" "declare i32 @strlen(i8*)" decls declared)
+            (buffer-append-string decls "define i32 @string-length(i8* %s) {\n")
+            (buffer-append-string decls "  %len = call i32 @strlen(i8* %s)\n")
+            (buffer-append-string decls "  ret i32 %len\n}\n")
+          )
+          (do 0)
+        )
+        (if-stmt (== (array-str-contains fn-sig-names "string-concat") 0)
+          (do
+            (emit-runtime-decl "strlen" "declare i32 @strlen(i8*)" decls declared)
+            (emit-runtime-decl "malloc" "declare i8* @malloc(i32)" decls declared)
+            (emit-runtime-decl "strcpy" "declare i8* @strcpy(i8*, i8*)" decls declared)
+            (emit-runtime-decl "strcat" "declare i8* @strcat(i8*, i8*)" decls declared)
+            (buffer-append-string decls "define i8* @string-concat(i8* %a, i8* %b) {\n")
+            (buffer-append-string decls "entry:\n")
+            (buffer-append-string decls "  %la = call i32 @strlen(i8* %a)\n")
+            (buffer-append-string decls "  %lb = call i32 @strlen(i8* %b)\n")
+            (buffer-append-string decls "  %sum = add i32 %la, %lb\n")
+            (buffer-append-string decls "  %sum1 = add i32 %sum, 1\n")
+            (buffer-append-string decls "  %out = call i8* @malloc(i32 %sum1)\n")
+            (buffer-append-string decls "  %t0 = call i8* @strcpy(i8* %out, i8* %a)\n")
+            (buffer-append-string decls "  %t1 = call i8* @strcat(i8* %out, i8* %b)\n")
+            (buffer-append-string decls "  ret i8* %out\n}\n")
+          )
+          (do 0)
+        )
+        (if-stmt (== (array-str-contains fn-sig-names "string-eq") 0)
+          (do
+            (emit-runtime-decl "strcmp" "declare i32 @strcmp(i8*, i8*)" decls declared)
+            (buffer-append-string decls "define i32 @string-eq(i8* %a, i8* %b) {\n")
+            (buffer-append-string decls "  %cmp = call i32 @strcmp(i8* %a, i8* %b)\n")
+            (buffer-append-string decls "  %eq = icmp eq i32 %cmp, 0\n")
+            (buffer-append-string decls "  %z = zext i1 %eq to i32\n")
+            (buffer-append-string decls "  ret i32 %z\n}\n")
+          )
+          (do 0)
+        )
 
         (collect-structs a root struct-names struct-fields)
         (emit-struct-defs decls struct-names struct-fields)
-        (let declared ArrayString (array-str-new))
         ;; Seed runtime decls we rely on
         (emit-runtime-decl "weave_get_cli_string" "declare i8* @weave_get_cli_string(i8*)" decls declared)
         (emit-runtime-decl "weave_read_file" "declare i8* @weave_read_file(i8*)" decls declared)
         (emit-runtime-decl "weave_write_file" "declare i32 @weave_write_file(i8*, i8*)" decls declared)
+        ;; Decls for common prelude helpers used in tests are emitted only when wrappers are generated below
+
         (let str-counter Int32 0)
 
         ;; Compile all fn and entry definitions
+        ;; First collect signatures so we can decide whether to emit built-in wrappers
         (compile-all-fns a root declared struct-names struct-fields decls (addr str-counter) fn-out fn-sig-names fn-sig-ret-types)
 
         (buffer-append-string out (buffer-to-string decls))
