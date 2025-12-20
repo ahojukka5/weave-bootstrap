@@ -4,12 +4,48 @@
   (body
     (return (|| (== ch 32) (|| (== ch 9) (|| (== ch 10) (== ch 13)))))
   )
+  (tests
+    (test is-whitespace-space
+      (doc "space (32) is whitespace")
+      (tags unit tokenizer)
+      (body
+        (let result Int32 (is-whitespace 32))
+        (expect-eq result 1)
+      )
+    )
+    (test is-whitespace-letter
+      (doc "letter 'a' (97) is not whitespace")
+      (tags unit tokenizer)
+      (body
+        (let result Int32 (is-whitespace 97))
+        (expect-eq result 0)
+      )
+    )
+  )
 )
 
 (fn is-digit
   (doc "Return 1 if ch is an ASCII digit.")
   (params (ch Int32)) (returns Int32)
   (body (return (&& (>= ch 48) (<= ch 57))))
+  (tests
+    (test is-digit-zero
+      (doc "'0' (48) is a digit")
+      (tags unit tokenizer)
+      (body
+        (let result Int32 (is-digit 48))
+        (expect-eq result 1)
+      )
+    )
+    (test is-digit-letter
+      (doc "'a' (97) is not a digit")
+      (tags unit tokenizer)
+      (body
+        (let result Int32 (is-digit 97))
+        (expect-eq result 0)
+      )
+    )
+  )
 )
 
 (fn is-symbol-start
@@ -44,10 +80,54 @@
       )
     )
   )
+  (tests
+    (test is-symbol-start-letter
+      (doc "'a' (97) can start a symbol")
+      (tags unit tokenizer)
+      (body
+        (let result Int32 (is-symbol-start 97))
+        (expect-eq result 1)
+      )
+    )
+    (test is-symbol-start-underscore
+      (doc "'_' (95) can start a symbol")
+      (tags unit tokenizer)
+      (body
+        (let result Int32 (is-symbol-start 95))
+        (expect-eq result 1)
+      )
+    )
+    (test is-symbol-start-digit
+      (doc "'1' (49) cannot start a symbol")
+      (tags unit tokenizer)
+      (body
+        (let result Int32 (is-symbol-start 49))
+        (expect-eq result 0)
+      )
+    )
+  )
 )
 
 (fn is-symbol-char
   (doc "Return 1 if ch can appear after the first char of a symbol.")
   (params (ch Int32)) (returns Int32)
   (body (return (|| (is-digit ch) (is-symbol-start ch))))
+  (tests
+    (test is-symbol-char-digit
+      (doc "'1' (49) is allowed after first char")
+      (tags unit tokenizer)
+      (body
+        (let result Int32 (is-symbol-char 49))
+        (expect-eq result 1)
+      )
+    )
+    (test is-symbol-char-space
+      (doc "space (32) is not allowed")
+      (tags unit tokenizer)
+      (body
+        (let result Int32 (is-symbol-char 32))
+        (expect-eq result 0)
+      )
+    )
+  )
 )
