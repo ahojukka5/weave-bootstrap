@@ -24,6 +24,35 @@
     ) ;; while
     (return (buffer-to-string b))
   )) ;; body
+  (tests
+    (test sanitize-name-empty
+      (doc "empty string should become v0")
+      (tags unit util-strings)
+      (body
+        (let result String (sanitize-name ""))
+        (let eq Int32 (string-eq result "v0"))
+        (expect-eq eq 1)
+      )
+    )
+    (test sanitize-name-hyphen
+      (doc "hyphens should become underscores")
+      (tags unit util-strings)
+      (body
+        (let result String (sanitize-name "foo-bar"))
+        (let eq Int32 (string-eq result "foo_bar"))
+        (expect-eq eq 1)
+      )
+    )
+    (test sanitize-name-no-change
+      (doc "names without hyphens stay unchanged")
+      (tags unit util-strings)
+      (body
+        (let result String (sanitize-name "foobar"))
+        (let eq Int32 (string-eq result "foobar"))
+        (expect-eq eq 1)
+      )
+    )
+  )
 ) ;; fn sanitize-name
 
 (fn array-str-contains
@@ -45,6 +74,29 @@
     ) ;; while
     (return 0)
   )) ;; body
+  (tests
+    (test array-str-contains-found
+      (doc "should find existing element")
+      (tags unit util-strings)
+      (body
+        (let arr ArrayString (array-str-new))
+        (array-str-append arr "foo")
+        (array-str-append arr "bar")
+        (let result Int32 (array-str-contains arr "bar"))
+        (expect-eq result 1)
+      )
+    )
+    (test array-str-contains-not-found
+      (doc "should return 0 for non-existing element")
+      (tags unit util-strings)
+      (body
+        (let arr ArrayString (array-str-new))
+        (array-str-append arr "foo")
+        (let result Int32 (array-str-contains arr "bar"))
+        (expect-eq result 0)
+      )
+    )
+  )
 ) ;; fn array-str-contains
 
 (fn string-starts-with
@@ -64,6 +116,32 @@
       ) ;; do
     ) ;; if-stmt
   )) ;; body
+  (tests
+    (test string-starts-with-true
+      (doc "should return 1 when string starts with prefix")
+      (tags unit util-strings)
+      (body
+        (let result Int32 (string-starts-with "hello world" "hello"))
+        (expect-eq result 1)
+      )
+    )
+    (test string-starts-with-false
+      (doc "should return 0 when string does not start with prefix")
+      (tags unit util-strings)
+      (body
+        (let result Int32 (string-starts-with "hello world" "world"))
+        (expect-eq result 0)
+      )
+    )
+    (test string-starts-with-too-short
+      (doc "should return 0 when string shorter than prefix")
+      (tags unit util-strings)
+      (body
+        (let result Int32 (string-starts-with "hi" "hello"))
+        (expect-eq result 0)
+      )
+    )
+  )
 ) ;; fn string-starts-with
 
 (fn string-ends-with
@@ -83,6 +161,24 @@
       ) ;; do
     ) ;; if-stmt
   )) ;; body
+  (tests
+    (test string-ends-with-true
+      (doc "should return 1 when string ends with suffix")
+      (tags unit util-strings)
+      (body
+        (let result Int32 (string-ends-with "hello.weave" ".weave"))
+        (expect-eq result 1)
+      )
+    )
+    (test string-ends-with-false
+      (doc "should return 0 when string does not end with suffix")
+      (tags unit util-strings)
+      (body
+        (let result Int32 (string-ends-with "hello.txt" ".weave"))
+        (expect-eq result 0)
+      )
+    )
+  )
 ) ;; fn string-ends-with
 
 (fn is-string-literal
@@ -92,6 +188,24 @@
   ) ;; params
   (returns Int32)
   (body (return (string-starts-with s "strlit:")))
+  (tests
+    (test is-string-literal-true
+      (doc "should return 1 for strlit: prefix")
+      (tags unit util-strings)
+      (body
+        (let result Int32 (is-string-literal "strlit:hello"))
+        (expect-eq result 1)
+      )
+    )
+    (test is-string-literal-false
+      (doc "should return 0 for non-literal")
+      (tags unit util-strings)
+      (body
+        (let result Int32 (is-string-literal "hello"))
+        (expect-eq result 0)
+      )
+    )
+  )
 ) ;; fn is-string-literal
 
 (fn string-literal-value
@@ -103,6 +217,17 @@
   (body
     (return (string-slice s 7 (- (string-length s) 7)))
   ) ;; body
+  (tests
+    (test string-literal-value-simple
+      (doc "should strip strlit: prefix")
+      (tags unit util-strings)
+      (body
+        (let result String (string-literal-value "strlit:hello"))
+        (let eq Int32 (string-eq result "hello"))
+        (expect-eq eq 1)
+      )
+    )
+  )
 ) ;; fn string-literal-value
 
 (fn is-number-string
@@ -141,6 +266,40 @@
     )
     (return ok)
   )) ;; body
+  (tests
+    (test is-number-string-positive
+      (doc "positive number should return 1")
+      (tags unit util-strings)
+      (body
+        (let result Int32 (is-number-string "123"))
+        (expect-eq result 1)
+      )
+    )
+    (test is-number-string-negative
+      (doc "negative number should return 1")
+      (tags unit util-strings)
+      (body
+        (let result Int32 (is-number-string "-42"))
+        (expect-eq result 1)
+      )
+    )
+    (test is-number-string-not-number
+      (doc "non-number should return 0")
+      (tags unit util-strings)
+      (body
+        (let result Int32 (is-number-string "abc"))
+        (expect-eq result 0)
+      )
+    )
+    (test is-number-string-empty
+      (doc "empty string should return 0")
+      (tags unit util-strings)
+      (body
+        (let result Int32 (is-number-string ""))
+        (expect-eq result 0)
+      )
+    )
+  )
 ) ;; fn is-number-string
 
 (fn escape-llvm-string
@@ -205,4 +364,24 @@
     (store Int32 out-len byte-count)
     (return (buffer-to-string buf))
   ) ;; body
+  (tests
+    (test escape-llvm-string-simple
+      (doc "simple string should not change much")
+      (tags unit util-strings)
+      (body
+        (let len Int32 0)
+        (let result String (escape-llvm-string "abc" (addr len)))
+        (expect-eq len 3)
+      )
+    )
+    (test escape-llvm-string-newline
+      (doc "newline should be escaped")
+      (tags unit util-strings)
+      (body
+        (let len Int32 0)
+        (let result String (escape-llvm-string "a\nb" (addr len)))
+        (expect-eq len 3)
+      )
+    )
+  )
 ) ;; fn escape-llvm-string
