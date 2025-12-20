@@ -23,6 +23,30 @@
       ) ;; while
       (return 0)
     )) ;; body
+    (tests
+      (test dump-indent-zero
+        (doc "indent by 0 should add nothing")
+        (tags unit debug)
+        (body
+          (let b Buffer (buffer-new))
+          (dump-indent b 0)
+          (let s String (buffer-to-string b))
+          (let len Int32 (string-length s))
+          (expect-eq len 0)
+        )
+      )
+      (test dump-indent-two
+        (doc "indent by 2 should add 4 spaces")
+        (tags unit debug)
+        (body
+          (let b Buffer (buffer-new))
+          (dump-indent b 2)
+          (let s String (buffer-to-string b))
+          (let len Int32 (string-length s))
+          (expect-eq len 4)
+        )
+      )
+    )
   ) ;; fn dump-indent
 
   (fn dump-node
@@ -61,6 +85,21 @@
       ) ;; if-stmt
       (return 0)
     )) ;; body
+    (tests
+      (test dump-node-atom
+        (doc "dumping atom should produce output")
+        (tags unit debug)
+        (body
+          (let a Arena (arena-new))
+          (let id Int32 (arena-add-node (addr a) (node-kind-atom) "test"))
+          (let b Buffer (buffer-new))
+          (dump-node (addr a) id b 0)
+          (let s String (buffer-to-string b))
+          (let len Int32 (string-length s))
+          (expect-true (> len 0))
+        )
+      )
+    )
   ) ;; fn dump-node
 
   (fn dump-tree
@@ -75,6 +114,19 @@
       (dump-node a root b 0)
       (return (buffer-to-string b))
     )) ;; body
+    (tests
+      (test dump-tree-single-atom
+        (doc "dumping single atom tree should produce string")
+        (tags unit debug)
+        (body
+          (let a Arena (arena-new))
+          (let id Int32 (arena-add-node (addr a) (node-kind-atom) "hello"))
+          (let s String (dump-tree (addr a) id))
+          (let len Int32 (string-length s))
+          (expect-true (> len 0))
+        )
+      )
+    )
   ) ;; fn dump-tree
 
   ;; Dump a linked sibling chain starting at `start` using next-sibling.
@@ -103,5 +155,31 @@
       ) ;; while
       (return (buffer-to-string b))
     )) ;; body
+    (tests
+      (test dump-sibling-chain-single
+        (doc "dumping single node chain should produce id:value")
+        (tags unit debug)
+        (body
+          (let a Arena (arena-new))
+          (let id Int32 (arena-add-node (addr a) (node-kind-atom) "test"))
+          (let s String (dump-sibling-chain (addr a) id))
+          (let len Int32 (string-length s))
+          (expect-true (> len 0))
+        )
+      )
+      (test dump-sibling-chain-two
+        (doc "dumping two-node chain should have arrow")
+        (tags unit debug)
+        (body
+          (let a Arena (arena-new))
+          (let first Int32 (arena-add-node (addr a) (node-kind-atom) "a"))
+          (let second Int32 (arena-add-node (addr a) (node-kind-atom) "b"))
+          (arena-set-next-sibling (addr a) first second)
+          (let s String (dump-sibling-chain (addr a) first))
+          (let len Int32 (string-length s))
+          (expect-true (> len 5))
+        )
+      )
+    )
   ) ;; fn dump-sibling-chain
 ) ;; module
