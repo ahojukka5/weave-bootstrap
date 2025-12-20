@@ -2,11 +2,15 @@
   (name "stage1-ir-util")
   (doc "Utility helpers for IR generation (env lookup, list helpers, struct registry).")
 
-  (include "../prelude.weave")
+  (include "../string.weave")
+  (include "../buffers.weave")
+  (include "../arrays.weave")
   (include "../arena.weave")
 
-  (include "./util_lists.weave")
+  (include "./util_lists_core.weave")
+  (include "./util_lists_tests.weave")
   (include "./util_env.weave")
   (include "./util_structs.weave")
-  (include "./util_strings.weave")
+  (include "./util_strings_core.weave")
+  (include "./util_strings_tests.weave")
 ) ;; module
