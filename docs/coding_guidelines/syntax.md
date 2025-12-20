@@ -91,6 +91,11 @@ Functions must follow this exact order:
 
 **Important:** The `(tests ...)` section MUST come AFTER the `(body ...)` section, not before.
 
+### Section Spacing
+
+- Always insert a blank line between the closing of the `body` section and the opening of the `tests` section.
+- This visual separation improves readability and helps avoid accidental multi-parenthesis runs.
+
 ## Indentation
 
 - Use 2 spaces per indentation level
