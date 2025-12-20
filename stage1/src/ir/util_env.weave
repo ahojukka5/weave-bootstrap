@@ -22,6 +22,28 @@
       (return orig)
     ) ;; if-stmt
   )) ;; body
+  (tests
+    (test env-find-safe-hit
+      (doc "returns safe name for matching binding")
+      (tags unit ir)
+      (body
+        (let names ArrayString (array-str-new))
+        (let safe ArrayString (array-str-new))
+        (array-str-append names "x")
+        (array-str-append safe "x_safe")
+        (expect-eq (string-eq (env-find-safe names safe "x") "x_safe") 1)
+      )
+    )
+    (test env-find-safe-miss
+      (doc "returns orig if no binding")
+      (tags unit ir)
+      (body
+        (let names ArrayString (array-str-new))
+        (let safe ArrayString (array-str-new))
+        (expect-eq (string-eq (env-find-safe names safe "y") "y") 1)
+      )
+    )
+  )
 ) ;; fn env-find-safe
 
 (fn env-add
@@ -78,6 +100,22 @@
       (return 0)
     ) ;; do
   ) ;; body
+  (tests
+    (test env-add-basic
+      (doc "appends binding to env arrays")
+      (tags unit ir)
+      (body
+        (let names ArrayString (array-str-new))
+        (let safe ArrayString (array-str-new))
+        (let types ArrayInt32 (array-i32-new))
+        (env-add names safe types "x" "x_safe" 0)
+        (expect-eq (array-str-len names) 1)
+        (expect-eq (string-eq (array-str-get names 0) "x") 1)
+        (expect-eq (string-eq (array-str-get safe 0) "x_safe") 1)
+        (expect-eq (array-i32-get types 0) 0)
+      )
+    )
+  )
 ) ;; fn env-add
 
 (fn env-find-type
@@ -100,4 +138,26 @@
     ) ;; while
     (return (- 0 1))
   )) ;; body
+  (tests
+    (test env-find-type-hit
+      (doc "returns type for matching binding")
+      (tags unit ir)
+      (body
+        (let names ArrayString (array-str-new))
+        (let types ArrayInt32 (array-i32-new))
+        (array-str-append names "x")
+        (array-i32-append types 42)
+        (expect-eq (env-find-type names types "x") 42)
+      )
+    )
+    (test env-find-type-miss
+      (doc "returns -1 if no binding")
+      (tags unit ir)
+      (body
+        (let names ArrayString (array-str-new))
+        (let types ArrayInt32 (array-i32-new))
+        (expect-eq (env-find-type names types "y") (- 0 1))
+      )
+    )
+  )
 ) ;; fn env-find-type
