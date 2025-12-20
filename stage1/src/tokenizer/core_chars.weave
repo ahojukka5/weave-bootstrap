@@ -1,0 +1,53 @@
+(fn is-whitespace
+  (doc "Return 1 if ch is ASCII whitespace.")
+  (params (ch Int32)) (returns Int32)
+  (body
+    (return (|| (== ch 32) (|| (== ch 9) (|| (== ch 10) (== ch 13)))))
+  )
+)
+
+(fn is-digit
+  (doc "Return 1 if ch is an ASCII digit.")
+  (params (ch Int32)) (returns Int32)
+  (body (return (&& (>= ch 48) (<= ch 57))))
+)
+
+(fn is-symbol-start
+  (doc "Return 1 if ch can start a symbol.")
+  (params (ch Int32)) (returns Int32)
+  (body
+    (return
+      (|| (&& (>= ch 65) (<= ch 90))
+          (|| (&& (>= ch 97) (<= ch 122))
+              (|| (== ch 95)
+                  (|| (== ch 46)
+                      (|| (== ch 43)
+                          (|| (== ch 45)
+                              (|| (== ch 42)
+                                  (|| (== ch 47)
+                                      (|| (== ch 60)
+                                          (|| (== ch 62)
+                                              (|| (== ch 61)
+                                                  (|| (== ch 33)
+                                                      (|| (== ch 38) (== ch 124))
+                                                  )
+                                              )
+                                          )
+                                      )
+                                  )
+                              )
+                          )
+                      )
+                  )
+              )
+          )
+      )
+    )
+  )
+)
+
+(fn is-symbol-char
+  (doc "Return 1 if ch can appear after the first char of a symbol.")
+  (params (ch Int32)) (returns Int32)
+  (body (return (|| (is-digit ch) (is-symbol-start ch))))
+)

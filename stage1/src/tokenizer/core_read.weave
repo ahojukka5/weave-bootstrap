@@ -1,0 +1,76 @@
+(fn skip-ws-and-comments
+  (doc "Skip whitespace and ';' comments starting at idx; return next index.")
+  (params (src String) (idx Int32)) (returns Int32)
+  (body
+    (let len Int32 (string-length src))
+    (let i Int32 idx)
+    (do
+      (while (< i len)
+        (do
+          (let ch Int32 (string-char-at src i))
+          (if-stmt (is-whitespace ch)
+            (set i (+ i 1))
+            (if-stmt (== ch 59)
+              (do
+                (while (&& (< i len) (!= (string-char-at src i) 10)) (set i (+ i 1)))
+                (if-stmt (< i len) (set i (+ i 1)) (set i i))
+              )
+              (return i)
+            )
+          )
+        )
+      )
+      (return i)
+    )
+  )
+)
+
+(fn read-while
+  (doc "Read digits or symbol chars (mode 0/1) into out; return next index.")
+  (params (src String) (idx Int32) (out Buffer) (mode Int32)) (returns Int32)
+  (body
+    (let len Int32 (string-length src))
+    (let i Int32 idx)
+    (do
+      (buffer-clear out)
+      (while (< i len)
+        (do
+          (let ch Int32 (string-char-at src i))
+          (if-stmt (== mode 0)
+            (if-stmt (is-digit ch)
+              (do (buffer-append-byte out ch) (set i (+ i 1)))
+              (return i)
+            )
+            (if-stmt (is-symbol-char ch)
+              (do (buffer-append-byte out ch) (set i (+ i 1)))
+              (return i)
+            )
+          )
+        )
+      )
+      (return i)
+    )
+  )
+)
+
+(fn read-string
+  (doc "Read a quoted string starting at idx; writes contents into out.")
+  (params (src String) (idx Int32) (out Buffer)) (returns Int32)
+  (body
+    (let len Int32 (string-length src))
+    (let i Int32 (+ idx 1))
+    (do
+      (buffer-clear out)
+      (while (< i len)
+        (do
+          (let ch Int32 (string-char-at src i))
+          (if-stmt (== ch 34)
+            (return (+ i 1))
+            (do (buffer-append-byte out ch) (set i (+ i 1)))
+          )
+        )
+      )
+      (return i)
+    )
+  )
+)
