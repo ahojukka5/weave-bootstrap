@@ -5,30 +5,119 @@
   (fn c-strlen (doc "libc strlen")
     (params (s String)) (returns Int32)
     (body (return (ccall "strlen" (returns Int32) (args (String s)))))
+    (tests
+      (test c-strlen-empty
+        (doc "strlen of empty string should be 0")
+        (tags unit libc)
+        (body
+          (let result Int32 (c-strlen ""))
+          (expect-eq result 0)
+        )
+      )
+      (test c-strlen-hello
+        (doc "strlen of 'hello' should be 5")
+        (tags unit libc)
+        (body
+          (let result Int32 (c-strlen "hello"))
+          (expect-eq result 5)
+        )
+      )
+    )
   )
 
   (fn c-malloc (doc "libc malloc")
     (params (n Int32)) (returns String)
     (body (return (ccall "malloc" (returns String) (args (Int32 n)))))
+    (tests
+      (test c-malloc-nonzero
+        (doc "malloc should return non-null pointer for positive size")
+        (tags unit libc)
+        (body
+          (let result String (c-malloc 10))
+          (expect-true (!= result 0))
+        )
+      )
+    )
   )
 
   (fn c-strcpy (doc "libc strcpy")
     (params (dest String) (src String)) (returns String)
     (body (return (ccall "strcpy" (returns String) (args (String dest) (String src)))))
+    (tests
+      (test c-strcpy-simple
+        (doc "strcpy should copy string correctly")
+        (tags unit libc)
+        (body
+          (let buf String (c-malloc 10))
+          (c-strcpy buf "test")
+          (let len Int32 (c-strlen buf))
+          (expect-eq len 4)
+        )
+      )
+    )
   )
 
   (fn c-strcat (doc "libc strcat")
     (params (dest String) (src String)) (returns String)
     (body (return (ccall "strcat" (returns String) (args (String dest) (String src)))))
+    (tests
+      (test c-strcat-simple
+        (doc "strcat should append string correctly")
+        (tags unit libc)
+        (body
+          (let buf String (c-malloc 20))
+          (c-strcpy buf "hello")
+          (c-strcat buf "world")
+          (let len Int32 (c-strlen buf))
+          (expect-eq len 10)
+        )
+      )
+    )
   )
 
   (fn c-atoi (doc "libc atoi")
     (params (s String)) (returns Int32)
     (body (return (ccall "atoi" (returns Int32) (args (String s)))))
+    (tests
+      (test c-atoi-positive
+        (doc "atoi should parse positive number")
+        (tags unit libc)
+        (body
+          (let result Int32 (c-atoi "42"))
+          (expect-eq result 42)
+        )
+      )
+      (test c-atoi-negative
+        (doc "atoi should parse negative number")
+        (tags unit libc)
+        (body
+          (let result Int32 (c-atoi "-10"))
+          (expect-eq result (- 0 10))
+        )
+      )
+    )
   )
 
   (fn c-strcmp (doc "libc strcmp == 0 means equal")
     (params (a String) (b String)) (returns Int32)
     (body (return (ccall "strcmp" (returns Int32) (args (String a) (String b)))))
+    (tests
+      (test c-strcmp-equal
+        (doc "strcmp should return 0 for equal strings")
+        (tags unit libc)
+        (body
+          (let result Int32 (c-strcmp "test" "test"))
+          (expect-eq result 0)
+        )
+      )
+      (test c-strcmp-not-equal
+        (doc "strcmp should return non-zero for different strings")
+        (tags unit libc)
+        (body
+          (let result Int32 (c-strcmp "test" "best"))
+          (expect-true (!= result 0))
+        )
+      )
+    )
   )
 )
