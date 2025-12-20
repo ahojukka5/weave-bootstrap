@@ -1,5 +1,16 @@
 (fn arena-new (doc "Allocate a fresh arena with empty arrays.") (params ()) (returns Arena)
   (body (make Arena (kinds (array-i32-new)) (values (array-str-new)) (first-child (array-i32-new)) (next-sibling (array-i32-new))))
+  (tests
+    (test arena-new-initial-state
+      (doc "new arena has zero kinds")
+      (tags unit arena)
+      (body
+        (let a Arena (arena-new))
+        (let len Int32 (array-i32-len (get-field (addr a) kinds)))
+        (expect-eq len 0)
+      )
+    )
+  )
 )
 
 (fn arena-add-node (doc "Append a node with kind/value; returns its id.") (params (a (ptr Arena)) (kind NodeKind) (value String)) (returns Int32)
@@ -12,28 +23,131 @@
       (return id)
     )
   ))
+  (tests
+    (test arena-add-node-basic
+      (doc "first add returns id 0, stores kind and value")
+      (tags unit arena)
+      (body
+        (let a Arena (arena-new))
+        (let id Int32 (arena-add-node (addr a) (node-kind-atom) "hello"))
+        (expect-eq id 0)
+        (let kind Int32 (arena-kind (addr a) id))
+        (expect-eq kind (node-kind-atom))
+        (let val String (arena-value (addr a) id))
+        (let eq Int32 (string-eq val "hello"))
+        (expect-eq eq 1)
+      )
+    )
+    (test arena-add-node-second
+      (doc "second add returns id 1")
+      (tags unit arena)
+      (body
+        (let a Arena (arena-new))
+        (arena-add-node (addr a) (node-kind-atom) "first")
+        (let id2 Int32 (arena-add-node (addr a) (node-kind-atom) "second"))
+        (expect-eq id2 1)
+      )
+    )
+  )
 )
 
 (fn arena-kind (doc "Get the kind of node id.") (params (a (ptr Arena)) (id Int32)) (returns Int32)
   (body (array-i32-get (get-field a kinds) id))
+  (tests
+    (test arena-kind-basic
+      (doc "kind of added atom node is atom")
+      (tags unit arena)
+      (body
+        (let a Arena (arena-new))
+        (let id Int32 (arena-add-node (addr a) (node-kind-atom) "x"))
+        (let kind Int32 (arena-kind (addr a) id))
+        (expect-eq kind (node-kind-atom))
+      )
+    )
+  )
 )
 
 (fn arena-value (doc "Get the stored atom string for node id.") (params (a (ptr Arena)) (id Int32)) (returns String)
   (body (array-str-get (get-field a values) id))
+  (tests
+    (test arena-value-basic
+      (doc "value of added node equals input")
+      (tags unit arena)
+      (body
+        (let a Arena (arena-new))
+        (let id Int32 (arena-add-node (addr a) (node-kind-atom) "hello"))
+        (let val String (arena-value (addr a) id))
+        (let eq Int32 (string-eq val "hello"))
+        (expect-eq eq 1)
+      )
+    )
+  )
 )
 
 (fn arena-first-child (doc "Return the first child id for the list node.") (params (a (ptr Arena)) (id Int32)) (returns Int32)
   (body (array-i32-get (get-field a first-child) id))
+  (tests
+    (test arena-first-child-initial
+      (doc "initial first-child is -1")
+      (tags unit arena)
+      (body
+        (let a Arena (arena-new))
+        (let id Int32 (arena-add-node (addr a) (node-kind-list) ""))
+        (let child Int32 (arena-first-child (addr a) id))
+        (expect-eq child (- 0 1))
+      )
+    )
+  )
 )
 
 (fn arena-next-sibling (doc "Return the next sibling id for the node.") (params (a (ptr Arena)) (id Int32)) (returns Int32)
   (body (array-i32-get (get-field a next-sibling) id))
+  (tests
+    (test arena-next-sibling-initial
+      (doc "initial next-sibling is -1")
+      (tags unit arena)
+      (body
+        (let a Arena (arena-new))
+        (let id Int32 (arena-add-node (addr a) (node-kind-atom) "a"))
+        (let next Int32 (arena-next-sibling (addr a) id))
+        (expect-eq next (- 0 1))
+      )
+    )
+  )
 )
 
 (fn arena-set-first-child (doc "Set the first child pointer for the list node.") (params (a (ptr Arena)) (id Int32) (child Int32)) (returns Int32)
   (body (array-i32-set (get-field a first-child) id child))
+  (tests
+    (test arena-set-first-child-basic
+      (doc "setting first-child stores child id")
+      (tags unit arena)
+      (body
+        (let a Arena (arena-new))
+        (let list Int32 (arena-add-node (addr a) (node-kind-list) ""))
+        (let child Int32 (arena-add-node (addr a) (node-kind-atom) "x"))
+        (arena-set-first-child (addr a) list child)
+        (let retrieved Int32 (arena-first-child (addr a) list))
+        (expect-eq retrieved child)
+      )
+    )
+  )
 )
 
 (fn arena-set-next-sibling (doc "Set the next sibling pointer for the node.") (params (a (ptr Arena)) (id Int32) (next Int32)) (returns Int32)
   (body (array-i32-set (get-field a next-sibling) id next))
+  (tests
+    (test arena-set-next-sibling-basic
+      (doc "setting next-sibling stores next id")
+      (tags unit arena)
+      (body
+        (let a Arena (arena-new))
+        (let first Int32 (arena-add-node (addr a) (node-kind-atom) "first"))
+        (let second Int32 (arena-add-node (addr a) (node-kind-atom) "second"))
+        (arena-set-next-sibling (addr a) first second)
+        (let retrieved Int32 (arena-next-sibling (addr a) first))
+        (expect-eq retrieved second)
+      )
+    )
+  )
 )
