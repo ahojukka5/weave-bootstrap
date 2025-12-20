@@ -38,6 +38,30 @@
         )
       )
     )
+    (tests
+      (test buffer-clear-empty
+        (doc "clear on empty buffer should succeed and leave length 0")
+        (tags unit prelude buffer)
+        (body
+          (let b Buffer (buffer-new))
+          (let rc Int32 (buffer-clear b))
+          (expect-eq rc 0)
+          (let s String (buffer-to-string b))
+          (expect-eq (c-strlen s) 0)
+        )
+      )
+      (test buffer-clear-after-append
+        (doc "clear after appends resets length to 0")
+        (tags unit prelude buffer)
+        (body
+          (let b Buffer (buffer-new))
+          (buffer-append-string b "hello")
+          (expect-true (> (c-strlen (buffer-to-string b)) 0))
+          (buffer-clear b)
+          (expect-eq (c-strlen (buffer-to-string b)) 0)
+        )
+      )
+    )
   ) ; fn buffer-clear
 
   (fn buffer-append-byte
@@ -51,6 +75,17 @@
         )
       )
     )
+    (tests
+      (test buffer-append-byte-basic
+        (doc "append one byte increases length by 1")
+        (tags unit prelude buffer)
+        (body
+          (let b Buffer (buffer-new))
+          (buffer-append-byte b 65) ;; 'A'
+          (expect-eq (c-strlen (buffer-to-string b)) 1)
+        )
+      )
+    )
   ) ; fn buffer-append-byte
 
   (fn buffer-append-string
@@ -61,6 +96,18 @@
         (ccall "weave_buffer_append_string"
           (returns Int32)
           (args (Buffer b) (String s))
+        )
+      )
+    )
+    (tests
+      (test buffer-append-string-basic
+        (doc "append string accumulates content correctly")
+        (tags unit prelude buffer)
+        (body
+          (let b Buffer (buffer-new))
+          (buffer-append-string b "hi")
+          (buffer-append-string b "!")
+          (expect-eq (c-strlen (buffer-to-string b)) 3)
         )
       )
     )
