@@ -63,6 +63,48 @@
         )
       )
     )
+    (tests
+      (test type-node-to-llvm-str-int32
+        (doc "Int32 atom converts to i32")
+        (tags unit ir types)
+        (body
+          (let a (ptr Arena) (arena-create 256))
+          (let node Int32 (parse-string a "Int32"))
+          (let result String (type-node-to-llvm-str a node))
+          (expect-eq (string-eq result "i32") 1)
+        )
+      )
+      (test type-node-to-llvm-str-string
+        (doc "String atom converts to i8*")
+        (tags unit ir types)
+        (body
+          (let a (ptr Arena) (arena-create 256))
+          (let node Int32 (parse-string a "String"))
+          (let result String (type-node-to-llvm-str a node))
+          (expect-eq (string-eq result "i8*") 1)
+        )
+      )
+      (test type-node-to-llvm-str-ptr
+        (doc "Pointer type converts to inner-type*")
+        (tags unit ir types)
+        (body
+          (let a (ptr Arena) (arena-create 256))
+          (let node Int32 (parse-string a "(ptr Int32)"))
+          (let result String (type-node-to-llvm-str a node))
+          (expect-eq (string-eq result "i32*") 1)
+        )
+      )
+      (test type-node-to-llvm-str-nested-ptr
+        (doc "Nested pointer converts correctly")
+        (tags unit ir types)
+        (body
+          (let a (ptr Arena) (arena-create 256))
+          (let node Int32 (parse-string a "(ptr (ptr Int32))"))
+          (let result String (type-node-to-llvm-str a node))
+          (expect-eq (string-eq result "i32**") 1)
+        )
+      )
+    )
   )
 
   (fn infer-arg-type
@@ -142,6 +184,53 @@
         )
       )
     )
+    (tests
+      (test infer-arg-type-number-literal
+        (doc "Number literal infers to i32")
+        (tags unit ir types)
+        (body
+          (let a (ptr Arena) (arena-create 256))
+          (let node Int32 (parse-string a "42"))
+          (let result String (infer-arg-type a node (array-str-new) (array-i32-new) (array-str-new) (array-i32-new)))
+          (expect-eq (string-eq result "i32") 1)
+        )
+      )
+      (test infer-arg-type-string-literal
+        (doc "String literal infers to i8*")
+        (tags unit ir types)
+        (body
+          (let a (ptr Arena) (arena-create 256))
+          (let node Int32 (parse-string a "\"hello\""))
+          (let result String (infer-arg-type a node (array-str-new) (array-i32-new) (array-str-new) (array-i32-new)))
+          (expect-eq (string-eq result "i8*") 1)
+        )
+      )
+      (test infer-arg-type-variable
+        (doc "Variable infers type from environment")
+        (tags unit ir types)
+        (body
+          (let a (ptr Arena) (arena-create 256))
+          (let node Int32 (parse-string a "x"))
+          (let env-names ArrayString (array-str-new))
+          (let env-types ArrayInt32 (array-i32-new))
+          (array-str-append env-names "x")
+          (let ty-node Int32 (parse-string a "String"))
+          (array-i32-append env-types ty-node)
+          (let result String (infer-arg-type a node env-names env-types (array-str-new) (array-i32-new)))
+          (expect-eq (string-eq result "i8*") 1)
+        )
+      )
+      (test infer-arg-type-arith-expr
+        (doc "Arithmetic expression returns i32")
+        (tags unit ir types)
+        (body
+          (let a (ptr Arena) (arena-create 256))
+          (let node Int32 (parse-string a "(+ 1 2)"))
+          (let result String (infer-arg-type a node (array-str-new) (array-i32-new) (array-str-new) (array-i32-new)))
+          (expect-eq (string-eq result "i32") 1)
+        )
+      )
+    )
   )
 
   (fn get-struct-name-from-type-node
@@ -164,6 +253,38 @@
             )
             (return "")
           )
+        )
+      )
+    )
+    (tests
+      (test get-struct-name-from-type-node-atom
+        (doc "Atom type returns the name directly")
+        (tags unit ir types)
+        (body
+          (let a (ptr Arena) (arena-create 256))
+          (let node Int32 (parse-string a "Arena"))
+          (let result String (get-struct-name-from-type-node a node))
+          (expect-eq (string-eq result "Arena") 1)
+        )
+      )
+      (test get-struct-name-from-type-node-struct-form
+        (doc "Struct form extracts name from (struct Name)")
+        (tags unit ir types)
+        (body
+          (let a (ptr Arena) (arena-create 256))
+          (let node Int32 (parse-string a "(struct Point)"))
+          (let result String (get-struct-name-from-type-node a node))
+          (expect-eq (string-eq result "Point") 1)
+        )
+      )
+      (test get-struct-name-from-type-node-other-list
+        (doc "Non-struct list returns empty string")
+        (tags unit ir types)
+        (body
+          (let a (ptr Arena) (arena-create 256))
+          (let node Int32 (parse-string a "(ptr Int32)"))
+          (let result String (get-struct-name-from-type-node a node))
+          (expect-eq (string-eq result "") 1)
         )
       )
     )
