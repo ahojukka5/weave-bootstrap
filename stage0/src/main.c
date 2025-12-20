@@ -76,6 +76,32 @@ static char *compute_base_dir(const char *path) {
     }
 }
 
+static void list_tests_in(Node *form) {
+    Node *head = list_nth(form, 0);
+    int i;
+    if (!form || form->kind != N_LIST || !head || head->kind != N_ATOM) return;
+    if (is_atom(head, "module") || is_atom(head, "program")) {
+        for (i = 1; i < form->count; i++) list_tests_in(list_nth(form, i));
+        return;
+    }
+    if (is_atom(head, "fn")) {
+        for (i = 1; i < form->count; i++) {
+            Node *extra = list_nth(form, i);
+            Node *eh = list_nth(extra, 0);
+            int ti;
+            if (!eh || eh->kind != N_ATOM) continue;
+            if (!is_atom(eh, "tests")) continue;
+            for (ti = 1; ti < extra->count; ti++) {
+                Node *tform = list_nth(extra, ti);
+                Node *th = list_nth(tform, 0);
+                if (!th || th->kind != N_ATOM || !is_atom(th, "test")) continue;
+                const char *tname = atom_text(list_nth(tform, 1));
+                if (tname && *tname) fprintf(stdout, "%s\n", tname);
+            }
+        }
+    }
+}
+
 int main(int argc, char **argv) {
     const char *input = get_arg_value(argc, argv, "input");
     const char *output = get_arg_value(argc, argv, "output");
@@ -84,6 +110,7 @@ int main(int argc, char **argv) {
     int use_static = 0;
     int optimize = 0;
     int generate_tests_mode = 0;
+    int list_tests_only = 0;
     StrList selected_test_names;
     StrList selected_tags;
     sl_init(&selected_test_names);
@@ -124,6 +151,8 @@ int main(int argc, char **argv) {
             generate_tests_mode = 1;
             /* In test generation mode, default to executable output to run tests. */
             mode = OUTPUT_EXECUTABLE;
+        } else if (strcmp(a, "--list-tests") == 0 || strcmp(a, "-list-tests") == 0) {
+            list_tests_only = 1;
         } else if (strcmp(a, "-test") == 0 && i + 1 < argc) {
             sl_push(&selected_test_names, argv[i + 1]);
             i++;
@@ -158,6 +187,7 @@ int main(int argc, char **argv) {
         fprintf(stderr, "  --runtime PATH    Path to runtime.c (or set WEAVE_RUNTIME env var)\n");
         fprintf(stderr, "  -generate-tests   Generate & run embedded tests (emit synthetic main)\n");
         fprintf(stderr, "  -run-tests        Alias for -generate-tests\n");
+        fprintf(stderr, "  -list-tests       List embedded tests by name (one per line)\n");
         fprintf(stderr, "  -test NAME        Select test(s) by name (repeatable)\n");
         fprintf(stderr, "  -tag TAG          Select test(s) by tag (repeatable)\n");
         fprintf(stderr, "  -I<dir>           Add include directory\n");
@@ -182,9 +212,19 @@ int main(int argc, char **argv) {
     free(base_dir);
 
     sb_init(&ir);
-    compile_to_llvm_ir(top, &ir, generate_tests_mode, &selected_test_names, &selected_tags);
+    if (list_tests_only) {
+        int i;
+        Node *decls = top;
+        for (i = 0; decls && i < decls->count; i++) list_tests_in(list_nth(decls, i));
+        /* No IR generation in list mode */
+    } else {
+        compile_to_llvm_ir(top, &ir, generate_tests_mode, &selected_test_names, &selected_tags);
+    }
 
-    if (mode == OUTPUT_LLVM_IR) {
+    if (list_tests_only) {
+        /* Listing mode prints to stdout only */
+        return 0;
+    } else if (mode == OUTPUT_LLVM_IR) {
         /* Just write the IR */
         f = fopen(output, "wb");
         if (!f) {
