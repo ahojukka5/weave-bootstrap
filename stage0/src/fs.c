@@ -20,9 +20,11 @@ char *read_file_all(const char *path) {
     buf = (char *)xmalloc((size_t)size + 1);
     nread = fread(buf, 1, (size_t)size, f);
     buf[nread] = '\0';
-    /* Hard line-count limit: if file has more than 256 lines, fail the build
-       with a humorous message. Count lines by '\n' characters, including the
-       last line if not terminated by a newline. */
+    /* Linux-style line-count limits:
+       - Soft limit (256 lines): issue warning but continue
+       - Hard limit (512 lines): fail the build
+       Count lines by '\n' characters, including the last line if not
+       terminated by a newline. */
     {
         size_t lines = 0;
         if (nread > 0) {
@@ -33,11 +35,16 @@ char *read_file_all(const char *path) {
             /* If the file does not end with a newline, count the trailing line */
             if (buf[nread - 1] != '\n') lines++;
         }
-        if (lines > 256) {
+        if (lines > 512) {
             fprintf(stderr,
-                    "weavec0c: cannot fit in it memory more than 256 things (file has %zu lines): %s\n",
+                    "weavec0c: cannot fit in it memory more than 512 things (file has %zu lines): %s\n",
                     lines, path);
             exit(1);
+        }
+        if (lines > 256) {
+            fprintf(stderr,
+                    "weavec0c: warning: file exceeds soft limit of 256 lines (has %zu lines): %s\n",
+                    lines, path);
         }
     }
     fclose(f);
