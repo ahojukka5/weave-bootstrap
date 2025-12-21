@@ -1,3 +1,4 @@
+;;; @weave-allow-long-file: include expansion involves multiple helpers
 (module
   (name "stage1-include-expand-core-a")
   (doc "Core helpers for include expansion: printable path, dirname, resolve, parse.")
@@ -148,15 +149,15 @@
       )
       (let src String (ccall "weave_read_file" (returns String) (args (String p))))
       (ccall "puts" (returns Int32) (args (String "[include_expand] read file attempted")))
-      (if-stmt (== (ccall "weave_string_length" (returns Int32) (args (String src))) 0)
+      (if-stmt (== (string-length src) 0)
         (do
           (let alt String (string-concat "bootstrap/" p))
           (set src (ccall "weave_read_file" (returns String) (args (String alt))))
-           (if-stmt (== (ccall "weave_string_length" (returns Int32) (args (String src))) 0)
+           (if-stmt (== (string-length src) 0)
             (do
               (let alt2 String (string-concat "stdlib/" p))
               (set src (ccall "weave_read_file" (returns String) (args (String alt2))))
-               (if-stmt (== (ccall "weave_string_length" (returns Int32) (args (String src))) 0) (return (- 0 1)) (do 0))
+               (if-stmt (== (string-length src) 0) (return (- 0 1)) (do 0))
             )
             (do 0)
           )
@@ -379,10 +380,31 @@
                                                   )
                                                 )
                                                 (do
-                                                  ;; Not multi-top - copy included root (e.g., module) into destination
-                                                  (let copied Int32 (copy-subtree (addr tmp) dst inc-root))
-                                                  (append-child dst dst-root copied)
-                                                  (ccall "puts" (returns Int32) (args (String "[include_expand] appended included root")))
+                                                  ;; Not multi-top: if included root is a module, flatten its children;
+                                                  ;; otherwise, copy the root as-is into destination.
+                                                  (let inc-root-head Int32 (arena-first-child (addr tmp) inc-root))
+                                                  (let is-inc-module Int32 0)
+                                                  (if-stmt (&& (!= inc-root-head (- 0 1)) (== (arena-kind (addr tmp) inc-root-head) (node-kind-atom)))
+                                                    (if-stmt (string-eq (arena-value (addr tmp) inc-root-head) "module")
+                                                      (set is-inc-module 1)
+                                                      (do 0)
+                                                    )
+                                                    (do 0)
+                                                  )
+                                                  (if-stmt (== is-inc-module 1)
+                                                    (do
+                                                      ;; Flatten module contents into destination
+                                                      (let rc2 Int32 (expand-children (addr tmp) inc-root dst dst-root visited next-dir 1))
+                                                      (if-stmt (== rc2 (- 0 1)) (return (- 0 1)) (do 0))
+                                                      (ccall "puts" (returns Int32) (args (String "[include_expand] flattened module children")))
+                                                    )
+                                                    (do
+                                                      ;; Copy non-module root as-is
+                                                      (let copied Int32 (copy-subtree (addr tmp) dst inc-root))
+                                                      (append-child dst dst-root copied)
+                                                      (ccall "puts" (returns Int32) (args (String "[include_expand] appended included root")))
+                                                    )
+                                                  )
                                                 )
                                               )
                                             )
