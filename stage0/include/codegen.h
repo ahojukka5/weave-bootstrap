@@ -19,6 +19,7 @@ Value value_const_i32(int v);
 Value value_temp(TypeRef *t, int temp);
 Value value_ssa(TypeRef *t, const char *name);
 
+Value ensure_type_ctx_at(IrCtx *ir, Value v, TypeRef *target, const char *ctx, Node *location);
 Value ensure_type_ctx(IrCtx *ir, Value v, TypeRef *target, const char *ctx);
 #define ensure_type(ir,v,t) ensure_type_ctx(ir,v,t,NULL)
 
