@@ -1,0 +1,27 @@
+(program
+  (name "test-while-42")
+  (doc "Increment in a while loop until reaching 42.")
+  (version "0.1")
+
+  (type ExitCode
+    (alias Int32)
+  ) ;; type ExitCode
+
+  (entry main
+    (doc "Loop from 0 to 42, then return x.")
+    (params ())
+    (returns ExitCode)
+    (body
+      (do
+        (let x Int32 0)
+        (while
+          (< x 42)
+          (do
+            (set x (+ x 1))
+          ) ;; do
+        ) ;; while
+        (return x)
+      ) ;; do
+    ) ;; body
+  ) ;; entry main
+) ;; program
