@@ -1,0 +1,25 @@
+(program
+  (name "test-if-eq-42")
+  (doc "If branch returns 42 when predicate is true.")
+  (version "0.1")
+
+  (type ExitCode
+    (alias Int32)
+  ) ;; type ExitCode
+
+  (entry main
+    (doc "Return 42 when x == 41, else 0.")
+    (params ())
+    (returns ExitCode)
+    (body
+      (do
+        (let x Int32 41)
+        (if-stmt
+          (== x 41)
+          (return 42)
+          (return 0)
+        ) ;; if-stmt
+      ) ;; do
+    ) ;; body
+  ) ;; entry main
+) ;; program
