@@ -1,0 +1,24 @@
+(program
+  (name "test-struct-like-42")
+  (doc "Allocate a struct-like layout and sum its fields.")
+  (struct Point
+    (fields Int32 Int32)
+  ) ;; struct
+  (entry main
+    (doc "Write two fields then read and add them.")
+    (params)
+    (returns Int32)
+    (body
+      (do
+        ;; malloc + (struct Point) layout.
+        (let buf (ptr Int8) (ccall "malloc" (returns (ptr Int8)) (args (Int32 8))))
+        (let p (ptr (struct Point)) (bitcast (ptr (struct Point)) buf))
+        (store Int32 40 (get-field (struct Point) 0 p))
+        (store Int32 2 (get-field (struct Point) 1 p))
+        (let a Int32 (load Int32 (get-field (struct Point) 0 p)))
+        (let b Int32 (load Int32 (get-field (struct Point) 1 p)))
+        (return (+ a b))
+      ) ;; do
+    ) ;; body
+  ) ;; entry
+) ;; program
