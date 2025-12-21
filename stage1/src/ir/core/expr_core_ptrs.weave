@@ -22,7 +22,14 @@
                   (let hv String (arena-value a h))
                   (if-stmt (string-eq hv "ptr") (return 1) (return 0))
                 )
-                (return 0)
+                (do
+                  ;; Atom types that map to i8* should be treated as pointers
+                  (let ty-name String (arena-value a ty-node))
+                  (if-stmt (|| (|| (string-eq ty-name "String") (string-eq ty-name "Buffer")) (|| (string-eq ty-name "ArrayString") (string-eq ty-name "ArrayInt32")))
+                    (return 1)
+                    (return 0)
+                  )
+                )
               )
             )
           )
