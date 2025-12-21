@@ -47,8 +47,9 @@ int cg_stmt(IrCtx *ir, VarEnv *env, Node *stmt, TypeRef *ret_type, Value *out_la
     if (is_atom(head, "store")) {
         TypeEnv *tenv = (TypeEnv *)ir->type_env;
         TypeRef *ty = parse_type_node(tenv, list_nth(stmt, 1));
+        Node *val_node = list_nth(stmt, 3);
         Value ptrv = cg_expr(ir, env, list_nth(stmt, 2));
-        Value vv = ensure_type_ctx(ir, cg_expr(ir, env, list_nth(stmt, 3)), ty, "store");
+        Value vv = ensure_type_ctx_at(ir, cg_expr(ir, env, val_node), ty, "store", val_node);
         sb_append(ir->out, "  store ");
         emit_llvm_type(ir->out, ty);
         sb_append(ir->out, " ");
@@ -77,7 +78,8 @@ int cg_stmt(IrCtx *ir, VarEnv *env, Node *stmt, TypeRef *ret_type, Value *out_la
         sd = type_env_find_struct(tenv, sty->name);
         fi = struct_field_index(sd, fname);
         if (fi < 0) return 0;
-        vv = ensure_type_ctx(ir, cg_expr(ir, env, list_nth(stmt, 3)), sd->field_types[fi], "set-field");
+        Node *val_node = list_nth(stmt, 3);
+        vv = ensure_type_ctx_at(ir, cg_expr(ir, env, val_node), sd->field_types[fi], "set-field", val_node);
         pfield = ir_fresh_temp(ir);
         sb_append(ir->out, "  ");
         ir_emit_temp(ir->out, pfield);
@@ -176,7 +178,7 @@ int cg_stmt(IrCtx *ir, VarEnv *env, Node *stmt, TypeRef *ret_type, Value *out_la
         Node *cond = list_nth(stmt, 1);
         Node *then_s = list_nth(stmt, 2);
         Node *else_s = list_nth(stmt, 3);
-        Value cv = ensure_type_ctx(ir, cg_expr(ir, env, cond), type_i32(), "if-cond");
+        Value cv = ensure_type_ctx_at(ir, cg_expr(ir, env, cond), type_i32(), "if-cond", cond);
         int tcond = ir_fresh_temp(ir);
         int then_l = ir_fresh_label(ir);
         int else_l = ir_fresh_label(ir);
@@ -231,7 +233,7 @@ int cg_stmt(IrCtx *ir, VarEnv *env, Node *stmt, TypeRef *ret_type, Value *out_la
 
         ir_emit_label_def(ir->out, cond_l);
         {
-            Value cv = ensure_type_ctx(ir, cg_expr(ir, env, cond), type_i32(), "while-cond");
+            Value cv = ensure_type_ctx_at(ir, cg_expr(ir, env, cond), type_i32(), "while-cond", cond);
             tcond = ir_fresh_temp(ir);
             sb_append(ir->out, "  ");
             ir_emit_temp(ir->out, tcond);
