@@ -2,7 +2,24 @@
   (name "stage1-buffers")
   (doc "Buffer runtime bindings consolidated; no prelude wrapper.")
 
-  (type Buffer (alias Int32))
+  (type Buffer (alias String))
+
+  ;; Compatibility wrapper for legacy call sites
+  (fn buffer-create
+    (doc "Allocate a new growable byte buffer with initial capacity (ignored).")
+    (params (cap Int32)) (returns Buffer)
+    (body (return (buffer-new)))
+    (tests
+      (test buffer-create-compat
+        (doc "buffer-create delegates to buffer-new")
+        (tags unit buffers)
+        (body
+          (let result Buffer (buffer-create 128))
+          (expect-true (!= result 0))
+        )
+      )
+    )
+  )
 
   (fn buffer-new
     (doc "Allocate a new growable byte buffer.")
