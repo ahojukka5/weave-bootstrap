@@ -9,7 +9,12 @@
   (fn string-length
     (doc "Return length of null-terminated string.")
     (params (s String)) (returns Int32)
-    (body (return (c-strlen s)))
+    (body
+      (if-stmt (== s 0)
+        (return 0)
+        (return (c-strlen s))
+      )
+    )
     (tests
       (test string-length-empty
         (doc "length of empty string is 0")
@@ -102,7 +107,11 @@
     (doc "Return 1 if two strings are equal.")
     (params (a String) (b String)) (returns Int32)
     (body
-      (if-stmt (== (c-strcmp a b) 0) (return 1) (return 0))
+      (do
+        ;; Guard against NULL inputs to avoid strcmp crashes
+        (if-stmt (|| (== a 0) (== b 0)) (return 0) (do 0))
+        (if-stmt (== (c-strcmp a b) 0) (return 1) (return 0))
+      )
     )
     (tests
       (test string-eq-equal
