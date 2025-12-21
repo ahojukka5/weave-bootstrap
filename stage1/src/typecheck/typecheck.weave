@@ -7,6 +7,7 @@
   (include "../arrays.weave")
   (include "../arena.weave")
   (include "../ir/util_structs.weave")
+  (include "../ir/util_lists_core.weave")
   (include "../ir/util_lists_tests.weave")
   (include "../ir/util_strings_core.weave")
   (include "./tc_sigs.weave")
@@ -52,8 +53,15 @@
       (collect-structs a root struct-names struct-fields)
 
       (let top Int32 (arena-first-child a root))
+      (let iter Int32 0)
+      (let maxNodes Int32 (array-i32-len (get-field a kinds)))
       (while (!= top (- 0 1))
         (do
+          (set iter (+ iter 1))
+          (if-stmt (> iter (+ maxNodes 10000))
+            (return (tc-error "Typecheck iteration limit exceeded"))
+            (do 0)
+          )
           (if-stmt (== (arena-kind a top) (node-kind-list))
             (do
               (let head Int32 (arena-first-child a top))
