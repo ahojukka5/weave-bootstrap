@@ -33,6 +33,11 @@
         (let env-types ArrayInt32 (array-i32-new))
         (let struct-names ArrayString (array-str-new))
         (let struct-fields ArrayString (array-str-new))
+
+        ;; Emit struct type definitions early so named types like %Arena
+        ;; are defined before any wrapper stubs or function IR that reference them.
+        (collect-structs a root struct-names struct-fields)
+        (emit-struct-defs decls struct-names struct-fields)
         
         ;; Debug: report child count and dump heads
         (buffer-append-string fn-out "; debug: root children:\n")
@@ -173,7 +178,7 @@
         ;; come from include_expand.weave once includes are correctly flattened.
         (if-stmt (== (array-str-contains fn-sig-names "expand-root") 0)
           (do
-            (buffer-append-string decls "define i32 @expand-root(i8* %path, %Arena* %out_arena, i32* %out_root) {\n")
+            (buffer-append-string decls "define i32 @expand-root(i8* %path, i8* %out_arena, i32* %out_root) {\n")
             (buffer-append-string decls "  ret i32 0\n}\n")
           )
           (do 0)
@@ -182,7 +187,7 @@
         ;; Fallback stub for generate-ir to avoid undefined symbol during IR verify
         (if-stmt (== (array-str-contains fn-sig-names "generate-ir") 0)
           (do
-            (buffer-append-string decls "define i32 @generate-ir(%Arena* %a, i32 %root, i8* %out, i32 %tok) {\n")
+            (buffer-append-string decls "define i32 @generate-ir(i8* %a, i32 %root, i8* %out, i32 %tok) {\n")
             (buffer-append-string decls "  ret i32 0\n}\n")
           )
           (do 0)
@@ -191,26 +196,21 @@
         ;; Fallback stubs for lowering and typechecking passes
         (if-stmt (== (array-str-contains fn-sig-names "lower-program") 0)
           (do
-            (buffer-append-string decls "define i32 @lower-program(%Arena* %a, i32 %root) {\n")
+            (buffer-append-string decls "define i32 @lower-program(i8* %a, i32 %root) {\n")
             (buffer-append-string decls "  ret i32 0\n}\n")
           )
           (do 0)
         )
         (if-stmt (== (array-str-contains fn-sig-names "typecheck_program") 0)
           (do
-            (buffer-append-string decls "define i32 @typecheck_program(%Arena* %a, i32 %root) {\n")
+            (buffer-append-string decls "define i32 @typecheck_program(i8* %a, i32 %root) {\n")
             (buffer-append-string decls "  ret i32 0\n}\n")
           )
           (do 0)
         )
 
-        ;; Identity helper to satisfy accidental calls to a 'return' function
-        ;; emitted by expression-mode conditionals. Maps i32 -> i32.
-        (buffer-append-string decls "define i32 @return(i32 %x) {\n")
-        (buffer-append-string decls "  ret i32 %x\n}\n")
+        ;; Removed identity @return helper to avoid return-as-value misuse.
 
-        (collect-structs a root struct-names struct-fields)
-        (emit-struct-defs decls struct-names struct-fields)
         ;; Seed runtime decls we rely on
         (emit-runtime-decl "weave_get_cli_string" "declare i8* @weave_get_cli_string(i8*)" decls declared)
         (emit-runtime-decl "weave_read_file" "declare i8* @weave_read_file(i8*)" decls declared)
