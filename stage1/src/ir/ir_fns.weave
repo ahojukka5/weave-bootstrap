@@ -34,6 +34,8 @@
               (if-stmt (!= head (- 0 1))
                 (do
                   (let head-val String (arena-value a head))
+                  ;; Check if this is a statement keyword
+                  ;; Note: 'if-stmt' is excluded here so it can be used as an expression
                   (if-stmt (|| (|| (|| (|| (string-eq head-val "do") (string-eq head-val "let")) (string-eq head-val "while")) (string-eq head-val "return")) (|| (string-eq head-val "store") (string-eq head-val "set")))
                     (do
                       (let ret Int32 (compile-stmt a item ret-type-node env-names env-safe env-types declared struct-names struct-fields decls str-counter out temp label-counter fn-sig-names fn-sig-ret-types))
@@ -394,6 +396,10 @@
                       (buffer-append-string out "; head: ")
                       (buffer-append-string out (arena-value a h))
                       (buffer-append-string out "\n")
+                      (if-stmt (string-eq (arena-value a h) "module")
+                        (buffer-append-string out
+                          "; DEBUG: found module at root level\n")
+                        (do 0))
                     )
                     (do 0)
                   )
@@ -417,14 +423,28 @@
                       (buffer-append-string out "; debug: fn ")
                       (buffer-append-string out fn-name)
                       (buffer-append-string out "\n")
-                      (compile-fn a mchild fn-name declared struct-names struct-fields decls str-counter out fn-sig-names fn-sig-ret-types)
+                      (compile-fn a mchild fn-name declared struct-names
+                        struct-fields decls str-counter out fn-sig-names
+                        fn-sig-ret-types)
                     )
                     (do 0)
                   )
                   (if-stmt (is-list-with-head a mchild "entry")
                     (do
                       (buffer-append-string out "; debug: entry found\n")
-                      (compile-fn a mchild "weave_main" declared struct-names struct-fields decls str-counter out fn-sig-names fn-sig-ret-types)
+                      (compile-fn a mchild "weave_main" declared
+                        struct-names struct-fields decls str-counter out
+                        fn-sig-names fn-sig-ret-types)
+                    )
+                    (do 0)
+                  )
+                  ;; Recursively compile nested modules
+                  (if-stmt (is-list-with-head a mchild "module")
+                    (do
+                      (buffer-append-string out "; debug: nested module found, recursing\n")
+                      (compile-all-fns a mchild declared struct-names
+                        struct-fields decls str-counter out fn-sig-names
+                        fn-sig-ret-types)
                     )
                     (do 0)
                   )
