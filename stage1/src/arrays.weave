@@ -2,8 +2,43 @@
   (name "stage1-arrays")
   (doc "Array runtime bindings (strings and i32) consolidated; no prelude wrapper.")
 
-  (type ArrayString (alias Int32))
-  (type ArrayInt32 (alias Int32))
+  (type ArrayString (alias String))
+  (type ArrayInt32 (alias String))
+
+  ;; Compatibility wrappers for legacy call sites
+  (fn array-string-create
+    (doc "Create a new dynamic array of strings (compat wrapper).")
+    (params ())
+    (returns ArrayString)
+    (body (return (array-str-new)))
+    (tests
+      (test array-string-create-compat
+        (doc "array-string-create delegates to array-str-new")
+        (tags unit arrays)
+        (body
+          (let result ArrayString (array-string-create))
+          (expect-true (!= result 0))
+        )
+      )
+    )
+  )
+
+  (fn array-int32-create
+    (doc "Create a new dynamic array of Int32 (compat wrapper).")
+    (params ())
+    (returns ArrayInt32)
+    (body (return (array-i32-new)))
+    (tests
+      (test array-int32-create-compat
+        (doc "array-int32-create delegates to array-i32-new")
+        (tags unit arrays)
+        (body
+          (let result ArrayInt32 (array-int32-create))
+          (expect-true (!= result 0))
+        )
+      )
+    )
+  )
 
   (fn array-str-new
     (doc "Create a new dynamic array of strings.")
