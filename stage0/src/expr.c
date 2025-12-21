@@ -1,4 +1,5 @@
 #include "codegen.h"
+#include "diagnostics.h"
 
 #include "fn_table.h"
 #include "type_env.h"
@@ -69,13 +70,14 @@ static const char *type_debug_name(TypeRef *t, char *buf, size_t n) {
     }
 }
 
-Value ensure_type_ctx(IrCtx *ir, Value v, TypeRef *target, const char *ctx) {
+Value ensure_type_ctx_at(IrCtx *ir, Value v, TypeRef *target, const char *ctx, Node *location) {
     char expected_buf[64];
     char got_buf[64];
     if (type_eq(v.type, target)) return v;
     /* Minimal conversions:
      * - allow i32 const 0 as null i8*
-     * - allow ptr -> i32 via ptrtoint (for bootstrap flexibility)
+     * - allow ptr -> i8* via bitcast
+     * - allow ptr/i8* -> i32 via ptrtoint (for bootstrap flexibility)
      */
     if (target && target->kind == TY_I8PTR && v.type && v.type->kind == TY_I32 && v.kind == 0 && v.const_i32 == 0) {
         int t = ir_fresh_temp(ir);
@@ -84,7 +86,18 @@ Value ensure_type_ctx(IrCtx *ir, Value v, TypeRef *target, const char *ctx) {
         sb_append(ir->out, " = inttoptr i32 0 to i8*\n");
         return value_temp(type_i8ptr(), t);
     }
-    if (target && target->kind == TY_I32 && v.type && v.type->kind == TY_PTR) {
+    if (target && target->kind == TY_I8PTR && v.type && v.type->kind == TY_PTR) {
+        int t = ir_fresh_temp(ir);
+        sb_append(ir->out, "  ");
+        ir_emit_temp(ir->out, t);
+        sb_append(ir->out, " = bitcast ");
+        emit_llvm_type(ir->out, v.type);
+        sb_append(ir->out, " ");
+        emit_value(ir->out, v);
+        sb_append(ir->out, " to i8*\n");
+        return value_temp(type_i8ptr(), t);
+    }
+    if (target && target->kind == TY_I32 && v.type && (v.type->kind == TY_PTR || v.type->kind == TY_I8PTR)) {
         int t = ir_fresh_temp(ir);
         sb_append(ir->out, "  ");
         ir_emit_temp(ir->out, t);
@@ -95,13 +108,29 @@ Value ensure_type_ctx(IrCtx *ir, Value v, TypeRef *target, const char *ctx) {
         sb_append(ir->out, " to i32\n");
         return value_temp(type_i32(), t);
     }
-    fprintf(stderr, "type mismatch in %s (ctx=%s): wanted %s, got %s\n",
-            ir->current_fn ? ir->current_fn : "<none>",
-            ctx ? ctx : "-",
-            type_debug_name(target, expected_buf, sizeof(expected_buf)),
-            type_debug_name(v.type, got_buf, sizeof(got_buf)));
-    die("type mismatch in expression");
+    if (location && location->filename) {
+        char details[256];
+        snprintf(details, sizeof(details), "in function '%s', context '%s': wanted %s, got %s",
+                 ir->current_fn ? ir->current_fn : "<none>",
+                 ctx ? ctx : "-",
+                 type_debug_name(target, expected_buf, sizeof(expected_buf)),
+                 type_debug_name(v.type, got_buf, sizeof(got_buf)));
+        diag_fatal(location->filename, location->line, location->col,
+                   "type-mismatch", "type mismatch in expression", details);
+    } else {
+        char details[256];
+        snprintf(details, sizeof(details), "in function '%s', context '%s': wanted %s, got %s",
+                 ir->current_fn ? ir->current_fn : "<none>",
+                 ctx ? ctx : "-",
+                 type_debug_name(target, expected_buf, sizeof(expected_buf)),
+                 type_debug_name(v.type, got_buf, sizeof(got_buf)));
+        diag_fatal(NULL, 0, 0, "type-mismatch", "type mismatch in expression", details);
+    }
     return value_const_i32(0);
+}
+
+Value ensure_type_ctx(IrCtx *ir, Value v, TypeRef *target, const char *ctx) {
+    return ensure_type_ctx_at(ir, v, target, ctx, NULL);
 }
 
 static Value cg_addr(IrCtx *ir, VarEnv *env, Node *n) {
@@ -293,7 +322,12 @@ static Value cg_call(IrCtx *ir, VarEnv *env, Node *list) {
         Value *arg_vals = NULL;
 
         if (!returns_form || returns_form->kind != N_LIST || !is_atom(list_nth(returns_form, 0), "returns")) {
-            die("ccall missing (returns ...)");
+            diag_fatal(list && list->filename ? list->filename : NULL,
+                       list ? list->line : 0,
+                       list ? list->col : 0,
+                       "syntax-error",
+                       "ccall missing (returns ...) form",
+                       "ccall requires a (returns Type) specification");
         }
         ret_ty = parse_type_node(tenv, list_nth(returns_form, 1));
 
@@ -312,7 +346,7 @@ static Value cg_call(IrCtx *ir, VarEnv *env, Node *list) {
                     expr = list_nth(arg, 1);
                 }
                 arg_types[i] = aty;
-                arg_vals[i] = ensure_type_ctx(ir, cg_expr(ir, env, expr), aty, "ccall-arg");
+                arg_vals[i] = ensure_type_ctx_at(ir, cg_expr(ir, env, expr), aty, "ccall-arg", arg);
             }
         }
 
@@ -390,7 +424,7 @@ static Value cg_call(IrCtx *ir, VarEnv *env, Node *list) {
                 TypeRef *expected = type_i32();
                 if (fns) expected = fn_table_param_type(fns, fn_name, i, type_i32());
                 arg_types[i] = expected;
-                arg_vals[i] = ensure_type_ctx(ir, cg_expr(ir, env, arg_expr), expected, "fn-arg");
+                arg_vals[i] = ensure_type_ctx_at(ir, cg_expr(ir, env, arg_expr), expected, "fn-arg", arg_expr);
             }
         }
 
@@ -498,6 +532,27 @@ Value cg_expr(IrCtx *ir, VarEnv *env, Node *expr) {
             return cg_addr(ir, env, list_nth(expr, 1));
         }
 
+        if (is_atom(head, "addr-of")) {
+            TypeEnv *tenv = (TypeEnv *)ir->type_env;
+            Node *type_node = list_nth(expr, 1);
+            Node *name_node = list_nth(expr, 2);
+            const char *name = atom_text(name_node);
+            TypeRef *decl_ty = env_type(env, name);
+            TypeRef *arg_ty = parse_type_node(tenv, type_node);
+            TypeRef *ptr_ty = NULL;
+            if (decl_ty && arg_ty && !type_eq(decl_ty, arg_ty)) {
+                /* Prefer declared type, but warn via diagnostics if mismatch */
+                diag_warn(name_node && name_node->filename ? name_node->filename : NULL,
+                          name_node ? name_node->line : 0,
+                          name_node ? name_node->col : 0,
+                          "addr-of-type-mismatch",
+                          "addr-of type does not match variable declared type",
+                          NULL);
+            }
+            ptr_ty = type_ptr(decl_ty ? decl_ty : arg_ty);
+            return value_ssa(ptr_ty, env_ssa_name(env, name));
+        }
+
         if (is_atom(head, "load")) {
             return cg_load(ir, env, expr);
         }
@@ -510,9 +565,26 @@ Value cg_expr(IrCtx *ir, VarEnv *env, Node *expr) {
             return cg_get_field(ir, env, expr);
         }
 
+        if (is_atom(head, "bitcast")) {
+            TypeEnv *tenv = (TypeEnv *)ir->type_env;
+            TypeRef *to_ty = parse_type_node(tenv, list_nth(expr, 1));
+            Value src = cg_expr(ir, env, list_nth(expr, 2));
+            int t = ir_fresh_temp(ir);
+            sb_append(ir->out, "  ");
+            ir_emit_temp(ir->out, t);
+            sb_append(ir->out, " = bitcast ");
+            emit_llvm_type(ir->out, src.type);
+            sb_append(ir->out, " ");
+            emit_value(ir->out, src);
+            sb_append(ir->out, " to ");
+            emit_llvm_type(ir->out, to_ty);
+            sb_append(ir->out, "\n");
+            return value_temp(to_ty, t);
+        }
+
         if (is_atom(head, "+") || is_atom(head, "-") || is_atom(head, "*") || is_atom(head, "/")) {
-            lhs = ensure_type_ctx(ir, cg_expr(ir, env, list_nth(expr, 1)), type_i32(), "arith");
-            rhs = ensure_type_ctx(ir, cg_expr(ir, env, list_nth(expr, 2)), type_i32(), "arith");
+            lhs = ensure_type_ctx_at(ir, cg_expr(ir, env, list_nth(expr, 1)), type_i32(), "arith", expr);
+            rhs = ensure_type_ctx_at(ir, cg_expr(ir, env, list_nth(expr, 2)), type_i32(), "arith", expr);
             t = ir_fresh_temp(ir);
             sb_append(ir->out, "  ");
             ir_emit_temp(ir->out, t);
@@ -534,8 +606,14 @@ Value cg_expr(IrCtx *ir, VarEnv *env, Node *expr) {
             is_atom(head, "<=") || is_atom(head, ">") || is_atom(head, ">=")) {
             const char *pred = "eq";
             int tcmp, tout;
-            lhs = ensure_type_ctx(ir, cg_expr(ir, env, list_nth(expr, 1)), type_i32(), "cmp");
-            rhs = ensure_type_ctx(ir, cg_expr(ir, env, list_nth(expr, 2)), type_i32(), "cmp");
+            Value raw_lhs = cg_expr(ir, env, list_nth(expr, 1));
+            Value raw_rhs = cg_expr(ir, env, list_nth(expr, 2));
+
+            /* Determine comparison mode: integer vs pointer */
+            int lhs_is_i32 = (raw_lhs.type && raw_lhs.type->kind == TY_I32);
+            int rhs_is_i32 = (raw_rhs.type && raw_rhs.type->kind == TY_I32);
+            int lhs_is_ptr = (raw_lhs.type && (raw_lhs.type->kind == TY_PTR || raw_lhs.type->kind == TY_I8PTR));
+            int rhs_is_ptr = (raw_rhs.type && (raw_rhs.type->kind == TY_PTR || raw_rhs.type->kind == TY_I8PTR));
 
             if (is_atom(head, "==")) pred = "eq";
             else if (is_atom(head, "!=")) pred = "ne";
@@ -546,15 +624,35 @@ Value cg_expr(IrCtx *ir, VarEnv *env, Node *expr) {
 
             tcmp = ir_fresh_temp(ir);
             tout = ir_fresh_temp(ir);
-            sb_append(ir->out, "  ");
-            ir_emit_temp(ir->out, tcmp);
-            sb_append(ir->out, " = icmp ");
-            sb_append(ir->out, pred);
-            sb_append(ir->out, " i32 ");
-            emit_value_i32(ir->out, lhs);
-            sb_append(ir->out, ", ");
-            emit_value_i32(ir->out, rhs);
-            sb_append(ir->out, "\n");
+
+            /* Pointer-aware equality: bitcast both to i8* when needed */
+            if ((is_atom(head, "==") || is_atom(head, "!=")) && (lhs_is_ptr || rhs_is_ptr)) {
+                lhs = ensure_type_ctx_at(ir, raw_lhs, type_i8ptr(), "cmp", expr);
+                rhs = ensure_type_ctx_at(ir, raw_rhs, type_i8ptr(), "cmp", expr);
+                sb_append(ir->out, "  ");
+                ir_emit_temp(ir->out, tcmp);
+                sb_append(ir->out, " = icmp ");
+                sb_append(ir->out, pred);
+                sb_append(ir->out, " i8* ");
+                emit_value(ir->out, lhs);
+                sb_append(ir->out, ", ");
+                emit_value(ir->out, rhs);
+                sb_append(ir->out, "\n");
+            } else {
+                /* Fallback to integer comparison; ptrs become i32 via ptrtoint */
+                lhs = ensure_type_ctx_at(ir, raw_lhs, type_i32(), "cmp", expr);
+                rhs = ensure_type_ctx_at(ir, raw_rhs, type_i32(), "cmp", expr);
+                sb_append(ir->out, "  ");
+                ir_emit_temp(ir->out, tcmp);
+                sb_append(ir->out, " = icmp ");
+                sb_append(ir->out, pred);
+                sb_append(ir->out, " i32 ");
+                emit_value_i32(ir->out, lhs);
+                sb_append(ir->out, ", ");
+                emit_value_i32(ir->out, rhs);
+                sb_append(ir->out, "\n");
+            }
+
             sb_append(ir->out, "  ");
             ir_emit_temp(ir->out, tout);
             sb_append(ir->out, " = zext i1 ");
@@ -565,8 +663,8 @@ Value cg_expr(IrCtx *ir, VarEnv *env, Node *expr) {
 
         if (is_atom(head, "&&") || is_atom(head, "||")) {
             int tb1, tb2, tb3, tout;
-            lhs = ensure_type_ctx(ir, cg_expr(ir, env, list_nth(expr, 1)), type_i32(), "logic");
-            rhs = ensure_type_ctx(ir, cg_expr(ir, env, list_nth(expr, 2)), type_i32(), "logic");
+            lhs = ensure_type_ctx_at(ir, cg_expr(ir, env, list_nth(expr, 1)), type_i32(), "logic", expr);
+            rhs = ensure_type_ctx_at(ir, cg_expr(ir, env, list_nth(expr, 2)), type_i32(), "logic", expr);
             tb1 = ir_fresh_temp(ir);
             tb2 = ir_fresh_temp(ir);
             tb3 = ir_fresh_temp(ir);
