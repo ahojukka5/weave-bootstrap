@@ -1,4 +1,5 @@
 #include "sexpr.h"
+#include "diagnostics.h"
 
 #include <string.h>
 
@@ -9,6 +10,9 @@ static Node *node_new(NodeKind k) {
     n->items = NULL;
     n->count = 0;
     n->cap = 0;
+    n->filename = NULL;
+    n->line = 0;
+    n->col = 0;
     return n;
 }
 
@@ -23,8 +27,11 @@ void node_list_push(Node *list, Node *child) {
     list->items[list->count++] = child;
 }
 
-static Node *parse_list(Lexer *lx, ParseCtx *ctx) {
+static Node *parse_list(Lexer *lx, ParseCtx *ctx, int start_line, int start_col) {
     Node *list = node_new(N_LIST);
+    list->filename = ctx && ctx->filename ? xstrdup(ctx->filename) : NULL;
+    list->line = start_line;
+    list->col = start_col;
     for (;;) {
         Token t = lex_next(lx);
         if (t.kind == TOK_EOF) {
@@ -36,14 +43,20 @@ static Node *parse_list(Lexer *lx, ParseCtx *ctx) {
         }
         if (t.kind == TOK_RPAREN) break;
         if (t.kind == TOK_LPAREN) {
-            node_list_push(list, parse_list(lx, ctx));
+            node_list_push(list, parse_list(lx, ctx, t.line, t.col));
         } else if (t.kind == TOK_ATOM) {
             Node *a = node_new(N_ATOM);
             a->text = t.text;
+            a->filename = ctx && ctx->filename ? xstrdup(ctx->filename) : NULL;
+            a->line = t.line;
+            a->col = t.col;
             node_list_push(list, a);
         } else if (t.kind == TOK_STRING) {
             Node *s = node_new(N_STRING);
             s->text = t.text;
+            s->filename = ctx && ctx->filename ? xstrdup(ctx->filename) : NULL;
+            s->line = t.line;
+            s->col = t.col;
             node_list_push(list, s);
         } else {
             if (ctx && ctx->filename) {
@@ -59,7 +72,7 @@ static Node *parse_list(Lexer *lx, ParseCtx *ctx) {
 static Node *parse_node(Lexer *lx, ParseCtx *ctx) {
     Token t = lex_next(lx);
     if (t.kind == TOK_EOF) return NULL;
-    if (t.kind == TOK_LPAREN) return parse_list(lx, ctx);
+    if (t.kind == TOK_LPAREN) return parse_list(lx, ctx, t.line, t.col);
     if (t.kind == TOK_RPAREN) {
         if (ctx && ctx->filename) {
             die_at(ctx->filename, t.line, t.col, "unexpected ')'");
@@ -71,11 +84,17 @@ static Node *parse_node(Lexer *lx, ParseCtx *ctx) {
     if (t.kind == TOK_ATOM) {
         Node *a = node_new(N_ATOM);
         a->text = t.text;
+        a->filename = ctx && ctx->filename ? xstrdup(ctx->filename) : NULL;
+        a->line = t.line;
+        a->col = t.col;
         return a;
     }
     if (t.kind == TOK_STRING) {
         Node *s = node_new(N_STRING);
         s->text = t.text;
+        s->filename = ctx && ctx->filename ? xstrdup(ctx->filename) : NULL;
+        s->line = t.line;
+        s->col = t.col;
         return s;
     }
     if (ctx && ctx->filename) {
