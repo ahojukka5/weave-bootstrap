@@ -157,9 +157,9 @@
         (doc "empty program typechecks with result 0")
         (tags unit typecheck)
         (body
-          (let a Arena (arena-new))
-          (let root Int32 (arena-add-node (addr a) (node-kind-list) ""))
-          (let result Int32 (typecheck_program (addr a) root))
+          (let a (ptr Arena) (arena-new))
+          (let root Int32 (arena-add-node a (node-kind-list) ""))
+          (let result Int32 (typecheck_program a root))
           (expect-eq result 0)
         )
       )
