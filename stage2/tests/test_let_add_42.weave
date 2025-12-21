@@ -1,0 +1,21 @@
+(program
+  (name "test-let-add-42")
+  (doc "Ensure let binding and addition evaluate to 42.")
+  (version "0.1")
+
+  (type ExitCode
+    (alias Int32)
+  ) ;; type ExitCode
+
+  (entry main
+    (doc "Bind x and return x+2.")
+    (params ())
+    (returns ExitCode)
+    (body
+      (do
+        (let x Int32 40)
+        (return (+ x 2))
+      ) ;; do
+    ) ;; body
+  ) ;; entry main
+) ;; program
