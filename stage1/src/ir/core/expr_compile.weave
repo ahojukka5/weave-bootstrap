@@ -124,11 +124,13 @@
               (let let-safe String (sanitize-name let-name))
               ;; Compile init first and capture the resulting register
               (let init-reg Int32 (compile-expr a let-init-node env-names env-safe env-types declared struct-names struct-fields decls str-counter out temp fn-sig-names fn-sig-ret-types))
-              ;; Add to env
+              ;; Add to env (which ensures uniqueness)
               (env-add env-names env-safe env-types let-name let-safe let-type-node)
+              ;; Get the actual unique safe name from env
+              (let actual-safe String (env-find-safe env-names env-safe let-name))
               ;; Emit alloca and store
               (buffer-append-string out "  %")
-              (buffer-append-string out let-safe)
+              (buffer-append-string out actual-safe)
               (buffer-append-string out " = alloca ")
               (emit-type-node out a let-type-node)
               (buffer-append-string out "\n")
@@ -139,7 +141,7 @@
               (buffer-append-string out ", ")
               (emit-pointer-type-node out a let-type-node)
               (buffer-append-string out " %")
-              (buffer-append-string out let-safe)
+              (buffer-append-string out actual-safe)
               (buffer-append-string out "\n")
               ;; Check for body (5-child let)
               (let let-body-node Int32 (fifth-child a node))
@@ -381,17 +383,31 @@
           (if-stmt (string-eq head-val "get-field")
             (do
               ;; (get-field type-node field-index ptr-expr)
-              ;; Return a pointer to the requested field (no load here)
+              ;; Get field pointer then load the value
               (let elem-ty-node Int32 (second-child a node))
               (let idx-node Int32 (third-child a node))
               (let ptr-node Int32 (fourth-child a node))
               (let idx_str String (arena-value a idx-node))
+              (let struct-name String (get-struct-name-from-type-node a elem-ty-node))
+              (let fty String (struct-field-type struct-names struct-fields struct-name (string-to-int idx_str)))
               ;; Compile pointer expression
               (compile-expr a ptr-node env-names env-safe env-types declared struct-names struct-fields decls str-counter out temp fn-sig-names fn-sig-ret-types)
               (let ptr-reg Int32 (- (load Int32 temp) 1))
-              ;; GEP to field pointer and return it
+              ;; GEP to field pointer
               (let field-ptr Int32 (compile-get-field-node a elem-ty-node idx_str ptr-reg struct-names struct-fields out temp))
-              (return field-ptr)
+              ;; Load the field value
+              (let t Int32 (load Int32 temp))
+              (buffer-append-string out "  ")
+              (emit-temp out t)
+              (buffer-append-string out " = load ")
+              (buffer-append-string out (map-simple-type-name fty))
+              (buffer-append-string out ", ")
+              (buffer-append-string out (map-simple-type-name fty))
+              (buffer-append-string out "* ")
+              (emit-temp out field-ptr)
+              (buffer-append-string out "\n")
+              (store Int32 temp (+ t 1))
+              (return t)
             )
             (do 0)
           ) ;; if-stmt
@@ -489,8 +505,19 @@
                   (set field (arena-next-sibling a field))
                 ) ;; do
               ) ;; while
-              ;; Return the pointer to the allocated struct
-              (return result)
+              ;; Load and return the struct value
+              (let ret Int32 (load Int32 temp))
+              (buffer-append-string out "  ")
+              (emit-temp out ret)
+              (buffer-append-string out " = load %")
+              (buffer-append-string out (sanitize-name struct-name))
+              (buffer-append-string out ", %")
+              (buffer-append-string out (sanitize-name struct-name))
+              (buffer-append-string out "* ")
+              (emit-temp out result)
+              (buffer-append-string out "\n")
+              (store Int32 temp (+ ret 1))
+              (return ret)
             )
             (do 0)
           ) ;; if-stmt
