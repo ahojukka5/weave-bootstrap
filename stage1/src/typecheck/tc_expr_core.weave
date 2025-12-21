@@ -58,6 +58,26 @@
           )
           (do 0)
         )
+        ;; Check load arity
+        (if-stmt (string-eq head-val "load")
+          (do
+            (if-stmt (!= (child-count a node) 2)
+              (return (tc-error "Arity mismatch in load"))
+              (do 0)
+            )
+          )
+          (do 0)
+        )
+        ;; Check store arity  
+        (if-stmt (string-eq head-val "store")
+          (do
+            (if-stmt (!= (child-count a node) 3)
+              (return (tc-error "Arity mismatch in store"))
+              (do 0)
+            )
+          )
+          (do 0)
+        )
         ;; Simple function call: head is a name, children are args
         (if-stmt (&& (== (arena-kind a node) (node-kind-list)) (== (arena-kind a head) (node-kind-atom)))
           (do
