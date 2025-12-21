@@ -9,6 +9,7 @@ set(CMAKE_C_EXTENSIONS ON)
 
 add_executable(weavec0
   src/common.c
+  src/diagnostics.c
   src/lexer.c
   src/sexpr.c
   src/fs.c
@@ -62,7 +63,7 @@ foreach(test_file IN LISTS STAGE0_TESTS)
       -DWEAVEC0=$<TARGET_FILE:weavec0>
       -DCLANG=${CLANG_EXE}
       -DTEST_FILE=${CMAKE_CURRENT_SOURCE_DIR}/${test_file}
-      -DRUNTIME=${CMAKE_CURRENT_SOURCE_DIR}/runtime/runtime.c
+      -DRUNTIME=${CMAKE_CURRENT_SOURCE_DIR}/runtime/stdlib_runtime.c
       -DOUT_DIR=${CMAKE_CURRENT_BINARY_DIR}/tests/${test_name}
       -P ${CMAKE_CURRENT_SOURCE_DIR}/tests/run_test.cmake
   )
@@ -89,7 +90,7 @@ foreach(test_file IN LISTS STAGE0_TESTS)
           -DCLANG=${CLANG_EXE}
           -DSRC_FILE=${CMAKE_CURRENT_SOURCE_DIR}/${test_file}
           -DTEST_NAME=${tname}
-          -DRUNTIME=${CMAKE_CURRENT_SOURCE_DIR}/runtime/runtime.c
+          -DRUNTIME=${CMAKE_CURRENT_SOURCE_DIR}/runtime/stdlib_runtime.c
           -DOUT_DIR=${CMAKE_CURRENT_BINARY_DIR}/tests/${test_name}_embedded
           -P ${CMAKE_CURRENT_SOURCE_DIR}/tests/run_embedded_tests.cmake
       )
@@ -103,7 +104,7 @@ foreach(test_file IN LISTS STAGE0_TESTS)
         -DWEAVEC0=$<TARGET_FILE:weavec0>
         -DCLANG=${CLANG_EXE}
         -DSRC_FILE=${CMAKE_CURRENT_SOURCE_DIR}/${test_file}
-        -DRUNTIME=${CMAKE_CURRENT_SOURCE_DIR}/runtime/runtime.c
+        -DRUNTIME=${CMAKE_CURRENT_SOURCE_DIR}/runtime/stdlib_runtime.c
         -DOUT_DIR=${CMAKE_CURRENT_BINARY_DIR}/tests/${test_name}_embedded
         -P ${CMAKE_CURRENT_SOURCE_DIR}/tests/run_embedded_tests.cmake
     )
