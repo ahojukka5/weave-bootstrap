@@ -1,0 +1,20 @@
+(program
+  (name "test-ptr-add-42")
+  (doc "Use ptr-add to index into a malloc'd int buffer and return sum.")
+
+  (entry main
+    (doc "Write 40 and 2, then read and add via ptr-add.")
+    (params)
+    (returns Int32)
+    (body
+      (do
+        (let buf (ptr Int32) (ccall "malloc" (returns (ptr Int32)) (args (Int32 8))))
+        (store Int32 40 (ptr-add Int32 buf 0))
+        (store Int32 2 (ptr-add Int32 buf 1))
+        (let a Int32 (load Int32 (ptr-add Int32 buf 0)))
+        (let b Int32 (load Int32 (ptr-add Int32 buf 1)))
+        (return (+ a b))
+      ) ;; do
+    ) ;; body
+  ) ;; entry
+) ;; program
