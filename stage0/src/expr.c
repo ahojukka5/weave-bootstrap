@@ -164,15 +164,46 @@ static Value cg_make_struct(IrCtx *ir, VarEnv *env, Node *list) {
     TypeRef *ty = parse_type_node(tenv, list_nth(list, 1));
     StructDef *sd = NULL;
     int i;
+    int size_ptr = ir_fresh_temp(ir);
+    int size_i64 = ir_fresh_temp(ir);
+    int malloc_result = ir_fresh_temp(ir);
     int ptr = ir_fresh_temp(ir);
-    int val = ir_fresh_temp(ir);
     if (!ty || ty->kind != TY_STRUCT) die("make expects struct type");
     sd = type_env_find_struct(tenv, ty->name);
+    
+    /* Calculate struct size using GEP null trick */
+    sb_append(ir->out, "  ");
+    ir_emit_temp(ir->out, size_ptr);
+    sb_append(ir->out, " = getelementptr ");
+    emit_llvm_type(ir->out, ty);
+    sb_append(ir->out, ", ");
+    emit_llvm_type(ir->out, ty);
+    sb_append(ir->out, "* null, i32 1\n");
+    
+    /* Convert pointer to integer (gives us the size) */
+    sb_append(ir->out, "  ");
+    ir_emit_temp(ir->out, size_i64);
+    sb_append(ir->out, " = ptrtoint ");
+    emit_llvm_type(ir->out, ty);
+    sb_append(ir->out, "* ");
+    ir_emit_temp(ir->out, size_ptr);
+    sb_append(ir->out, " to i32\n");
+    
+    /* Call malloc */
+    sb_append(ir->out, "  ");
+    ir_emit_temp(ir->out, malloc_result);
+    sb_append(ir->out, " = call i8* @malloc(i32 ");
+    ir_emit_temp(ir->out, size_i64);
+    sb_append(ir->out, ")\n");
+    
+    /* Bitcast to struct pointer */
     sb_append(ir->out, "  ");
     ir_emit_temp(ir->out, ptr);
-    sb_append(ir->out, " = alloca ");
+    sb_append(ir->out, " = bitcast i8* ");
+    ir_emit_temp(ir->out, malloc_result);
+    sb_append(ir->out, " to ");
     emit_llvm_type(ir->out, ty);
-    sb_append(ir->out, "\n");
+    sb_append(ir->out, "*\n");
     for (i = 2; i < list->count; i++) {
         Node *field = list_nth(list, i);
         const char *fname = atom_text(list_nth(field, 0));
@@ -201,16 +232,8 @@ static Value cg_make_struct(IrCtx *ir, VarEnv *env, Node *list) {
         ir_emit_temp(ir->out, pfi);
         sb_append(ir->out, "\n");
     }
-    sb_append(ir->out, "  ");
-    ir_emit_temp(ir->out, val);
-    sb_append(ir->out, " = load ");
-    emit_llvm_type(ir->out, ty);
-    sb_append(ir->out, ", ");
-    emit_llvm_type(ir->out, ty);
-    sb_append(ir->out, "* ");
-    ir_emit_temp(ir->out, ptr);
-    sb_append(ir->out, "\n");
-    return value_temp(ty, val);
+    /* Return pointer to the allocated struct instead of loading the value */
+    return value_temp(type_ptr(ty), ptr);
 }
 
 static Value cg_get_field(IrCtx *ir, VarEnv *env, Node *list) {
