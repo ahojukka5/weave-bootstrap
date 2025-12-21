@@ -28,16 +28,18 @@
   ) ;; fn log-include
 
   (fn is-printable-path
-    (doc "Return 1 if path is non-empty, ends with .weave, and all chars are ASCII [A-Za-z0-9._/\\-].")
+    (doc "Return 1 if path is non-empty, ends with .weave, contains '/', and all chars are ASCII [A-Za-z0-9._/\\-].")
     (params (path String)) (returns Int32)
     (body
       (let len Int32 (string-length path))
       (if-stmt (<= len 6) (return 0) (do 0))
       (if-stmt (!= (string-ends-with path ".weave") 1) (return 0) (do 0))
+      (let has-slash Int32 0)
       (let i Int32 0)
       (while (< i len)
         (do
           (let ch Int32 (string-char-at path i))
+          (if-stmt (== ch 47) (set has-slash 1) (do 0))  ;; Check for '/'
           (if-stmt
             (||
               (&& (>= ch 48) (<= ch 57))    ;; 0-9
@@ -55,6 +57,7 @@
           (set i (+ i 1))
         )
       )
+      (if-stmt (== has-slash 0) (return 0) (do 0))  ;; Require at least one '/'
       (return 1)
     )
     (tests
