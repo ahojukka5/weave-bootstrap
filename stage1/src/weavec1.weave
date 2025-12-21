@@ -128,21 +128,21 @@
           (do 0)
         )
         
-        (let arena Arena (arena-new))
+        (let arena (ptr Arena) (arena-new))
         ;; Expand includes to bring in prelude and all modules before typecheck/codegen
         (let out-root Int32 0)
-        (let rc Int32 (expand-root input-path (addr arena) (addr out-root)))
+        (let rc Int32 (expand-root input-path arena (addr out-root)))
         (if-stmt (!= rc 0) (return 1) (do 0))
         (let root Int32 out-root)
         (ccall "puts" (returns Int32) (args (String "[weavec1] lowering...")))
-        (let lc Int32 (lower-program (addr arena) root))
+        (let lc Int32 (lower-program arena root))
         (ccall "puts" (returns Int32) (args (String "[weavec1] typechecking...")))
-        (let tc Int32 (typecheck_program (addr arena) root))
+        (let tc Int32 (typecheck_program arena root))
         (ccall "puts" (returns Int32) (args (String "[weavec1] typechecking done")))
         (if-stmt (!= tc 0) (return 1) (do 0))
         (ccall "puts" (returns Int32) (args (String "[weavec1] generating IR...")))
         (let ir-buf Buffer (buffer-new))
-        (generate-ir (addr arena) root ir-buf 0)
+        (generate-ir arena root ir-buf 0)
         
         ;; Mode selection and output
         (if-stmt (!= has-emit-llvm 0)
