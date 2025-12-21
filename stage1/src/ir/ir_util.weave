@@ -185,6 +185,12 @@
       (if-stmt (string-eq fn-name "string-length") (return "i32") (do 0))
       (if-stmt (string-eq fn-name "string-eq") (return "i32") (do 0))
       (if-stmt (string-eq fn-name "buffer-to-string") (return "i8*") (do 0))
+      (if-stmt (string-eq fn-name "c-malloc") (return "i8*") (do 0))
+      (if-stmt (string-eq fn-name "c-strlen") (return "i32") (do 0))
+      (if-stmt (string-eq fn-name "c-atoi") (return "i32") (do 0))
+      (if-stmt (string-eq fn-name "c-strcpy") (return "i8*") (do 0))
+      (if-stmt (string-eq fn-name "c-memcpy") (return "i8*") (do 0))
+      (if-stmt (string-eq fn-name "c-strcat") (return "i8*") (do 0))
       (return "i32")
     ))
     (tests
