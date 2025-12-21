@@ -176,17 +176,29 @@ static void compile_fn_form(IrCtx *ir, Node *fn_form, const char *override_name)
                 has_tests = 1;
                 /* Verify that tests section has at least one test */
                 if (extra->count < 2) {
-                    fprintf(stderr, "ERROR: function '%s' has empty (tests ...) section\n", name ? name : "<unknown>");
-                    fprintf(stderr, "Every function must have at least one test.\n");
-                    exit(1);
+                    char msg[256];
+                    snprintf(msg, sizeof(msg), "function '%s' has empty (tests ...) section",
+                             name ? name : "<unknown>");
+                    diag_fatal(fn_form && fn_form->filename ? fn_form->filename : NULL,
+                               fn_form ? fn_form->line : 0,
+                               fn_form ? fn_form->col : 0,
+                               "missing-tests",
+                               msg,
+                               "Every function must have at least one test.");
                 }
                 break;
             }
         }
         if (!has_tests) {
-            fprintf(stderr, "ERROR: function '%s' is missing required (tests ...) section\n", name ? name : "<unknown>");
-            fprintf(stderr, "Every function must have at least one test.\n");
-            exit(1);
+            char msg[256];
+            snprintf(msg, sizeof(msg), "function '%s' is missing required (tests ...) section",
+                     name ? name : "<unknown>");
+            diag_fatal(fn_form && fn_form->filename ? fn_form->filename : NULL,
+                       fn_form ? fn_form->line : 0,
+                       fn_form ? fn_form->col : 0,
+                       "missing-tests",
+                       msg,
+                       "Every function must have at least one test.");
         }
     }
 
@@ -472,6 +484,7 @@ static int try_desugar_expect(IrCtx *ir, VarEnv *env, Node *form, const char *te
     if (!head || head->kind != N_ATOM) return 0;
 
     if (is_atom(head, "expect-eq")) {
+        ir->saw_expect = 1;
         /* (expect-eq actual expected [debug ...]) */
         Node *actual_node = list_nth(form, 1);
         Node *expected_node = list_nth(form, 2);
@@ -483,25 +496,42 @@ static int try_desugar_expect(IrCtx *ir, VarEnv *env, Node *form, const char *te
         int tcond = ir_fresh_temp(ir);
         int pass_l = ir_fresh_label(ir);
         int fail_l = ir_fresh_label(ir);
-        /* Compare actual == expected */
-        sb_append(ir->out, "  ");
-        ir_emit_temp(ir->out, tcmp);
-        sb_append(ir->out, " = icmp eq ");
-        emit_llvm_type(ir->out, actual_val.type);
-        sb_append(ir->out, " ");
-        emit_value_only(ir->out, actual_val);
-        sb_append(ir->out, ", ");
-        emit_value_only(ir->out, expected_val);
-        sb_append(ir->out, "\n");
-        sb_append(ir->out, "  ");
-        ir_emit_temp(ir->out, tzext);
-        sb_append(ir->out, " = zext i1 ");
-        ir_emit_temp(ir->out, tcmp);
-        sb_append(ir->out, " to i32\n");
+        /* Compare actual == expected; for strings use weave_string_eq */
+        if (actual_val.type && actual_val.type->kind == TY_I8PTR && expected_val.type && expected_val.type->kind == TY_I8PTR) {
+            /* Declare weave_string_eq if needed */
+            if (!sl_contains(&ir->declared_ccalls, "weave_string_eq")) {
+                sl_push(&ir->declared_ccalls, "weave_string_eq");
+                sb_append(&ir->decls, "declare i32 @weave_string_eq(i8*, i8*)\n");
+            }
+            sb_append(ir->out, "  ");
+            ir_emit_temp(ir->out, tcmp);
+            sb_append(ir->out, " = call i32 @weave_string_eq(i8* ");
+            emit_value_only(ir->out, actual_val);
+            sb_append(ir->out, ", i8* ");
+            emit_value_only(ir->out, expected_val);
+            sb_append(ir->out, ")\n");
+        } else {
+            sb_append(ir->out, "  ");
+            ir_emit_temp(ir->out, tcmp);
+            sb_append(ir->out, " = icmp eq ");
+            emit_llvm_type(ir->out, actual_val.type);
+            sb_append(ir->out, " ");
+            emit_value_only(ir->out, actual_val);
+            sb_append(ir->out, ", ");
+            emit_value_only(ir->out, expected_val);
+            sb_append(ir->out, "\n");
+            sb_append(ir->out, "  ");
+            ir_emit_temp(ir->out, tzext);
+            sb_append(ir->out, " = zext i1 ");
+            ir_emit_temp(ir->out, tcmp);
+            sb_append(ir->out, " to i32\n");
+            /* normalize tcmp to i32 for consistent branch below */
+            tcmp = tzext;
+        }
         sb_append(ir->out, "  ");
         ir_emit_temp(ir->out, tcond);
         sb_append(ir->out, " = icmp ne i32 ");
-        ir_emit_temp(ir->out, tzext);
+        ir_emit_temp(ir->out, tcmp);
         sb_append(ir->out, ", 0\n");
         sb_append(ir->out, "  br i1 ");
         ir_emit_temp(ir->out, tcond);
@@ -515,8 +545,19 @@ static int try_desugar_expect(IrCtx *ir, VarEnv *env, Node *form, const char *te
         {
             char msgbuf[512];
             int sptr;
-            snprintf(msgbuf, sizeof(msgbuf), "%s: expect-eq failed: expected %%d, got %%d",
-                     test_name ? test_name : "test");
+            const char *fmt_expected = "%p";
+            const char *fmt_actual = "%p";
+            if (expected_val.type && expected_val.type->kind == TY_I32) fmt_expected = "%d";
+            else if (expected_val.type && expected_val.type->kind == TY_I8PTR) fmt_expected = "%s";
+            if (actual_val.type && actual_val.type->kind == TY_I32) fmt_actual = "%d";
+            else if (actual_val.type && actual_val.type->kind == TY_I8PTR) fmt_actual = "%s";
+            snprintf(msgbuf, sizeof(msgbuf), "%s:%d:%d: %s: expect-eq failed: expected %s, got %s",
+                     form && form->filename ? form->filename : "<unknown>",
+                     form ? form->line : 0,
+                     form ? form->col : 0,
+                     test_name ? test_name : "test",
+                     fmt_expected,
+                     fmt_actual);
             sptr = emit_c_string_ptr(ir, msgbuf);
             if (!sl_contains(&ir->declared_ccalls, "printf")) {
                 sl_push(&ir->declared_ccalls, "printf");
@@ -524,20 +565,18 @@ static int try_desugar_expect(IrCtx *ir, VarEnv *env, Node *form, const char *te
             }
             sb_append(ir->out, "  call i32 (i8*, ...) @printf(i8* ");
             ir_emit_temp(ir->out, sptr);
-            sb_append(ir->out, ", i32 ");
+            sb_append(ir->out, ", ");
+            emit_llvm_type(ir->out, expected_val.type);
+            sb_append(ir->out, " ");
             emit_value_only(ir->out, expected_val);
-            sb_append(ir->out, ", i32 ");
+            sb_append(ir->out, ", ");
+            emit_llvm_type(ir->out, actual_val.type);
+            sb_append(ir->out, " ");
             emit_value_only(ir->out, actual_val);
             sb_append(ir->out, ")\n");
         }
-        /* Run optional debug block */
-        if (debug_node && debug_node->kind == N_LIST && is_atom(list_nth(debug_node, 0), "debug")) {
-            int di;
-            for (di = 1; di < debug_node->count; di++) {
-                Value tmp = {0};
-                cg_stmt(ir, env, list_nth(debug_node, di), ret_type, &tmp);
-            }
-        }
+        /* Skip optional debug block to avoid external dependencies in tests */
+        /* Intentionally not executing (debug ...) statements inside expect-eq. */
         sb_append(ir->out, "  ret i32 1\n");
         /* Pass: continue to next statement */
         ir_emit_label_def(ir->out, pass_l);
@@ -545,6 +584,7 @@ static int try_desugar_expect(IrCtx *ir, VarEnv *env, Node *form, const char *te
     }
 
     if (is_atom(head, "expect-ne")) {
+        ir->saw_expect = 1;
         /* (expect-ne actual expected [debug ...]) */
         Node *actual_node = list_nth(form, 1);
         Node *expected_node = list_nth(form, 2);
@@ -557,25 +597,41 @@ static int try_desugar_expect(IrCtx *ir, VarEnv *env, Node *form, const char *te
         int pass_l = ir_fresh_label(ir);
         int fail_l = ir_fresh_label(ir);
         int end_l = ir_fresh_label(ir);
-        /* Compare actual != expected */
-        sb_append(ir->out, "  ");
-        ir_emit_temp(ir->out, tcmp);
-        sb_append(ir->out, " = icmp ne ");
-        emit_llvm_type(ir->out, actual_val.type);
-        sb_append(ir->out, " ");
-        emit_value_only(ir->out, actual_val);
-        sb_append(ir->out, ", ");
-        emit_value_only(ir->out, expected_val);
-        sb_append(ir->out, "\n");
-        sb_append(ir->out, "  ");
-        ir_emit_temp(ir->out, tzext);
-        sb_append(ir->out, " = zext i1 ");
-        ir_emit_temp(ir->out, tcmp);
-        sb_append(ir->out, " to i32\n");
+        /* Compare actual != expected; for strings use weave_string_eq and invert */
+        if (actual_val.type && actual_val.type->kind == TY_I8PTR && expected_val.type && expected_val.type->kind == TY_I8PTR) {
+            if (!sl_contains(&ir->declared_ccalls, "weave_string_eq")) {
+                sl_push(&ir->declared_ccalls, "weave_string_eq");
+                sb_append(&ir->decls, "declare i32 @weave_string_eq(i8*, i8*)\n");
+            }
+            sb_append(ir->out, "  ");
+            ir_emit_temp(ir->out, tcmp);
+            sb_append(ir->out, " = call i32 @weave_string_eq(i8* ");
+            emit_value_only(ir->out, actual_val);
+            sb_append(ir->out, ", i8* ");
+            emit_value_only(ir->out, expected_val);
+            sb_append(ir->out, ")\n");
+        } else {
+            sb_append(ir->out, "  ");
+            ir_emit_temp(ir->out, tcmp);
+            sb_append(ir->out, " = icmp ne ");
+            emit_llvm_type(ir->out, actual_val.type);
+            sb_append(ir->out, " ");
+            emit_value_only(ir->out, actual_val);
+            sb_append(ir->out, ", ");
+            emit_value_only(ir->out, expected_val);
+            sb_append(ir->out, "\n");
+            sb_append(ir->out, "  ");
+            ir_emit_temp(ir->out, tzext);
+            sb_append(ir->out, " = zext i1 ");
+            ir_emit_temp(ir->out, tcmp);
+            sb_append(ir->out, " to i32\n");
+            tcmp = tzext;
+        }
         sb_append(ir->out, "  ");
         ir_emit_temp(ir->out, tcond);
+        /* For string eq, tcmp is i32 eq result; inequality when tcmp == 0 */
         sb_append(ir->out, " = icmp ne i32 ");
-        ir_emit_temp(ir->out, tzext);
+        ir_emit_temp(ir->out, tcmp);
         sb_append(ir->out, ", 0\n");
         sb_append(ir->out, "  br i1 ");
         ir_emit_temp(ir->out, tcond);
@@ -592,8 +648,15 @@ static int try_desugar_expect(IrCtx *ir, VarEnv *env, Node *form, const char *te
         {
             char msgbuf[512];
             int sptr;
-            snprintf(msgbuf, sizeof(msgbuf), "%s: expect-ne failed: values should differ, both are %%d",
-                     test_name ? test_name : "test");
+            const char *fmt_actual = "%p";
+            if (actual_val.type && actual_val.type->kind == TY_I32) fmt_actual = "%d";
+            else if (actual_val.type && actual_val.type->kind == TY_I8PTR) fmt_actual = "%s";
+            snprintf(msgbuf, sizeof(msgbuf), "%s:%d:%d: %s: expect-ne failed: values should differ, both are %s",
+                     form && form->filename ? form->filename : "<unknown>",
+                     form ? form->line : 0,
+                     form ? form->col : 0,
+                     test_name ? test_name : "test",
+                     fmt_actual);
             sptr = emit_c_string_ptr(ir, msgbuf);
             if (!sl_contains(&ir->declared_ccalls, "printf")) {
                 sl_push(&ir->declared_ccalls, "printf");
@@ -601,27 +664,24 @@ static int try_desugar_expect(IrCtx *ir, VarEnv *env, Node *form, const char *te
             }
             sb_append(ir->out, "  call i32 (i8*, ...) @printf(i8* ");
             ir_emit_temp(ir->out, sptr);
-            sb_append(ir->out, ", i32 ");
+            sb_append(ir->out, ", ");
+            emit_llvm_type(ir->out, actual_val.type);
+            sb_append(ir->out, " ");
             emit_value_only(ir->out, actual_val);
             sb_append(ir->out, ")\n");
         }
-        if (debug_node && debug_node->kind == N_LIST && is_atom(list_nth(debug_node, 0), "debug")) {
-            int di;
-            for (di = 1; di < debug_node->count; di++) {
-                Value tmp = {0};
-                cg_stmt(ir, env, list_nth(debug_node, di), ret_type, &tmp);
-            }
-        }
+        /* Intentionally skip (debug ...) to keep embedded tests self-contained. */
         sb_append(ir->out, "  ret i32 1\n");
         ir_emit_label_def(ir->out, pass_l);
         return 1;
     }
 
     if (is_atom(head, "expect-true")) {
+        ir->saw_expect = 1;
         /* (expect-true cond [debug ...]) */
         Node *cond_node = list_nth(form, 1);
         Node *debug_node = (form->count > 2) ? list_nth(form, 2) : NULL;
-        Value cond_val = ensure_type_ctx(ir, cg_expr(ir, env, cond_node), type_i32(), "expect-true");
+        Value cond_val = ensure_type_ctx_at(ir, cg_expr(ir, env, cond_node), type_i32(), "expect-true", cond_node);
         int tcmp = ir_fresh_temp(ir);
         int pass_l = ir_fresh_label(ir);
         int fail_l = ir_fresh_label(ir);
@@ -641,7 +701,10 @@ static int try_desugar_expect(IrCtx *ir, VarEnv *env, Node *form, const char *te
         {
             char msgbuf[512];
             int sptr;
-            snprintf(msgbuf, sizeof(msgbuf), "%s: expect-true failed: condition was false",
+            snprintf(msgbuf, sizeof(msgbuf), "%s:%d:%d: %s: expect-true failed: condition was false",
+                     form && form->filename ? form->filename : "<unknown>",
+                     form ? form->line : 0,
+                     form ? form->col : 0,
                      test_name ? test_name : "test");
             sptr = emit_c_string_ptr(ir, msgbuf);
             if (!sl_contains(&ir->declared_ccalls, "printf")) {
@@ -652,23 +715,18 @@ static int try_desugar_expect(IrCtx *ir, VarEnv *env, Node *form, const char *te
             ir_emit_temp(ir->out, sptr);
             sb_append(ir->out, ")\n");
         }
-        if (debug_node && debug_node->kind == N_LIST && is_atom(list_nth(debug_node, 0), "debug")) {
-            int di;
-            for (di = 1; di < debug_node->count; di++) {
-                Value tmp = {0};
-                cg_stmt(ir, env, list_nth(debug_node, di), ret_type, &tmp);
-            }
-        }
+        /* Intentionally skip (debug ...) to keep embedded tests self-contained. */
         sb_append(ir->out, "  ret i32 1\n");
         ir_emit_label_def(ir->out, pass_l);
         return 1;
     }
 
     if (is_atom(head, "expect-false")) {
+        ir->saw_expect = 1;
         /* (expect-false cond [debug ...]) */
         Node *cond_node = list_nth(form, 1);
         Node *debug_node = (form->count > 2) ? list_nth(form, 2) : NULL;
-        Value cond_val = ensure_type_ctx(ir, cg_expr(ir, env, cond_node), type_i32(), "expect-false");
+        Value cond_val = ensure_type_ctx_at(ir, cg_expr(ir, env, cond_node), type_i32(), "expect-false", cond_node);
         int tcmp = ir_fresh_temp(ir);
         int pass_l = ir_fresh_label(ir);
         int fail_l = ir_fresh_label(ir);
@@ -688,7 +746,10 @@ static int try_desugar_expect(IrCtx *ir, VarEnv *env, Node *form, const char *te
         {
             char msgbuf[512];
             int sptr;
-            snprintf(msgbuf, sizeof(msgbuf), "%s: expect-false failed: condition was true",
+            snprintf(msgbuf, sizeof(msgbuf), "%s:%d:%d: %s: expect-false failed: condition was true",
+                     form && form->filename ? form->filename : "<unknown>",
+                     form ? form->line : 0,
+                     form ? form->col : 0,
                      test_name ? test_name : "test");
             sptr = emit_c_string_ptr(ir, msgbuf);
             if (!sl_contains(&ir->declared_ccalls, "printf")) {
@@ -793,6 +854,8 @@ static void emit_tests_for_fn(IrCtx *ir, Node *fn_form) {
             ir->current_fn = buf;
             /* Emit header for test function: define i32 @name() { */
             emit_fn_header(ir, NULL, buf, ret_type, NULL);
+            /* Reset per-test expect flag */
+            ir->saw_expect = 0;
 
             env_init(&env);
             /* Phase 1: setup (optional) */
@@ -845,7 +908,10 @@ static void emit_tests_for_fn(IrCtx *ir, Node *fn_form) {
                     }
                 }
                 if (!did_ret) {
-                    if (has_last && last_expr.type) {
+                    /* If any expect-* assertions were present, default to success return. */
+                    if (ir->saw_expect) {
+                        sb_append(ir->out, "  ret i32 0\n");
+                    } else if (has_last && last_expr.type) {
                         Value rv = ensure_type_ctx(ir, last_expr, ret_type, "implicit-ret");
                         sb_append(ir->out, "  ret ");
                         emit_llvm_type(ir->out, ret_type);
@@ -981,6 +1047,54 @@ void compile_to_llvm_ir(Node *top, StrBuf *out, int run_tests_mode, StrList *sel
 
         collect_types(&tenv, &ir, decls);
         collect_signatures(&tenv, &fns, decls);
+
+        /* Built-in signatures for functions used in tests but not declared in Weave code. */
+        {
+            /* arena-create: returns ptr(Arena), takes Int32 size */
+            TypeRef *arena_ptr = type_ptr(type_struct("Arena"));
+            TypeRef *param_types[1];
+            param_types[0] = type_i32();
+            fn_table_add(&fns, "arena-create", arena_ptr, 1, param_types);
+        }
+
+          /* Define Arena struct type only if not already defined by user code.
+              Arena has four i8* fields: kinds, values, first, next */
+        if (!type_env_find_struct(&tenv, "Arena")) {
+            sb_append(&ir.typedefs, "%Arena = type { i8*, i8*, i8*, i8* }\n");
+        }
+
+        /* Ensure malloc is declared for arena-create */
+        if (!sl_contains(&ir.declared_ccalls, "malloc")) {
+            sl_push(&ir.declared_ccalls, "malloc");
+            sb_append(&ir.decls, "declare i8* @malloc(i32)\n");
+                /* Ensure array functions are declared for arena-create */
+                if (!sl_contains(&ir.declared_ccalls, "weave_array_i32_new")) {
+                    sl_push(&ir.declared_ccalls, "weave_array_i32_new");
+                    sb_append(&ir.decls, "declare i8* @weave_array_i32_new()\n");
+                }
+                if (!sl_contains(&ir.declared_ccalls, "weave_array_str_new")) {
+                    sl_push(&ir.declared_ccalls, "weave_array_str_new");
+                    sb_append(&ir.decls, "declare i8* @weave_array_str_new()\n");
+                }
+        }
+
+        sb_append(&funcs, "define %Arena* @arena-create(i32 %size) {\n");
+        sb_append(&funcs, "  %kinds = call i8* @weave_array_i32_new()\n");
+        sb_append(&funcs, "  %values = call i8* @weave_array_str_new()\n");
+        sb_append(&funcs, "  %first = call i8* @weave_array_i32_new()\n");
+        sb_append(&funcs, "  %next = call i8* @weave_array_i32_new()\n");
+        sb_append(&funcs, "  %raw = call i8* @malloc(i32 32)\n");
+        sb_append(&funcs, "  %a = bitcast i8* %raw to %Arena*\n");
+        sb_append(&funcs, "  %p0 = getelementptr inbounds %Arena, %Arena* %a, i32 0, i32 0\n");
+        sb_append(&funcs, "  store i8* %kinds, i8** %p0\n");
+        sb_append(&funcs, "  %p1 = getelementptr inbounds %Arena, %Arena* %a, i32 0, i32 1\n");
+        sb_append(&funcs, "  store i8* %values, i8** %p1\n");
+        sb_append(&funcs, "  %p2 = getelementptr inbounds %Arena, %Arena* %a, i32 0, i32 2\n");
+        sb_append(&funcs, "  store i8* %first, i8** %p2\n");
+        sb_append(&funcs, "  %p3 = getelementptr inbounds %Arena, %Arena* %a, i32 0, i32 3\n");
+        sb_append(&funcs, "  store i8* %next, i8** %p3\n");
+        sb_append(&funcs, "  ret %Arena* %a\n");
+        sb_append(&funcs, "}\n");
 
         /* Emit function declarations/forms first */
         for (i = 0; decls && i < decls->count; i++) {
