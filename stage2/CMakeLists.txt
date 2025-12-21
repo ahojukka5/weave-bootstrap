@@ -18,6 +18,9 @@ endif()
 # Stage1 compiler (built by parent CMake)
 set(WEAVEC1 ${CMAKE_BINARY_DIR}/stage1/weavec1)
 
+# Option to run Stage2 tests with self-hosted weavec2
+option(WEAVE_STAGE2_USE_WEAVEC2 "Use weavec2 (built by stage1) to run Stage2 tests" OFF)
+
 # Build Stage2 (self-hosted: stage1 source compiled by stage1 compiler)
 set(STAGE1_SRC ${CMAKE_SOURCE_DIR}/stage1/src/weavec1.weave)
 set(WEAVEC2_OUT ${CMAKE_BINARY_DIR}/stage2/weavec2)
@@ -31,8 +34,19 @@ add_custom_command(
   COMMENT "Building stage2 compiler (weavec2) via weavec1 (self-hosting)"
   VERBATIM
 )
-# Do not build weavec2 by default to avoid blocking stage1 iteration
-add_custom_target(weavec2_target DEPENDS ${WEAVEC2_OUT})
+# Build weavec2 by default only when explicitly enabled
+if(WEAVE_STAGE2_USE_WEAVEC2)
+  add_custom_target(weavec2_target ALL DEPENDS ${WEAVEC2_OUT})
+else()
+  add_custom_target(weavec2_target DEPENDS ${WEAVEC2_OUT})
+endif()
+
+# Choose compiler for Stage2 tests
+if(WEAVE_STAGE2_USE_WEAVEC2)
+  set(STAGE2_COMPILER ${WEAVEC2_OUT})
+else()
+  set(STAGE2_COMPILER ${WEAVEC1})
+endif()
 
 # Register stage2 tests
 file(GLOB STAGE2_TESTS ${CMAKE_CURRENT_SOURCE_DIR}/tests/test_*.weave)
@@ -48,15 +62,15 @@ foreach(test_file IN LISTS STAGE2_TESTS)
     # Expected to fail at typecheck - just run weavec1 and expect non-zero
     add_test(
       NAME stage2_${test_name}
-      COMMAND bash -c "${WEAVEC1} ${test_file} --emit-llvm -o ${out_dir}/${test_name}.ll 2>&1 && exit 1 || exit 0"
+      COMMAND bash -c "${STAGE2_COMPILER} ${test_file} --emit-llvm -o ${out_dir}/${test_name}.ll 2>&1 && exit 1 || exit 0"
     )
   else()
     # Expected to succeed - compile, link, run, check exit 42
     add_test(
       NAME stage2_${test_name}
-      COMMAND bash -c "${WEAVEC1} ${test_file} --emit-llvm -o ${out_dir}/${test_name}.ll && ${CLANG_EXE} -Wno-null-character ${out_dir}/${test_name}.ll ${WEAVE_RUNTIME} -lm -o ${out_dir}/${test_name} && ${out_dir}/${test_name}; test $? -eq 42"
+      COMMAND bash -c "${STAGE2_COMPILER} ${test_file} --emit-llvm -o ${out_dir}/${test_name}.ll && ${CLANG_EXE} -Wno-null-character ${out_dir}/${test_name}.ll ${WEAVE_RUNTIME} -lm -o ${out_dir}/${test_name} && ${out_dir}/${test_name}; test $? -eq 42"
     )
   endif()
   
-  set_tests_properties(stage2_${test_name} PROPERTIES LABELS "stage2")
+  set_tests_properties(stage2_${test_name} PROPERTIES LABELS "stage2" TIMEOUT 30)
 endforeach()
