@@ -17,6 +17,10 @@ struct Node {
     Node **items;    /* for LIST */
     int count;
     int cap;
+    /* Source location */
+    const char *filename;
+    int line;
+    int col;
 };
 
 Node *parse_top(const char *src, const char *filename);
