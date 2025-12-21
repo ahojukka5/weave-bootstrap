@@ -34,10 +34,10 @@
         (let opt-O String (ccall "weave_get_option" (returns String) (args (String "O"))))
         (let opt-I String (ccall "weave_get_option" (returns String) (args (String "I"))))
         ;; Normalize NULL options to empty strings to avoid libc NULL deref
-        (if-stmt (== (ccall "weave_string_length" (returns Int32) (args (String input-path))) 0) (set input-path "") (do 0))
-        (if-stmt (== (ccall "weave_string_length" (returns Int32) (args (String output-path))) 0) (set output-path "") (do 0))
-        (if-stmt (== (ccall "weave_string_length" (returns Int32) (args (String opt-O))) 0) (set opt-O "") (do 0))
-        (if-stmt (== (ccall "weave_string_length" (returns Int32) (args (String opt-I))) 0) (set opt-I "") (do 0))
+        (if-stmt (== (string-length input-path) 0) (set input-path "") (do 0))
+        (if-stmt (== (string-length output-path) 0) (set output-path "") (do 0))
+        (if-stmt (== (string-length opt-O) 0) (set opt-O "") (do 0))
+        (if-stmt (== (string-length opt-I) 0) (set opt-I "") (do 0))
         (let has-static Int32 (ccall "weave_has_flag" (returns Int32) (args (String "static"))))
         ;; Build extra clang flags string
         (let extra String "")
@@ -90,6 +90,8 @@
         )
         ;; Always silence known runtime warning
         (set extra (string-concat extra " -Wno-null-character"))
+        ;; Disable FastISel to avoid clang crash on PHI handling
+        (set extra (string-concat extra " -mllvm -fast-isel=false"))
         
         (let has-input Int32 0)
         (if-stmt (!= (string-length input-path) 0) (set has-input 1) (do 0))
@@ -136,6 +138,7 @@
         (let lc Int32 (lower-program (addr arena) root))
         (ccall "puts" (returns Int32) (args (String "[weavec1] typechecking...")))
         (let tc Int32 (typecheck_program (addr arena) root))
+        (ccall "puts" (returns Int32) (args (String "[weavec1] typechecking done")))
         (if-stmt (!= tc 0) (return 1) (do 0))
         (ccall "puts" (returns Int32) (args (String "[weavec1] generating IR...")))
         (let ir-buf Buffer (buffer-new))
