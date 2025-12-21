@@ -1,0 +1,20 @@
+(program
+  (name "test-typecheck-bad-field-index")
+  (doc "Indexing past the struct field count should fail.")
+
+  (struct Pair
+    (fields Int32 Int32)
+  ) ;; struct
+
+  (entry main
+    (doc "Use get-field with idx 2 (out of range).")
+    (params)
+    (returns Int32)
+    (body
+      (do
+        (let p (ptr (struct Pair)) (make (struct Pair) 1 2))
+        (return (load Int32 (get-field (struct Pair) 2 p)))
+      ) ;; do
+    ) ;; body
+  ) ;; entry
+) ;; program

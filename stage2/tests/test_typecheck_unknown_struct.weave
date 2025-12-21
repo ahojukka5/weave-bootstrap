@@ -1,0 +1,13 @@
+(program
+  (name "test-typecheck-unknown-struct")
+  (doc "Accessing an unknown struct should fail typecheck.")
+
+  (entry main
+    (doc "Attempt to load from (struct Ghost); should error.")
+    (params)
+    (returns Int32)
+    (body
+      (return (load Int32 (get-field (struct Ghost) 0 (addr main))))
+    ) ;; body
+  ) ;; entry
+) ;; program

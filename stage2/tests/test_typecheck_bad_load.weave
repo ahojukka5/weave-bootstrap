@@ -1,0 +1,12 @@
+(module
+  (name "tc-bad-load")
+  (doc "Negative: load missing pointer should fail arity check.")
+  (entry main
+    (doc "Return 0 via malformed load; typecheck should fail.")
+    (params ())
+    (returns Int32)
+    (body
+      (return (load Int32))
+    ) ;; body
+  ) ;; entry
+) ;; module
