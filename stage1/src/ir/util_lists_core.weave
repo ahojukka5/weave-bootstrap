@@ -1,12 +1,20 @@
 (fn is-list-with-head (doc "Return 1 if node is a list whose first atom equals head.") (params (a (ptr Arena)) (node Int32) (head String)) (returns Int32)
-  (body (if-stmt (== (arena-kind a node) (node-kind-list))
-    (let first Int32 (arena-first-child a node)
-      (if-stmt (== first (- 0 1))
-        (return 0)
-        (if-stmt (== (arena-kind a first) (node-kind-atom)) (return (string-eq (arena-value a first) head)) (return 0))
+  (body (do
+    (let result Int32 0)
+    (if-stmt (== (arena-kind a node) (node-kind-list))
+      (do
+        (let first Int32 (arena-first-child a node))
+        (if-stmt (== first (- 0 1))
+          (set result 0)
+          (if-stmt (== (arena-kind a first) (node-kind-atom))
+            (set result (string-eq (arena-value a first) head))
+            (set result 0)
+          )
+        )
       )
+      (set result 0)
     )
-    (return 0)
+    (return result)
   ))
   (tests
     (test is-list-with-head-cases
