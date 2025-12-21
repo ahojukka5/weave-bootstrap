@@ -19,6 +19,7 @@ typedef struct {
     StrList test_names;      /* Human-readable test names */
     StrList selected_test_names; /* Filters for selected test names */
     StrList selected_tags;        /* Filters for selected tags */
+    int saw_expect;               /* Per-test flag: saw any expect-* assertion */
 } IrCtx;
 
 void ir_init(IrCtx *ir, StrBuf *out);
