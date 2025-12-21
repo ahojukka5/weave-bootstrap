@@ -55,6 +55,77 @@
           (expect-true (> (string-length result-str) 0)))))
   )
 
+  (fn collect-fn-sigs-from-module
+    (doc "Recursively collect fn signatures from a module node.")
+    (params
+      (a (ptr Arena))
+      (module-node Int32)
+      (fn-sig-names ArrayString)
+      (fn-sig-ret-types ArrayInt32)
+    )
+    (returns Int32)
+    (body (do
+      (let child Int32 (arena-first-child a module-node))
+      (while (!= child (- 0 1))
+        (do
+          (if-stmt (is-list-with-head a child "fn")
+            (do
+              (let name-node Int32 (second-child a child))
+              (let fn-name String (arena-value a name-node))
+              (let sib Int32 (arena-next-sibling a name-node))
+              (if-stmt (is-list-with-head a sib "doc")
+                (set sib (arena-next-sibling a sib)) (do 0))
+              (if-stmt (is-list-with-head a sib "params")
+                (set sib (arena-next-sibling a sib)) (do 0))
+              (if-stmt (is-list-with-head a sib "returns")
+                (do
+                  (let ret-type Int32 (second-child a sib))
+                  (array-str-append fn-sig-names fn-name)
+                  (ccall "puts" (returns Int32)
+                    (args (String (string-concat "[collect] fn: " fn-name))))
+                  (array-i32-append fn-sig-ret-types ret-type)
+                )
+                (do 0)
+              )
+            )
+            (do 0)
+          )
+          (if-stmt (is-list-with-head a child "entry")
+            (do
+              (array-str-append fn-sig-names "weave_main")
+              (array-i32-append fn-sig-ret-types (- 0 1))
+            )
+            (do 0)
+          )
+          ;; Recursively scan nested modules
+          (if-stmt (is-list-with-head a child "module")
+            (do
+              (collect-fn-sigs-from-module a child fn-sig-names
+                fn-sig-ret-types)
+            )
+            (do 0)
+          )
+          (set child (arena-next-sibling a child))
+        )
+      )
+      (return 0)
+    ))
+    (tests
+      (test collect-from-module-empty
+        (doc "Test collecting from empty module")
+        (tags unit)
+        (body
+          (let a (ptr Arena) (arena-create 4096))
+          (let root Int32 (parse-string a "(module (name \"test\"))"))
+          (let names ArrayString (array-string-create))
+          (let types ArrayInt32 (array-int32-create))
+          (collect-fn-sigs-from-module a root names types)
+          (expect-eq (array-str-len names) 0)
+        )
+      )
+    )
+  )
+
   (fn collect-fn-sigs
     (doc "Collect function signatures: names -> return type nodes.")
     (params
@@ -74,13 +145,16 @@
               (let name-node Int32 (second-child a child))
               (let fn-name String (arena-value a name-node))
               (let sib Int32 (arena-next-sibling a name-node))
-              (if-stmt (is-list-with-head a sib "doc") (set sib (arena-next-sibling a sib)) (do 0))
-              (if-stmt (is-list-with-head a sib "params") (set sib (arena-next-sibling a sib)) (do 0))
+              (if-stmt (is-list-with-head a sib "doc")
+                (set sib (arena-next-sibling a sib)) (do 0))
+              (if-stmt (is-list-with-head a sib "params")
+                (set sib (arena-next-sibling a sib)) (do 0))
               (if-stmt (is-list-with-head a sib "returns")
                 (do
                   (let ret-type Int32 (second-child a sib))
                   (array-str-append fn-sig-names fn-name)
-                  (ccall "puts" (returns Int32) (args (String (string-concat "[collect] fn: " fn-name))))
+                  (ccall "puts" (returns Int32)
+                    (args (String (string-concat "[collect] fn: " fn-name))))
                   (array-i32-append fn-sig-ret-types ret-type)
                 )
                 (do 0)
@@ -96,41 +170,11 @@
             )
             (do 0)
           )
-          ;; Module: scan nested children for fn/entry
+          ;; Module: recursively scan for fn/entry/module
           (if-stmt (is-list-with-head a child "module")
             (do
-              (let mchild Int32 (arena-first-child a child))
-              (while (!= mchild (- 0 1))
-                (do
-                  (if-stmt (is-list-with-head a mchild "fn")
-                    (do
-                      (let name-node Int32 (second-child a mchild))
-                      (let fn-name String (arena-value a name-node))
-                      (let sib Int32 (arena-next-sibling a name-node))
-                      (if-stmt (is-list-with-head a sib "doc") (set sib (arena-next-sibling a sib)) (do 0))
-                      (if-stmt (is-list-with-head a sib "params") (set sib (arena-next-sibling a sib)) (do 0))
-                      (if-stmt (is-list-with-head a sib "returns")
-                        (do
-                          (let ret-type Int32 (second-child a sib))
-                          (array-str-append fn-sig-names fn-name)
-                          (ccall "puts" (returns Int32) (args (String (string-concat "[collect] fn: " fn-name))))
-                          (array-i32-append fn-sig-ret-types ret-type)
-                        )
-                        (do 0)
-                      )
-                    )
-                    (do 0)
-                  )
-                  (if-stmt (is-list-with-head a mchild "entry")
-                    (do
-                      (array-str-append fn-sig-names "weave_main")
-                      (array-i32-append fn-sig-ret-types (- 0 1))
-                    )
-                    (do 0)
-                  )
-                  (set mchild (arena-next-sibling a mchild))
-                )
-              )
+              (collect-fn-sigs-from-module a child fn-sig-names
+                fn-sig-ret-types)
             )
             (do 0)
           )
