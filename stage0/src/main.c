@@ -260,15 +260,21 @@ int main(int argc, char **argv) {
         pid = fork();
         if (pid == 0) {
             /* Child process - exec clang */
-            const char *clang_args[20];
+            const char *clang_args[24];
             int arg_idx = 0;
             
             clang_args[arg_idx++] = "clang";
+            const char *use_asan_env = getenv("WEAVE_ASAN");
+            int use_asan = (use_asan_env && use_asan_env[0] == '1');
             if (optimize) {
                 clang_args[arg_idx++] = "-O2";
             }
             /* Silence external runtime null-char literal warnings */
             clang_args[arg_idx++] = "-Wno-null-character";
+            if (use_asan) {
+                clang_args[arg_idx++] = "-fsanitize=address";
+                clang_args[arg_idx++] = "-fno-omit-frame-pointer";
+            }
             if (mode == OUTPUT_OBJECT) {
                 clang_args[arg_idx++] = "-c";
             }
