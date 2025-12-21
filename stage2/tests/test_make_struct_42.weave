@@ -1,0 +1,22 @@
+(program
+  (name "test-make-struct-42")
+  (doc "Create a struct via make and return sum of fields.")
+
+  (struct Point
+    (fields Int32 Int32)
+  ) ;; struct
+
+  (entry main
+    (doc "Build Point{40,2} with make, then load fields and add.")
+    (params)
+    (returns Int32)
+    (body
+      (do
+        (let p (ptr (struct Point)) (make (struct Point) 40 2))
+        (let a Int32 (load Int32 (get-field (struct Point) 0 p)))
+        (let b Int32 (load Int32 (get-field (struct Point) 1 p)))
+        (return (+ a b))
+      ) ;; do
+    ) ;; body
+  ) ;; entry
+) ;; program
