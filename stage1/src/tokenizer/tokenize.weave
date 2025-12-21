@@ -26,7 +26,15 @@
                   )
                   (if-stmt (is-symbol-start ch)
                     (do
-                      (set i (read-while src i tmp 1))
+                      (buffer-clear tmp)
+                      (buffer-append-byte tmp ch)
+                      (set i (+ i 1))
+                      (while (&& (< i len) (is-symbol-char (string-char-at src i)))
+                        (do
+                          (buffer-append-byte tmp (string-char-at src i))
+                          (set i (+ i 1))
+                        )
+                      )
                       (array-str-append tokens (string-concat "SYMBOL:" (buffer-to-string tmp)))
                     )
                     (set i (+ i 1))
