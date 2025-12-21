@@ -1,11 +1,12 @@
 (module
   (name "stage1-string")
   (doc "String utilities implemented using libc wrappers.")
-
   (include "libc.weave")
+  (include "buffers.weave")
 
   (type Int8 (alias Int32))
-
+  
+  ;; String utility functions
   (fn string-length
     (doc "Return length of null-terminated string.")
     (params (s String)) (returns Int32)
@@ -137,12 +138,7 @@
     (doc "Return byte value at index or 0 if out of bounds.")
     (params (s String) (idx Int32)) (returns Int32)
     (body
-      (return
-        (ccall "weave_string_char_at"
-          (returns Int32)
-          (args (String s) (Int32 idx))
-        )
-      )
+      (return (ccall "weave_string_char_at" (returns Int32) (args (String s) (Int32 idx))))
     )
     (tests
       (test string-char-at-basic
@@ -153,11 +149,51 @@
           (expect-eq result 97)
         )
       )
-      (test string-char-at-oob
-        (doc "out-of-bounds index returns 0")
+      (test string-char-at-middle
+        (doc "middle char of 'abc' is 'b' (98)")
+        (tags unit string)
+        (body
+          (let result Int32 (string-char-at "abc" 1))
+          (expect-eq result 98)
+        )
+      )
+      (test string-char-at-last
+        (doc "last char of 'abc' is 'c' (99)")
+        (tags unit string)
+        (body
+          (let result Int32 (string-char-at "abc" 2))
+          (expect-eq result 99)
+        )
+      )
+      (test string-char-at-oob-positive
+        (doc "out-of-bounds positive index returns 0")
         (tags unit string)
         (body
           (let result Int32 (string-char-at "abc" 5))
+          (expect-eq result 0)
+        )
+      )
+      (test string-char-at-oob-negative
+        (doc "negative index returns 0")
+        (tags unit string)
+        (body
+          (let result Int32 (string-char-at "abc" (- 0 1)))
+          (expect-eq result 0)
+        )
+      )
+      (test string-char-at-empty
+        (doc "char-at on empty string returns 0")
+        (tags unit string)
+        (body
+          (let result Int32 (string-char-at "" 0))
+          (expect-eq result 0)
+        )
+      )
+      (test string-char-at-at-length
+        (doc "index at length (one past end) returns 0")
+        (tags unit string)
+        (body
+          (let result Int32 (string-char-at "abc" 3))
           (expect-eq result 0)
         )
       )
@@ -168,11 +204,24 @@
     (doc "Return substring of length len starting at start.")
     (params (s String) (start Int32) (len Int32)) (returns String)
     (body
-      (return
-        (ccall "weave_string_slice"
-          (returns String)
-          (args (String s) (Int32 start) (Int32 len))
+      (do
+        (if-stmt (== s 0) (return "") (do 0))
+        (if-stmt (< start 0) (set start 0) (do 0))
+        (if-stmt (< len 0) (set len 0) (do 0))
+        (let slen Int32 (c-strlen s))
+        (if-stmt (> start slen) (set start slen) (do 0))
+        (if-stmt (> (+ start len) slen) (set len (- slen start)) (do 0))
+        (if-stmt (== len 0) (return "") (do 0))
+        (let b Buffer (buffer-new))
+        (let i Int32 0)
+        (while (< i len)
+          (do
+            (let ch Int32 (string-char-at s (+ start i)))
+            (buffer-append-byte b ch)
+            (set i (+ i 1))
+          )
         )
+        (return (buffer-to-string b))
       )
     )
     (tests
@@ -194,6 +243,78 @@
           (expect-eq eq 1)
         )
       )
+      (test string-slice-full
+        (doc "slice entire string returns copy")
+        (tags unit string)
+        (body
+          (let out String (string-slice "test" 0 4))
+          (let eq Int32 (string-eq out "test"))
+          (expect-eq eq 1)
+        )
+      )
+      (test string-slice-empty-len
+        (doc "slice with zero length returns empty string")
+        (tags unit string)
+        (body
+          (let out String (string-slice "hello" 2 0))
+          (let len Int32 (string-length out))
+          (expect-eq len 0)
+        )
+      )
+      (test string-slice-negative-start
+        (doc "negative start is clamped to 0")
+        (tags unit string)
+        (body
+          (let out String (string-slice "hello" (- 0 5) 2))
+          (let eq Int32 (string-eq out "he"))
+          (expect-eq eq 1)
+        )
+      )
+      (test string-slice-negative-len
+        (doc "negative length returns empty string")
+        (tags unit string)
+        (body
+          (let out String (string-slice "hello" 0 (- 0 1)))
+          (let len Int32 (string-length out))
+          (expect-eq len 0)
+        )
+      )
+      (test string-slice-start-past-end
+        (doc "start past end returns empty string")
+        (tags unit string)
+        (body
+          (let out String (string-slice "hello" 10 5))
+          (let len Int32 (string-length out))
+          (expect-eq len 0)
+        )
+      )
+      (test string-slice-len-past-end
+        (doc "length past end is clamped")
+        (tags unit string)
+        (body
+          (let out String (string-slice "hello" 2 100))
+          (let eq Int32 (string-eq out "llo"))
+          (expect-eq eq 1)
+        )
+      )
+      (test string-slice-empty-string
+        (doc "slice from empty string returns empty")
+        (tags unit string)
+        (body
+          (let out String (string-slice "" 0 5))
+          (let len Int32 (string-length out))
+          (expect-eq len 0)
+        )
+      )
+      (test string-slice-single-char
+        (doc "slice single character")
+        (tags unit string)
+        (body
+          (let out String (string-slice "hello" 1 1))
+          (let eq Int32 (string-eq out "e"))
+          (expect-eq eq 1)
+        )
+      )
     )
   )
 
@@ -201,30 +322,106 @@
     (doc "Convert Int32 to decimal string.")
     (params (v Int32)) (returns String)
     (body
-      (return
-        (ccall "weave_int_to_string"
-          (returns String)
-          (args (Int32 v))
+      (do
+        (if-stmt (== v 0)
+          (return "0")
+          (do 0)
         )
+        (let sign Int32 0)
+        (let n Int32 v)
+        (if-stmt (< n 0) (do (set sign 1) (set n (- 0 n))) (do 0))
+        (let digits ArrayInt32 (array-i32-new))
+        (while (!= n 0)
+          (do
+            (let d Int32 (/ n 10))
+            (let r Int32 (- n (* d 10)))
+            (array-i32-append digits r)
+            (set n d)
+          )
+        )
+        (let b Buffer (buffer-new))
+        (if-stmt (!= sign 0) (buffer-append-byte b 45) (do 0))
+        (let i Int32 (- (array-i32-len digits) 1))
+        (while (>= i 0)
+          (do
+            (buffer-append-byte b (+ 48 (array-i32-get digits i)))
+            (set i (- i 1))
+          )
+        )
+        (return (buffer-to-string b))
       )
     )
     (tests
-      (test int-to-string-positive
-        (doc "convert 42 to string")
-        (tags unit string)
-        (body
-          (let result String (int-to-string 42))
-          (let len Int32 (string-length result))
-          (expect-eq len 2)
-        )
-      )
       (test int-to-string-zero
         (doc "convert 0 to string")
         (tags unit string)
         (body
           (let result String (int-to-string 0))
-          (let len Int32 (string-length result))
-          (expect-eq len 1)
+          (let eq Int32 (string-eq result "0"))
+          (expect-eq eq 1)
+        )
+      )
+      (test int-to-string-positive-small
+        (doc "convert 5 to string")
+        (tags unit string)
+        (body
+          (let result String (int-to-string 5))
+          (let eq Int32 (string-eq result "5"))
+          (expect-eq eq 1)
+        )
+      )
+      (test int-to-string-positive-two-digit
+        (doc "convert 42 to string")
+        (tags unit string)
+        (body
+          (let result String (int-to-string 42))
+          (let eq Int32 (string-eq result "42"))
+          (expect-eq eq 1)
+        )
+      )
+      (test int-to-string-positive-large
+        (doc "convert 12345 to string")
+        (tags unit string)
+        (body
+          (let result String (int-to-string 12345))
+          (let eq Int32 (string-eq result "12345"))
+          (expect-eq eq 1)
+        )
+      )
+      (test int-to-string-negative-small
+        (doc "convert -1 to string")
+        (tags unit string)
+        (body
+          (let result String (int-to-string (- 0 1)))
+          (let eq Int32 (string-eq result "-1"))
+          (expect-eq eq 1)
+        )
+      )
+      (test int-to-string-negative-two-digit
+        (doc "convert -42 to string")
+        (tags unit string)
+        (body
+          (let result String (int-to-string (- 0 42)))
+          (let eq Int32 (string-eq result "-42"))
+          (expect-eq eq 1)
+        )
+      )
+      (test int-to-string-negative-large
+        (doc "convert -9999 to string")
+        (tags unit string)
+        (body
+          (let result String (int-to-string (- 0 9999)))
+          (let eq Int32 (string-eq result "-9999"))
+          (expect-eq eq 1)
+        )
+      )
+      (test int-to-string-powers-of-ten
+        (doc "convert 100 to string")
+        (tags unit string)
+        (body
+          (let result String (int-to-string 100))
+          (let eq Int32 (string-eq result "100"))
+          (expect-eq eq 1)
         )
       )
     )
