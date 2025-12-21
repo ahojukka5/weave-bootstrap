@@ -91,7 +91,7 @@
       (tags unit tokenizer)
       (body
         (let out Buffer (buffer-new))
-        (let next Int32 (read-while "abc123!" 0 out 1))
+        (let next Int32 (read-while "abc123@" 0 out 1))
         (let s String (buffer-to-string out))
         (let eq Int32 (string-eq s "abc123"))
         (expect-eq eq 1)
