@@ -177,6 +177,16 @@
             (do 0)
           ) ;; if-stmt
 
+          ;; Special-case: (return expr) appearing in expression context.
+          ;; Unwrap to the inner expression to avoid emitting a call to @return.
+          (if-stmt (string-eq head-val "return")
+            (do
+              (let ret-node Int32 (second-child a node))
+              (return (compile-expr a ret-node env-names env-safe env-types declared struct-names struct-fields decls str-counter out temp fn-sig-names fn-sig-ret-types))
+            )
+            (do 0)
+          ) ;; if-stmt
+
           ;; (if-stmt cond then else)
           (if-stmt (string-eq head-val "if-stmt")
             (do
@@ -212,7 +222,10 @@
               (buffer-append-string out "L")
               (buffer-append-string out (int-to-string l-then))
               (buffer-append-string out ":\n")
-              (let then-reg Int32 (compile-expr a if-then env-names env-safe env-types declared struct-names struct-fields decls str-counter out temp fn-sig-names fn-sig-ret-types))
+              ;; Unwrap (return expr) in expression-context branches
+              (let then-node Int32 if-then)
+              (if-stmt (== (arena-kind a if-then) (node-kind-list)) (do (let th Int32 (arena-first-child a if-then)) (if-stmt (!= th (- 0 1)) (do (let tv String (arena-value a th)) (if-stmt (string-eq tv "return") (set then-node (second-child a if-then)) (do 0))) (do 0))) (do 0))
+              (let then-reg Int32 (compile-expr a then-node env-names env-safe env-types declared struct-names struct-fields decls str-counter out temp fn-sig-names fn-sig-ret-types))
               (buffer-append-string out "  br label %L")
               (buffer-append-string out (int-to-string l-end))
               (buffer-append-string out "\n")
@@ -222,7 +235,7 @@
               (buffer-append-string out ":\n")
               (let else-reg Int32 0)
               (if-stmt (!= if-else (- 0 1))
-                (set else-reg (compile-expr a if-else env-names env-safe env-types declared struct-names struct-fields decls str-counter out temp fn-sig-names fn-sig-ret-types))
+                (do (let else-node Int32 if-else) (if-stmt (== (arena-kind a if-else) (node-kind-list)) (do (let el Int32 (arena-first-child a if-else)) (if-stmt (!= el (- 0 1)) (do (let ev String (arena-value a el)) (if-stmt (string-eq ev "return") (set else-node (second-child a if-else)) (do 0))) (do 0))) (do 0)) (set else-reg (compile-expr a else-node env-names env-safe env-types declared struct-names struct-fields decls str-counter out temp fn-sig-names fn-sig-ret-types)))
                 (do
                   ;; No else clause: emit default value (0 for int, null for ptr)
                   (let default-t Int32 (load Int32 temp))
@@ -383,31 +396,17 @@
           (if-stmt (string-eq head-val "get-field")
             (do
               ;; (get-field type-node field-index ptr-expr)
-              ;; Get field pointer then load the value
+              ;; Compute and return the field pointer (value loads are handled by explicit 'load')
               (let elem-ty-node Int32 (second-child a node))
               (let idx-node Int32 (third-child a node))
               (let ptr-node Int32 (fourth-child a node))
               (let idx_str String (arena-value a idx-node))
-              (let struct-name String (get-struct-name-from-type-node a elem-ty-node))
-              (let fty String (struct-field-type struct-names struct-fields struct-name (string-to-int idx_str)))
               ;; Compile pointer expression
               (compile-expr a ptr-node env-names env-safe env-types declared struct-names struct-fields decls str-counter out temp fn-sig-names fn-sig-ret-types)
               (let ptr-reg Int32 (- (load Int32 temp) 1))
               ;; GEP to field pointer
               (let field-ptr Int32 (compile-get-field-node a elem-ty-node idx_str ptr-reg struct-names struct-fields out temp))
-              ;; Load the field value
-              (let t Int32 (load Int32 temp))
-              (buffer-append-string out "  ")
-              (emit-temp out t)
-              (buffer-append-string out " = load ")
-              (buffer-append-string out (map-simple-type-name fty))
-              (buffer-append-string out ", ")
-              (buffer-append-string out (map-simple-type-name fty))
-              (buffer-append-string out "* ")
-              (emit-temp out field-ptr)
-              (buffer-append-string out "\n")
-              (store Int32 temp (+ t 1))
-              (return t)
+              (return field-ptr)
             )
             (do 0)
           ) ;; if-stmt
@@ -505,19 +504,8 @@
                   (set field (arena-next-sibling a field))
                 ) ;; do
               ) ;; while
-              ;; Load and return the struct value
-              (let ret Int32 (load Int32 temp))
-              (buffer-append-string out "  ")
-              (emit-temp out ret)
-              (buffer-append-string out " = load %")
-              (buffer-append-string out (sanitize-name struct-name))
-              (buffer-append-string out ", %")
-              (buffer-append-string out (sanitize-name struct-name))
-              (buffer-append-string out "* ")
-              (emit-temp out result)
-              (buffer-append-string out "\n")
-              (store Int32 temp (+ ret 1))
-              (return ret)
+              ;; Return the pointer to the allocated struct
+              (return result)
             )
             (do 0)
           ) ;; if-stmt
@@ -772,7 +760,10 @@
                                             (buffer-append-string out "L")
                                             (buffer-append-string out (int-to-string l-then))
                                             (buffer-append-string out ":\n")
-                                            (set last-reg (compile-expr a if-then env-names env-safe env-types declared struct-names struct-fields decls str-counter out temp fn-sig-names fn-sig-ret-types))
+                                            ;; Unwrap (return expr) for expression-context branches
+                                            (let then-node Int32 if-then)
+                                            (if-stmt (== (arena-kind a if-then) (node-kind-list)) (do (let th Int32 (arena-first-child a if-then)) (if-stmt (!= th (- 0 1)) (do (let tv String (arena-value a th)) (if-stmt (string-eq tv "return") (set then-node (second-child a if-then)) (do 0))) (do 0))) (do 0))
+                                            (set last-reg (compile-expr a then-node env-names env-safe env-types declared struct-names struct-fields decls str-counter out temp fn-sig-names fn-sig-ret-types))
                                             (buffer-append-string out "  br label %L")
                                             (buffer-append-string out (int-to-string l-end))
                                             (buffer-append-string out "\n")
@@ -781,7 +772,7 @@
                                             (buffer-append-string out (int-to-string l-else))
                                             (buffer-append-string out ":\n")
                                             (if-stmt (!= if-else (- 0 1))
-                                              (set last-reg (compile-expr a if-else env-names env-safe env-types declared struct-names struct-fields decls str-counter out temp fn-sig-names fn-sig-ret-types))
+                                              (do (let else-node Int32 if-else) (if-stmt (== (arena-kind a if-else) (node-kind-list)) (do (let el Int32 (arena-first-child a if-else)) (if-stmt (!= el (- 0 1)) (do (let ev String (arena-value a el)) (if-stmt (string-eq ev "return") (set else-node (second-child a if-else)) (do 0))) (do 0))) (do 0)) (set last-reg (compile-expr a else-node env-names env-safe env-types declared struct-names struct-fields decls str-counter out temp fn-sig-names fn-sig-ret-types)))
                                               (do 0)
                                             )
                                             (buffer-append-string out "  br label %L")
