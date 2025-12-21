@@ -16,6 +16,7 @@ void ir_init(IrCtx *ir, StrBuf *out) {
     sl_init(&ir->test_names);
     sl_init(&ir->selected_test_names);
     sl_init(&ir->selected_tags);
+    ir->saw_expect = 0;
 }
 
 int ir_fresh_temp(IrCtx *ir) {
