@@ -5,28 +5,28 @@
     (body (let result NodeKind (node-kind-list)) (expect-eq result 1)))
 
   (test arena-new-empty (doc "new arena should have empty arrays") (tags unit arena)
-    (body (let a Arena (arena-new)) (let len Int32 (array-i32-len (get-field (addr a) kinds))) (expect-eq len 0)))
+    (body (let a (ptr Arena) (arena-new)) (let len Int32 (array-i32-len (get-field a kinds))) (expect-eq len 0)))
 
   (test arena-add-node-first (doc "adding first node should return id 0") (tags unit arena)
-    (body (let a Arena (arena-new)) (let id Int32 (arena-add-node (addr a) (node-kind-atom) "test")) (expect-eq id 0)))
+    (body (let a (ptr Arena) (arena-new)) (let id Int32 (arena-add-node a (node-kind-atom) "test")) (expect-eq id 0)))
   (test arena-add-node-second (doc "adding second node should return id 1") (tags unit arena)
-    (body (let a Arena (arena-new)) (arena-add-node (addr a) (node-kind-atom) "first") (let id Int32 (arena-add-node (addr a) (node-kind-atom) "second")) (expect-eq id 1)))
+    (body (let a (ptr Arena) (arena-new)) (arena-add-node a (node-kind-atom) "first") (let id Int32 (arena-add-node a (node-kind-atom) "second")) (expect-eq id 1)))
 
   (test arena-kind-retrieval (doc "retrieved kind should match what was added") (tags unit arena)
-    (body (let a Arena (arena-new)) (let id Int32 (arena-add-node (addr a) (node-kind-list) "test")) (let kind Int32 (arena-kind (addr a) id)) (expect-eq kind 1)))
+    (body (let a (ptr Arena) (arena-new)) (let id Int32 (arena-add-node a (node-kind-list) "test")) (let kind Int32 (arena-kind a id)) (expect-eq kind 1)))
 
   (test arena-value-retrieval (doc "retrieved value should match what was added") (tags unit arena)
-    (body (let a Arena (arena-new)) (let id Int32 (arena-add-node (addr a) (node-kind-atom) "hello")) (let val String (arena-value (addr a) id)) (let eq Int32 (string-eq val "hello")) (expect-eq eq 1)))
+    (body (let a (ptr Arena) (arena-new)) (let id Int32 (arena-add-node a (node-kind-atom) "hello")) (let val String (arena-value a id)) (let eq Int32 (string-eq val "hello")) (expect-eq eq 1)))
 
   (test arena-first-child-default (doc "newly added node should have first-child -1") (tags unit arena)
-    (body (let a Arena (arena-new)) (let id Int32 (arena-add-node (addr a) (node-kind-list) "")) (let child Int32 (arena-first-child (addr a) id)) (expect-eq child (- 0 1))))
+    (body (let a (ptr Arena) (arena-new)) (let id Int32 (arena-add-node a (node-kind-list) "")) (let child Int32 (arena-first-child a id)) (expect-eq child (- 0 1))))
 
   (test arena-next-sibling-default (doc "newly added node should have next-sibling -1") (tags unit arena)
-    (body (let a Arena (arena-new)) (let id Int32 (arena-add-node (addr a) (node-kind-atom) "test")) (let sibling Int32 (arena-next-sibling (addr a) id)) (expect-eq sibling (- 0 1))))
+    (body (let a (ptr Arena) (arena-new)) (let id Int32 (arena-add-node a (node-kind-atom) "test")) (let sibling Int32 (arena-next-sibling a id)) (expect-eq sibling (- 0 1))))
 
   (test arena-set-first-child-works (doc "set-first-child should update the first child") (tags unit arena)
-    (body (let a Arena (arena-new)) (let parent Int32 (arena-add-node (addr a) (node-kind-list) "")) (let child Int32 (arena-add-node (addr a) (node-kind-atom) "child")) (arena-set-first-child (addr a) parent child) (let retrieved Int32 (arena-first-child (addr a) parent)) (expect-eq retrieved child)))
+    (body (let a (ptr Arena) (arena-new)) (let parent Int32 (arena-add-node a (node-kind-list) "")) (let child Int32 (arena-add-node a (node-kind-atom) "child")) (arena-set-first-child a parent child) (let retrieved Int32 (arena-first-child a parent)) (expect-eq retrieved child)))
 
   (test arena-set-next-sibling-works (doc "set-next-sibling should update the next sibling") (tags unit arena)
-    (body (let a Arena (arena-new)) (let first Int32 (arena-add-node (addr a) (node-kind-atom) "first")) (let second Int32 (arena-add-node (addr a) (node-kind-atom) "second")) (arena-set-next-sibling (addr a) first second) (let retrieved Int32 (arena-next-sibling (addr a) first)) (expect-eq retrieved second)))
+    (body (let a (ptr Arena) (arena-new)) (let first Int32 (arena-add-node a (node-kind-atom) "first")) (let second Int32 (arena-add-node a (node-kind-atom) "second")) (arena-set-next-sibling a first second) (let retrieved Int32 (arena-next-sibling a first)) (expect-eq retrieved second)))
 )
