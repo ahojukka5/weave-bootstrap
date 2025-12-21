@@ -230,4 +230,32 @@
       )
     )
   ) ;; fn parse-top
+
+  (fn parse-string
+    (doc "Tokenize the source string and parse into the arena; returns root node id.")
+    (params
+      (a (ptr Arena))
+      (src String)
+    ) ;; params
+    (returns Int32)
+    (body
+      (let tokens ArrayString (array-str-new))
+      (tokenize src tokens)
+      (let pos Int32 0)
+      (let node Int32 (parse-expr-at a tokens 0 (addr pos)))
+      (return node)
+    ) ;; body
+    (tests
+      (test parse-string-simple
+        (doc "parses a simple atom expression")
+        (tags unit sexpr-parser)
+        (body
+          (let a Arena (arena-new))
+          (let root Int32 (parse-string (addr a) "test"))
+          (let kind Int32 (arena-kind (addr a) root))
+          (expect-eq kind 0)
+        )
+      )
+    )
+  ) ;; fn parse-string
 ) ;; module
