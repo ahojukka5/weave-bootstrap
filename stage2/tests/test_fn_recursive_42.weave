@@ -1,0 +1,28 @@
+(program
+  (name "test-fn-recursive-42")
+  (doc "Test recursive function calls.")
+  (version "0.1")
+
+  (type ExitCode
+    (alias Int32)
+  )
+
+  (fn countdown
+    (doc "Recursively count down, returning accumulated value.")
+    (params (n Int32) (acc Int32))
+    (returns Int32)
+    (body
+      (if-stmt (<= n 0)
+        acc
+        (countdown (- n 1) (+ acc n))
+      )
+    )
+  )
+
+  (entry main
+    (doc "Sum 1+2+3+4+5+6+7+8+9 = 45, subtract 3 to get 42.")
+    (params ())
+    (returns ExitCode)
+    (body (- (countdown 9 0) 3))
+  )
+)
