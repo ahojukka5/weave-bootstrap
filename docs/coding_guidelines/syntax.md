@@ -186,3 +186,59 @@ In rare cases where a file legitimately cannot be split, you can extend the hard
 - Variable names: `kebab-case` (e.g., `temp-var`)
 - Struct names: `PascalCase` (e.g., `Arena`, `Buffer`)
 - Constants: `SCREAMING_SNAKE_CASE` (if applicable)
+
+## Struct Field Access
+
+### Field Access with `get-field`
+
+Use `(get-field ptr field-name)` to access struct fields. The operation returns the loaded field value directly.
+
+**Syntax:** `(get-field base-pointer field-name)`
+
+```lisp
+(struct Point
+  (fields Int32 Int32)
+)
+
+;; Access fields by name (f0, f1 for anonymous fields)
+(let p (ptr (struct Point)) (make (struct Point) 10 20))
+(let x Int32 (get-field p f0))  ;; Returns the value 10
+(let y Int32 (get-field p f1))  ;; Returns the value 20
+```
+
+**For structs with named fields:**
+
+```lisp
+(type Person (struct (name String) (age Int32)))
+
+(let person (ptr Person) (make Person "Alice" 30))
+(let name String (get-field person name))
+(let age Int32 (get-field person age))
+```
+
+### Field Mutation with `set-field`
+
+Use `(set-field ptr field-name value)` to update struct fields.
+
+**Syntax:** `(set-field base-pointer field-name new-value)`
+
+```lisp
+;; Set field values
+(set-field p f0 42)       ;; Sets first field to 42
+(set-field p f1 100)      ;; Sets second field to 100
+
+;; With named fields
+(set-field person age 31)
+```
+
+### Semantics
+
+- **`get-field`**: Emits GEP + load; returns the loaded value
+- **`set-field`**: Emits GEP + store; returns the stored value
+- **Type safety**: Field names are validated against struct definitions at compile time
+- **Field names**: Use `f0`, `f1`, ... for anonymous field lists; use declared names for named structs
+
+### Migration Note
+
+The compiler currently supports both old index-based syntax (for backward compatibility during migration) and the new field-name syntax. The old syntax `(get-field (struct Type) index ptr)` will be removed in a future version.
+
