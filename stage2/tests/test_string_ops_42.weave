@@ -1,0 +1,25 @@
+(program
+  (name "test-string-ops-42")
+  (doc "Test string operations and literals.")
+  (version "0.1")
+
+  (type ExitCode
+    (alias Int32)
+  )
+
+  (entry main
+    (doc "Create strings and compute length-based result.")
+    (params ())
+    (returns ExitCode)
+    (body
+      (do
+        (let s1 String "Hello")
+        (let s2 String "World")
+        (let combined String (string-concat s1 s2))
+        (let len Int32 (string-length combined))
+        ;; "HelloWorld" = 10 chars, need 42
+        (return (+ len 32))
+      )
+    )
+  )
+)
