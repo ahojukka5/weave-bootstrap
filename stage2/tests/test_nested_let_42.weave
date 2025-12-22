@@ -1,0 +1,24 @@
+(program
+  (name "test-nested-let-42")
+  (doc "Test nested let expressions (pattern used in stage1).")
+  (version "0.1")
+
+  (type ExitCode
+    (alias Int32)
+  )
+
+  (entry main
+    (doc "Use nested let pattern to compute 42.")
+    (params ())
+    (returns ExitCode)
+    (body
+      (let a Int32 10
+        (let b Int32 20
+          (let c Int32 12
+            (+ (+ a b) c)
+          )
+        )
+      )
+    )
+  )
+)
