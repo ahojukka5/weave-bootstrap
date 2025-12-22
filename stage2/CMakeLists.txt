@@ -25,6 +25,7 @@ option(WEAVE_STAGE2_ONLY_SMOKE "Register only the simplest smoke test for Stage2
 option(WEAVE_STAGE2_SMOKE_PLUS_SIMPLE "Register only smoke + fn_simple tests for Stage2" OFF)
 option(WEAVE_STAGE2_MIN3 "Register smoke + fn_simple + let_add tests for Stage2" OFF)
 option(WEAVE_STAGE2_MIN5 "Register minimal five: smoke + fn_simple + let_add + fn_two_params + if_eq" OFF)
+option(WEAVE_STAGE2_MIN8 "Register eight tests including struct ops: MIN5 + make_struct + struct_like + while" OFF)
 
 # Build Stage2 (self-hosted: stage1 source compiled by stage1 compiler)
 set(STAGE1_SRC ${CMAKE_SOURCE_DIR}/stage1/src/weavec1.weave)
@@ -67,7 +68,18 @@ if(WEAVE_STAGE2_USE_WEAVE_RUNTIME)
 endif()
 
 # Register stage2 tests
-if(WEAVE_STAGE2_MIN5)
+if(WEAVE_STAGE2_MIN8)
+  set(STAGE2_TESTS
+    ${CMAKE_CURRENT_SOURCE_DIR}/tests/test_smoke_exit_42.weave
+    ${CMAKE_CURRENT_SOURCE_DIR}/tests/test_fn_simple_42.weave
+    ${CMAKE_CURRENT_SOURCE_DIR}/tests/test_let_add_42.weave
+    ${CMAKE_CURRENT_SOURCE_DIR}/tests/test_fn_two_params_42.weave
+    ${CMAKE_CURRENT_SOURCE_DIR}/tests/test_if_eq_42.weave
+    ${CMAKE_CURRENT_SOURCE_DIR}/tests/test_make_struct_42.weave
+    ${CMAKE_CURRENT_SOURCE_DIR}/tests/test_struct_like_42.weave
+    ${CMAKE_CURRENT_SOURCE_DIR}/tests/test_while_42.weave
+  )
+elseif(WEAVE_STAGE2_MIN5)
   set(STAGE2_TESTS
     ${CMAKE_CURRENT_SOURCE_DIR}/tests/test_smoke_exit_42.weave
     ${CMAKE_CURRENT_SOURCE_DIR}/tests/test_fn_simple_42.weave
