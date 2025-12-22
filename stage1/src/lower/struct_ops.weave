@@ -1,9 +1,7 @@
-  ;; ============================================================
-  ;; Lower get-field: (get-field ptr fname) -> (get-field (struct T) idx ptr)
-  ;; ============================================================
+  ;; (Deprecated) Lower get-field: handled in IR now; keep minimal tests
 
   (fn lower-get-field
-    (doc "Lower (get-field ptr field-name) to (get-field (struct T) idx ptr).")
+    (doc "Deprecated: no-op; IR handles get-field directly.")
     (params
       (a (ptr Arena))
       (node Int32)
@@ -13,108 +11,27 @@
       (struct-fields ArrayString)
     )
     (returns Int32)
-    (body (do
-      ;; Current form: (get-field ptr-expr field-name)
-      ;; We have: head="get-field", child1=ptr-expr, child2=field-name
-      (let head Int32 (arena-first-child a node))
-      (let ptr-expr Int32 (arena-next-sibling a head))
-      (let field-node Int32 (arena-next-sibling a ptr-expr))
-      
-      ;; Get pointer expression - could be variable or (addr x)
-      (let ptr-kind Int32 (arena-kind a ptr-expr))
-      (let ptr-type String "")
-      
-      (if-stmt (== ptr-kind (node-kind-atom))
-        (do
-          ;; Simple variable - look up its type
-          (let var-name String (arena-value a ptr-expr))
-          (set ptr-type (type-env-lookup env-names env-types var-name))
-        )
-        (do 0) ;; TODO: handle complex expressions
-      )
-      
-      ;; Extract struct name from pointer type
-      (let struct-name String (extract-struct-type ptr-type))
-      (if-stmt (== (string-length struct-name) 0)
-        (do
-          ;; Can't determine struct type - leave unchanged
-          (return 0)
-        )
-        (do 0)
-      )
-      
-      ;; Get field name and look up index
-      (let field-name String (arena-value a field-node))
-      (let field-idx Int32 (struct-field-index struct-names struct-fields struct-name field-name))
-      (if-stmt (== field-idx (- 0 1))
-        (do
-          ;; Unknown field - leave unchanged for error reporting
-          (return 0)
-        )
-        (do 0)
-      )
-      
-      ;; Build new lowered form: (get-field (struct T) idx ptr-expr)
-      ;; We'll rewrite the existing node's children
-      
-      ;; Create new nodes
-      (let struct-type-node Int32 (build-struct-type-node a struct-name))
-      (let idx-atom Int32 (make-atom a (int-to-string field-idx)))
-      
-      ;; Relink: head -> struct-type-node -> idx-atom -> ptr-expr (copy) -> nil
-      ;; We need to copy ptr-expr since it might have children
-      ;; For now, just relink existing nodes
-      
-      ;; Update links: head's next = struct-type-node
-      (link-siblings a head struct-type-node)
-      ;; struct-type-node's next = idx-atom
-      (link-siblings a struct-type-node idx-atom)
-      ;; idx-atom's next = ptr-expr (original)
-      (link-siblings a idx-atom ptr-expr)
-      ;; ptr-expr's next = nil (remove field-name)
-      (arena-set-next-sibling a ptr-expr (- 0 1))
-      
-      (return 1)
-    ))
+    (body (return 0))
     (tests
-      (test lower-get-field-basic
-        (doc "lowers to (get-field (struct T) idx ptr)")
+      (test lower-get-field-noop-basic
+        (doc "returns 0 and leaves node unchanged")
         (tags unit lower)
         (body
           (let a (ptr Arena) (arena-create 256))
-          (let node Int32 (parse-string a "(get-field p b)"))
-          (let env-names ArrayString (array-str-new))
-          (let env-types ArrayString (array-str-new))
-          (let struct-names ArrayString (array-str-new))
-          (let struct-fields ArrayString (array-str-new))
-          (array-str-append env-names "p")
-          (array-str-append env-types "(ptr Foo)")
-          (array-str-append struct-names "Foo")
-          (array-str-append struct-fields "a:Int32,b:String")
-          (let rc Int32 (lower-get-field a node env-names env-types struct-names struct-fields))
-          (expect-eq rc 1)
-          (let head Int32 (arena-first-child a node))
-          (let s Int32 (arena-next-sibling a head))
-          (expect-eq (arena-kind a s) (node-kind-list))
-          (let sh Int32 (arena-first-child a s))
-          (expect-eq (string-eq (arena-value a sh) "struct") 1)
-          (let sname Int32 (arena-next-sibling a sh))
-          (expect-eq (string-eq (arena-value a sname) "Foo") 1)
-          (let idx Int32 (arena-next-sibling a s))
-          (expect-eq (string-eq (arena-value a idx) "1") 1)
-          (let ptr Int32 (arena-next-sibling a idx))
-          (expect-eq (string-eq (arena-value a ptr) "p") 1)
+          (let node Int32 (parse-string a "(get-field p x)"))
+          (let rc Int32 (lower-get-field a node (array-str-new) (array-str-new) (array-str-new) (array-str-new)))
+          (expect-eq rc 0)
         )
       )
     )
   )
 
   ;; ============================================================
-  ;; Lower set-field: (set-field ptr fname val) -> (set-field (struct T) idx ptr val)
+  ;; (Deprecated) Lower set-field: handled in IR now
   ;; ============================================================
 
   (fn lower-set-field
-    (doc "Lower (set-field ptr field-name val) to (set-field (struct T) idx ptr val).")
+    (doc "Deprecated: no-op; IR handles set-field directly.")
     (params
       (a (ptr Arena))
       (node Int32)
@@ -124,68 +41,16 @@
       (struct-fields ArrayString)
     )
     (returns Int32)
-    (body (do
-      ;; Current form: (set-field ptr-expr field-name val-expr)
-      (let head Int32 (arena-first-child a node))
-      (let ptr-expr Int32 (arena-next-sibling a head))
-      (let field-node Int32 (arena-next-sibling a ptr-expr))
-      (let val-expr Int32 (arena-next-sibling a field-node))
-      
-      ;; Get pointer type
-      (let ptr-kind Int32 (arena-kind a ptr-expr))
-      (let ptr-type String "")
-      
-      (if-stmt (== ptr-kind (node-kind-atom))
-        (do
-          (let var-name String (arena-value a ptr-expr))
-          (set ptr-type (type-env-lookup env-names env-types var-name))
-        )
-        (do 0)
-      )
-      
-      (let struct-name String (extract-struct-type ptr-type))
-      (if-stmt (== (string-length struct-name) 0)
-        (return 0)
-        (do 0)
-      )
-      
-      (let field-name String (arena-value a field-node))
-      (let field-idx Int32 (struct-field-index struct-names struct-fields struct-name field-name))
-      (if-stmt (== field-idx (- 0 1))
-        (return 0)
-        (do 0)
-      )
-      
-      ;; Build: (set-field (struct T) idx ptr-expr val-expr)
-      (let struct-type-node Int32 (build-struct-type-node a struct-name))
-      (let idx-atom Int32 (make-atom a (int-to-string field-idx)))
-      
-      ;; Relink
-      (link-siblings a head struct-type-node)
-      (link-siblings a struct-type-node idx-atom)
-      (link-siblings a idx-atom ptr-expr)
-      (link-siblings a ptr-expr val-expr)
-      (arena-set-next-sibling a val-expr (- 0 1))
-      
-      (return 1)
-    ))
+    (body (return 0))
     (tests
-      (test lower-set-field-basic
-        (doc "lowers to (set-field (struct T) idx ptr val)")
+      (test lower-set-field-noop-basic
+        (doc "returns 0")
         (tags unit lower)
         (body
           (let a (ptr Arena) (arena-create 256))
           (let node Int32 (parse-string a "(set-field p b x)"))
-          (let env-names ArrayString (array-str-new))
-          (let env-types ArrayString (array-str-new))
-          (let struct-names ArrayString (array-str-new))
-          (let struct-fields ArrayString (array-str-new))
-          (array-str-append env-names "p")
-          (array-str-append env-types "(ptr Foo)")
-          (array-str-append struct-names "Foo")
-          (array-str-append struct-fields "a:Int32,b:String")
-          (let rc Int32 (lower-set-field a node env-names env-types struct-names struct-fields))
-          (expect-eq rc 1)
+          (let rc Int32 (lower-set-field a node (array-str-new) (array-str-new) (array-str-new) (array-str-new)))
+          (expect-eq rc 0)
         )
       )
     )
