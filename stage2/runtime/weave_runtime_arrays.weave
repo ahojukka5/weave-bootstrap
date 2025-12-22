@@ -1,0 +1,33 @@
+;; Minimal Weave runtime replacements for array helpers
+
+  (type WeaveArrayI32 (struct (magic Int32) (data (ptr Int32)) (len Int32) (cap Int32)))
+  (type WeaveArrayStr (struct (magic Int32) (data (ptr String)) (len Int32) (cap Int32)))
+
+  (fn weave_array_i32_len
+    (doc "Return length of ArrayInt32 handle by reading struct field.")
+    (params (h ArrayInt32)) (returns Int32)
+    (body
+      (let p (ptr WeaveArrayI32) (bitcast h (ptr WeaveArrayI32)))
+      (return (get-field p len))
+    )
+    (tests
+      (test weave_array_i32_len_null
+        (doc "bitcasted null is allowed; reading len yields 0 if zero-initialized")
+        (tags unit stage2_runtime)
+        (body
+          (let zero ArrayInt32 0)
+          (let len Int32 (weave_array_i32_len zero))
+          (expect-eq len 0)
+        )
+      )
+    )
+  )
+
+  (fn weave_array_str_len
+    (doc "Return length of ArrayString handle by reading struct field.")
+    (params (h ArrayString)) (returns Int32)
+    (body
+      (let p (ptr WeaveArrayStr) (bitcast h (ptr WeaveArrayStr)))
+      (return (get-field p len))
+    )
+  )
