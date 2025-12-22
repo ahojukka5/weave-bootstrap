@@ -21,6 +21,7 @@ set(WEAVEC1 ${CMAKE_BINARY_DIR}/stage1/weavec1)
 # Option to run Stage2 tests with self-hosted weavec2
 option(WEAVE_STAGE2_USE_WEAVEC2 "Use weavec2 (built by stage1) to run Stage2 tests" OFF)
 option(WEAVE_STAGE2_USE_WEAVE_RUNTIME "Use Weave-implemented runtime helpers instead of C stdlib runtime for selected functions" OFF)
+option(WEAVE_STAGE2_ONLY_SMOKE "Register only the simplest smoke test for Stage2" OFF)
 
 # Build Stage2 (self-hosted: stage1 source compiled by stage1 compiler)
 set(STAGE1_SRC ${CMAKE_SOURCE_DIR}/stage1/src/weavec1.weave)
@@ -63,7 +64,11 @@ if(WEAVE_STAGE2_USE_WEAVE_RUNTIME)
 endif()
 
 # Register stage2 tests
-file(GLOB STAGE2_TESTS ${CMAKE_CURRENT_SOURCE_DIR}/tests/test_*.weave)
+if(WEAVE_STAGE2_ONLY_SMOKE)
+  set(STAGE2_TESTS ${CMAKE_CURRENT_SOURCE_DIR}/tests/test_smoke_exit_42.weave)
+else()
+  file(GLOB STAGE2_TESTS ${CMAKE_CURRENT_SOURCE_DIR}/tests/test_*.weave)
+endif()
 
 foreach(test_file IN LISTS STAGE2_TESTS)
   get_filename_component(test_name ${test_file} NAME_WE)
