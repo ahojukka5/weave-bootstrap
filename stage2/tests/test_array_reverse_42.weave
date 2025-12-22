@@ -1,0 +1,58 @@
+(program
+  (name "test-array-reverse-42")
+  (doc "Reverse an array in place.")
+  (version "0.1")
+
+  (type ExitCode
+    (alias Int32)
+  )
+
+  (fn reverse-array
+    (doc "Reverse array of given length in place.")
+    (params (arr (ptr Int32)) (len Int32))
+    (returns Int32)
+    (body
+      (do
+        (let left Int32 0)
+        (let right Int32 (- len 1))
+        (while (< left right)
+          (do
+            (let left-ptr (ptr Int32) (ptr-add Int32 arr left))
+            (let right-ptr (ptr Int32) (ptr-add Int32 arr right))
+            (let temp Int32 (load Int32 left-ptr))
+            (store Int32 (load Int32 right-ptr) left-ptr)
+            (store Int32 temp right-ptr)
+            (set left (+ left 1))
+            (set right (- right 1))
+          )
+        )
+        (return 0)
+      )
+    )
+  )
+
+  (entry main
+    (doc "Reverse [2,4,6,8] to get [8,6,4,2], then sum to 20, multiply by 2, add 2.")
+    (params ())
+    (returns ExitCode)
+    (body
+      (do
+        (let arr-raw (ptr Int8) (ccall "malloc" (returns (ptr Int8)) (args (Int32 16))))
+        (let arr (ptr Int32) (bitcast (ptr Int32) arr-raw))
+        (store Int32 2 (ptr-add Int32 arr 0))
+        (store Int32 4 (ptr-add Int32 arr 1))
+        (store Int32 6 (ptr-add Int32 arr 2))
+        (store Int32 8 (ptr-add Int32 arr 3))
+        (reverse-array arr 4)
+        ;; Array is now [8,6,4,2]
+        (let sum Int32 0)
+        (set sum (+ sum (load Int32 (ptr-add Int32 arr 0))))
+        (set sum (+ sum (load Int32 (ptr-add Int32 arr 1))))
+        (set sum (+ sum (load Int32 (ptr-add Int32 arr 2))))
+        (set sum (+ sum (load Int32 (ptr-add Int32 arr 3))))
+        ;; sum = 20, multiply by 2 and add 2 = 42
+        (return (+ (* sum 2) 2))
+      )
+    )
+  )
+)
