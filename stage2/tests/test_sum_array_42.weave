@@ -1,0 +1,42 @@
+(program
+  (name "test-sum-array-42")
+  (doc "Sum values by iterating with pointer arithmetic.")
+  (version "0.1")
+
+  (type ExitCode
+    (alias Int32)
+  )
+
+  (entry main
+    (doc "Allocate array, fill with values, sum via pointer walk.")
+    (params ())
+    (returns ExitCode)
+    (body
+      (do
+        ;; Allocate space for 5 integers (20 bytes)
+        (let arr (ptr Int8) (ccall "malloc" (returns (ptr Int8)) (args (Int32 20))))
+        (let base (ptr Int32) (bitcast (ptr Int32) arr))
+        
+        ;; Fill array: [5, 10, 12, 8, 7] (sum = 42)
+        (store Int32 5 (ptr-add Int32 base 0))
+        (store Int32 10 (ptr-add Int32 base 1))
+        (store Int32 12 (ptr-add Int32 base 2))
+        (store Int32 8 (ptr-add Int32 base 3))
+        (store Int32 7 (ptr-add Int32 base 4))
+        
+        ;; Sum via loop
+        (let sum Int32 0)
+        (let i Int32 0)
+        (while (< i 5)
+          (do
+            (let val Int32 (load Int32 (ptr-add Int32 base i)))
+            (set sum (+ sum val))
+            (set i (+ i 1))
+          )
+        )
+        
+        (return sum)
+      )
+    )
+  )
+)
