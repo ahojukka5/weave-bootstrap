@@ -1,0 +1,41 @@
+(program
+  (name "test-collatz-42")
+  (doc "Calculate Collatz sequence steps (3n+1 problem).")
+  (version "0.1")
+
+  (type ExitCode
+    (alias Int32)
+  )
+
+  (fn collatz-steps
+    (doc "Count steps in Collatz sequence until reaching 1.")
+    (params (n Int32))
+    (returns Int32)
+    (body
+      (do
+        (let steps Int32 0)
+        (let current Int32 n)
+        (while (!= current 1)
+          (do
+            ;; Check if even using division pattern: n/2*2 == n
+            (let half Int32 (/ current 2))
+            (let doubled Int32 (* half 2))
+            (if-stmt (== doubled current)
+              (set current half)
+              (set current (+ (* current 3) 1))
+            )
+            (set steps (+ steps 1))
+          )
+        )
+        (return steps)
+      )
+    )
+  )
+
+  (entry main
+    (doc "Collatz(9) takes 19 steps, 19 + 23 = 42.")
+    (params ())
+    (returns ExitCode)
+    (body (+ (collatz-steps 9) 23))
+  )
+)
