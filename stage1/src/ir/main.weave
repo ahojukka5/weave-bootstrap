@@ -170,6 +170,30 @@
           (do 0)
         )
 
+        ;; If we need to emit any fallback stubs that reference %Arena*, ensure
+        ;; the identified struct exists (opaque is fine for prototypes).
+        (let need-arena Int32 0)
+        (if-stmt (== (array-str-contains fn-sig-names "expand-root") 0)
+          (set need-arena 1)
+          (do 0)
+        )
+        (if-stmt (== (array-str-contains fn-sig-names "generate-ir") 0)
+          (set need-arena 1)
+          (do 0)
+        )
+        (if-stmt (== (array-str-contains fn-sig-names "lower-program") 0)
+          (set need-arena 1)
+          (do 0)
+        )
+        (if-stmt (== (array-str-contains fn-sig-names "typecheck_program") 0)
+          (set need-arena 1)
+          (do 0)
+        )
+        (if-stmt (&& (== need-arena 1) (== (array-str-contains struct-names "Arena") 0))
+          (buffer-append-string decls "%Arena = type opaque\n")
+          (do 0)
+        )
+
         ;; Fallback for include expansion entry when not compiled from modules
         ;; This prevents LLVM IR verification errors on self-host builds when
         ;; include_expand.weave wasn't flattened into the compiler AST.
@@ -178,7 +202,7 @@
         ;; come from include_expand.weave once includes are correctly flattened.
         (if-stmt (== (array-str-contains fn-sig-names "expand-root") 0)
           (do
-            (buffer-append-string decls "define i32 @expand-root(i8* %path, i8* %out_arena, i32* %out_root) {\n")
+            (buffer-append-string decls "define i32 @expand-root(i8* %path, %Arena* %out_arena, i32* %out_root) {\n")
             (buffer-append-string decls "  ret i32 0\n}\n")
           )
           (do 0)
@@ -187,7 +211,7 @@
         ;; Fallback stub for generate-ir to avoid undefined symbol during IR verify
         (if-stmt (== (array-str-contains fn-sig-names "generate-ir") 0)
           (do
-            (buffer-append-string decls "define i32 @generate-ir(i8* %a, i32 %root, i8* %out, i32 %tok) {\n")
+            (buffer-append-string decls "define i32 @generate-ir(%Arena* %a, i32 %root, i8* %out, i32 %tok) {\n")
             (buffer-append-string decls "  ret i32 0\n}\n")
           )
           (do 0)
@@ -196,14 +220,14 @@
         ;; Fallback stubs for lowering and typechecking passes
         (if-stmt (== (array-str-contains fn-sig-names "lower-program") 0)
           (do
-            (buffer-append-string decls "define i32 @lower-program(i8* %a, i32 %root) {\n")
+            (buffer-append-string decls "define i32 @lower-program(%Arena* %a, i32 %root) {\n")
             (buffer-append-string decls "  ret i32 0\n}\n")
           )
           (do 0)
         )
         (if-stmt (== (array-str-contains fn-sig-names "typecheck_program") 0)
           (do
-            (buffer-append-string decls "define i32 @typecheck_program(i8* %a, i32 %root) {\n")
+            (buffer-append-string decls "define i32 @typecheck_program(%Arena* %a, i32 %root) {\n")
             (buffer-append-string decls "  ret i32 0\n}\n")
           )
           (do 0)
