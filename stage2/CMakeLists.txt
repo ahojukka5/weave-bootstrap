@@ -20,6 +20,7 @@ set(WEAVEC1 ${CMAKE_BINARY_DIR}/stage1/weavec1)
 
 # Option to run Stage2 tests with self-hosted weavec2
 option(WEAVE_STAGE2_USE_WEAVEC2 "Use weavec2 (built by stage1) to run Stage2 tests" OFF)
+option(WEAVE_STAGE2_USE_WEAVE_RUNTIME "Use Weave-implemented runtime helpers instead of C stdlib runtime for selected functions" OFF)
 
 # Build Stage2 (self-hosted: stage1 source compiled by stage1 compiler)
 set(STAGE1_SRC ${CMAKE_SOURCE_DIR}/stage1/src/weavec1.weave)
@@ -48,6 +49,19 @@ else()
   set(STAGE2_COMPILER ${WEAVEC1})
 endif()
 
+# Optionally build Weave runtime module to LLVM and link into tests
+set(WEAVE_RT_LL ${CMAKE_BINARY_DIR}/stage2/weave_runtime_arrays.ll)
+if(WEAVE_STAGE2_USE_WEAVE_RUNTIME)
+  add_custom_command(
+    OUTPUT ${WEAVE_RT_LL}
+    COMMAND ${STAGE2_COMPILER} ${CMAKE_SOURCE_DIR}/stage2/runtime/weave_runtime_arrays.weave --emit-llvm -o ${WEAVE_RT_LL}
+    DEPENDS ${STAGE2_COMPILER} ${CMAKE_SOURCE_DIR}/stage2/runtime/weave_runtime_arrays.weave
+    COMMENT "Building Weave runtime arrays module to LLVM"
+    VERBATIM
+  )
+  add_custom_target(weave_runtime_arrays_ll ALL DEPENDS ${WEAVE_RT_LL})
+endif()
+
 # Register stage2 tests
 file(GLOB STAGE2_TESTS ${CMAKE_CURRENT_SOURCE_DIR}/tests/test_*.weave)
 
@@ -68,7 +82,7 @@ foreach(test_file IN LISTS STAGE2_TESTS)
     # Expected to succeed - compile, link, run, check exit 42
     add_test(
       NAME stage2_${test_name}
-      COMMAND bash -c "${STAGE2_COMPILER} ${test_file} --emit-llvm -o ${out_dir}/${test_name}.ll && ${CLANG_EXE} -Wno-null-character ${out_dir}/${test_name}.ll ${WEAVE_RUNTIME} -lm -o ${out_dir}/${test_name} && ${out_dir}/${test_name}; test $? -eq 42"
+      COMMAND bash -c "${STAGE2_COMPILER} ${test_file} --emit-llvm -o ${out_dir}/${test_name}.ll && ${CLANG_EXE} -Wno-null-character ${out_dir}/${test_name}.ll $<$<BOOL:${WEAVE_STAGE2_USE_WEAVE_RUNTIME}>:${WEAVE_RT_LL}> $<$<NOT:$<BOOL:${WEAVE_STAGE2_USE_WEAVE_RUNTIME}>>:${WEAVE_RUNTIME}> -lm -o ${out_dir}/${test_name} && ${out_dir}/${test_name}; test $? -eq 42"
     )
   endif()
   
