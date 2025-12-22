@@ -13,8 +13,8 @@
     (body
       (do
         (let p (ptr (struct Point)) (make (struct Point) 40 2))
-        (let a Int32 (load Int32 (get-field (struct Point) 0 p)))
-        (let b Int32 (load Int32 (get-field (struct Point) 1 p)))
+        (let a Int32 (get-field p f0))
+        (let b Int32 (get-field p f1))
         (return (+ a b))
       ) ;; do
     ) ;; body
