@@ -1,0 +1,43 @@
+(program
+  (name "test-clamp-42")
+  (doc "Clamp value between min and max bounds.")
+  (version "0.1")
+
+  (type ExitCode
+    (alias Int32)
+  )
+
+  (fn clamp
+    (doc "Clamp value between min and max.")
+    (params (value Int32) (min-val Int32) (max-val Int32))
+    (returns Int32)
+    (body
+      (do
+        (if-stmt (< value min-val)
+          (return min-val)
+          (do 0)
+        )
+        (if-stmt (> value max-val)
+          (return max-val)
+          (do 0)
+        )
+        (return value)
+      )
+    )
+  )
+
+  (entry main
+    (doc "Clamp various values and sum: clamp(50,10,30) + clamp(5,10,30) + clamp(20,10,30).")
+    (params ())
+    (returns ExitCode)
+    (body
+      (do
+        (let a Int32 (clamp 50 10 30))  ;; 30
+        (let b Int32 (clamp 5 10 30))   ;; 10
+        (let c Int32 (clamp 20 10 30))  ;; 20
+        ;; 30 + 10 + 20 = 60, subtract 18
+        (return (- (+ (+ a b) c) 18))
+      )
+    )
+  )
+)
