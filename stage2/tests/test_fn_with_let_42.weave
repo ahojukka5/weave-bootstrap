@@ -1,0 +1,29 @@
+(program
+  (name "test-fn-with-let-42")
+  (doc "Test function with let bindings in body.")
+  (version "0.1")
+
+  (type ExitCode
+    (alias Int32)
+  )
+
+  (fn compute-sum
+    (doc "Compute a+b+c using let bindings.")
+    (params (a Int32) (b Int32) (c Int32))
+    (returns Int32)
+    (body
+      (do
+        (let ab Int32 (+ a b))
+        (let result Int32 (+ ab c))
+        (return result)
+      )
+    )
+  )
+
+  (entry main
+    (doc "Call compute-sum with 10, 20, 12 to get 42.")
+    (params ())
+    (returns ExitCode)
+    (body (compute-sum 10 20 12))
+  )
+)
