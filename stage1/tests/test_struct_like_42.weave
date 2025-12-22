@@ -13,10 +13,10 @@
         ;; malloc + (struct Point) layout.
         (let buf (ptr Int8) (ccall "malloc" (returns (ptr Int8)) (args (Int32 8))))
         (let p (ptr (struct Point)) (bitcast (ptr (struct Point)) buf))
-        (store Int32 40 (get-field (struct Point) 0 p))
-        (store Int32 2 (get-field (struct Point) 1 p))
-        (let a Int32 (load Int32 (get-field (struct Point) 0 p)))
-        (let b Int32 (load Int32 (get-field (struct Point) 1 p)))
+        (set-field p f0 40)
+        (set-field p f1 2)
+        (let a Int32 (get-field p f0))
+        (let b Int32 (get-field p f1))
         (return (+ a b))
       ) ;; do
     ) ;; body
