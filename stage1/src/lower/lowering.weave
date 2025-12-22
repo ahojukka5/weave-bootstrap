@@ -34,36 +34,9 @@
       
       (let head-val String (arena-value a head))
       
-      ;; Check for get-field with 3 children (high-level form: head + ptr + field-name)
-      (if-stmt (string-eq head-val "get-field")
-        (do
-          ;; Count children to distinguish forms
-          (let child-count Int32 (count-children a node))
-          (if-stmt (== child-count 3)
-            (do
-              ;; High-level form: (get-field ptr field-name)
-              (lower-get-field a node env-names env-types struct-names struct-fields)
-            )
-            (do 0)
-          )
-        )
-        (do 0)
-      )
+      ;; get-field: handled directly in IR; no lowering
       
-      ;; Check for set-field with 4 children (high-level form: head + ptr + field-name + val)
-      (if-stmt (string-eq head-val "set-field")
-        (do
-          (let child-count Int32 (count-children a node))
-          (if-stmt (== child-count 4)
-            (do
-              ;; High-level form: (set-field ptr field-name val)
-              (lower-set-field a node env-names env-types struct-names struct-fields)
-            )
-            (do 0)
-          )
-        )
-        (do 0)
-      )
+      ;; set-field: handled directly in IR; no lowering
       
       ;; Check for make with field pairs
       (if-stmt (string-eq head-val "make")
