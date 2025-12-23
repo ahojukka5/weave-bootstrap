@@ -1,0 +1,44 @@
+(program
+  (name "test-linked-list-42")
+  (doc "Simple struct array to simulate linked data.")
+  (version "0.1")
+
+  (type ExitCode
+    (alias Int32)
+  )
+
+  (struct Node
+    (fields Int32 Int32)
+  )
+
+  (fn sum-three-nodes
+    (doc "Sum first field of three nodes.")
+    (params (n1 (ptr (struct Node))) (n2 (ptr (struct Node))) (n3 (ptr (struct Node))))
+    (returns Int32)
+    (body
+      (do
+        (let sum Int32 0)
+        (set sum (+ sum (get-field n1 f0)))
+        (set sum (+ sum (get-field n2 f0)))
+        (set sum (+ sum (get-field n3 f0)))
+        (return sum)
+      )
+    )
+  )
+
+  (entry main
+    (doc "Create three nodes with values [10, 15, 17] and sum to 42.")
+    (params ())
+    (returns ExitCode)
+    (body
+      (do
+        ;; Create three nodes using make
+        (let node1 (ptr (struct Node)) (make (struct Node) 10 0))
+        (let node2 (ptr (struct Node)) (make (struct Node) 15 0))
+        (let node3 (ptr (struct Node)) (make (struct Node) 17 0))
+        
+        (return (sum-three-nodes node1 node2 node3))
+      )
+    )
+  )
+)

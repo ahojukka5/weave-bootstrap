@@ -1,0 +1,69 @@
+(program
+  (name "test-bubble-sort-42")
+  (doc "Sort array using bubble sort algorithm.")
+  (version "0.1")
+
+  (type ExitCode
+    (alias Int32)
+  )
+
+  (fn bubble-sort
+    (doc "Sort array in-place using bubble sort.")
+    (params (arr (ptr Int32)) (size Int32))
+    (returns Int32)
+    (body
+      (do
+        (let i Int32 0)
+        (while (< i size)
+          (do
+            (let j Int32 0)
+            (while (< j (- size i 1))
+              (do
+                (let j-ptr (ptr Int32) (ptr-add Int32 arr j))
+                (let j1-ptr (ptr Int32) (ptr-add Int32 arr (+ j 1)))
+                (let j-val Int32 (load Int32 j-ptr))
+                (let j1-val Int32 (load Int32 j1-ptr))
+                (if-stmt (> j-val j1-val)
+                  (do
+                    (store Int32 j1-val j-ptr)
+                    (store Int32 j-val j1-ptr)
+                  )
+                  (do 0)
+                )
+                (set j (+ j 1))
+              )
+            )
+            (set i (+ i 1))
+          )
+        )
+        (return 0)
+      )
+    )
+  )
+
+  (entry main
+    (doc "Sort [50, 42, 30, 20, 10] and get last element.")
+    (params ())
+    (returns ExitCode)
+    (body
+      (do
+        (let size Int32 5)
+        (let bytes Int32 (* size 4))
+        (let arr-raw (ptr Int8) (ccall "malloc" (returns (ptr Int8)) (args (Int32 bytes))))
+        (let arr-ptr (ptr Int32) (bitcast (ptr Int32) arr-raw))
+        
+        (store Int32 50 (ptr-add Int32 arr-ptr 0))
+        (store Int32 42 (ptr-add Int32 arr-ptr 1))
+        (store Int32 30 (ptr-add Int32 arr-ptr 2))
+        (store Int32 20 (ptr-add Int32 arr-ptr 3))
+        (store Int32 10 (ptr-add Int32 arr-ptr 4))
+        
+        (bubble-sort arr-ptr size)
+        
+        ;; After sorting: [10, 20, 30, 42, 50]
+        ;; Return element at index 3 which should be 42
+        (return (load Int32 (ptr-add Int32 arr-ptr 3)))
+      )
+    )
+  )
+)

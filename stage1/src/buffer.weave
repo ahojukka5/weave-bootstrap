@@ -1,0 +1,167 @@
+(program
+  (name "buffer")
+  (doc "Dynamic string buffer implementation in Weave.")
+  (version "0.1")
+
+  (type Buffer
+    (alias (ptr BufferData))
+  )
+
+  (struct BufferData
+    (field data (ptr Int8))
+    (field len Int32)
+    (field cap Int32)
+  )
+
+  (fn buffer-new
+    (doc "Create a new empty buffer.")
+    (params)
+    (returns Buffer)
+    (body
+      (do
+        (let raw (ptr Int8) (ccall "malloc" (returns (ptr Int8)) (args (Int32 12))))
+        (let buf (ptr BufferData) (bitcast (ptr BufferData) raw))
+        (set-field buf data (bitcast (ptr Int8) 0))
+        (set-field buf len 0)
+        (set-field buf cap 0)
+        (return buf)
+      )
+    )
+  )
+
+  (fn buffer-clear
+    (doc "Clear buffer contents (reset length to 0).")
+    (params (buf Buffer))
+    (returns Int32)
+    (body
+      (do
+        (set-field buf len 0)
+        (return 0)
+      )
+    )
+  )
+
+  (fn buffer-grow
+    (doc "Ensure buffer has at least 'need' capacity.")
+    (params (buf Buffer) (need Int32))
+    (returns Int32)
+    (body
+      (do
+        (if-stmt (< need 0)
+          (return (- 0 1))
+          (do 0)
+        )
+        (let current-cap Int32 (get-field buf cap))
+        (if-stmt (>= current-cap need)
+          (return 0)
+          (do 0)
+        )
+        ;; Calculate new capacity: start with 64 or current, double until >= need
+        (let ncap Int32 (if-stmt (== current-cap 0) 64 current-cap))
+        (while (< ncap need)
+          (set ncap (* ncap 2))
+        )
+        ;; Reallocate
+        (let old-data (ptr Int8) (get-field buf data))
+        (let old-cap Int32 current-cap)
+        (let new-data-raw (ptr Int8) (ccall "malloc" (returns (ptr Int8)) (args (Int32 ncap))))
+        (if-stmt (== (bitcast Int32 new-data-raw) 0)
+          (return (- 0 1))
+          (do 0)
+        )
+        ;; Copy old data if it exists
+        (if-stmt (!= (bitcast Int32 old-data) 0)
+          (do
+            (let current-len Int32 (get-field buf len))
+            (if-stmt (> current-len 0)
+              (ccall "memcpy" (returns (ptr Int8)) (args ((ptr Int8) new-data-raw) ((ptr Int8) old-data) (Int32 current-len)))
+              (do 0)
+            )
+            (ccall "free" (returns Void) (args ((ptr Int8) old-data)))
+          )
+          (do 0)
+        )
+        (set-field buf data new-data-raw)
+        (set-field buf cap ncap)
+        (return 0)
+      )
+    )
+  )
+
+  (fn buffer-append-byte
+    (doc "Append a single byte to buffer.")
+    (params (buf Buffer) (byte Int32))
+    (returns Int32)
+    (body
+      (do
+        (let current-len Int32 (get-field buf len))
+        (let need Int32 (+ current-len 1))
+        (if-stmt (!= (buffer-grow buf need) 0)
+          (return (- 0 1))
+          (do 0)
+        )
+        (let data (ptr Int8) (get-field buf data))
+        (let target (ptr Int8) (ptr-add Int8 data current-len))
+        (store Int8 (bitcast Int8 byte) target)
+        (set-field buf len need)
+        (return 0)
+      )
+    )
+  )
+
+  (fn buffer-append-string
+    (doc "Append a string to buffer.")
+    (params (buf Buffer) (str String))
+    (returns Int32)
+    (body
+      (do
+        (if-stmt (== (bitcast Int32 str) 0)
+          (return 0)
+          (do 0)
+        )
+        (let slen Int32 (ccall "strlen" (returns Int32) (args ((ptr Int8) str))))
+        (let current-len Int32 (get-field buf len))
+        (let need Int32 (+ current-len slen))
+        (if-stmt (!= (buffer-grow buf need) 0)
+          (return (- 0 1))
+          (do 0)
+        )
+        (let data (ptr Int8) (get-field buf data))
+        (let target (ptr Int8) (ptr-add Int8 data current-len))
+        (ccall "memcpy" (returns (ptr Int8)) (args ((ptr Int8) target) ((ptr Int8) str) (Int32 slen)))
+        (set-field buf len need)
+        (return 0)
+      )
+    )
+  )
+
+  (fn buffer-to-string
+    (doc "Convert buffer to a null-terminated string. Returns new allocated string.")
+    (params (buf Buffer))
+    (returns String)
+    (body
+      (do
+        (let len Int32 (get-field buf len))
+        (if-stmt (== len 0)
+          (do
+            ;; Return empty string literal
+            (let empty-raw (ptr Int8) (ccall "malloc" (returns (ptr Int8)) (args (Int32 1))))
+            (store Int8 0 empty-raw)
+            (return (bitcast String empty-raw))
+          )
+          (do 0)
+        )
+        (let out-raw (ptr Int8) (ccall "malloc" (returns (ptr Int8)) (args (Int32 (+ len 1)))))
+        (if-stmt (== (bitcast Int32 out-raw) 0)
+          (return (bitcast String 0))
+          (do 0)
+        )
+        (let data (ptr Int8) (get-field buf data))
+        (ccall "memcpy" (returns (ptr Int8)) (args ((ptr Int8) out-raw) ((ptr Int8) data) (Int32 len)))
+        (let null-pos (ptr Int8) (ptr-add Int8 out-raw len))
+        (store Int8 0 null-pos)
+        (return (bitcast String out-raw))
+      )
+    )
+  )
+)
