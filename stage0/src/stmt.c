@@ -122,6 +122,22 @@ int cg_stmt(IrCtx *ir, VarEnv *env, Node *stmt, TypeRef *ret_type, Value *out_la
         sb_append(ir->out, " = alloca ");
         emit_llvm_type(ir->out, ty);
         sb_append(ir->out, "\n");
+        
+        /* If initv is a pointer to ty, we need to load the value first */
+        if (initv.type->kind == TY_PTR && type_eq(initv.type->pointee, ty)) {
+            int loaded_temp = ir_fresh_temp(ir);
+            sb_append(ir->out, "  ");
+            ir_emit_temp(ir->out, loaded_temp);
+            sb_append(ir->out, " = load ");
+            emit_llvm_type(ir->out, ty);
+            sb_append(ir->out, ", ");
+            emit_llvm_type(ir->out, initv.type);
+            sb_append(ir->out, " ");
+            emit_value(ir->out, initv);
+            sb_append(ir->out, "\n");
+            initv = value_temp(ty, loaded_temp);
+        }
+        
         sb_append(ir->out, "  store ");
         emit_llvm_type(ir->out, ty);
         sb_append(ir->out, " ");
