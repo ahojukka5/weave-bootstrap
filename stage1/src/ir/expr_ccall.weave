@@ -1,3 +1,39 @@
+  ;; Helper function to get C library function return type
+  (fn get-c-function-ret-type
+    (doc "Get the LLVM return type for a C library function.")
+    (params (name String)) (returns String)
+    (body (do
+      (if-stmt (string-eq name "abs") (return "i32") (do 0))
+      (if-stmt (string-eq name "atoi") (return "i32") (do 0))
+      (if-stmt (string-eq name "exit") (return "void") (do 0))
+      (if-stmt (string-eq name "malloc") (return "i8*") (do 0))
+      (if-stmt (string-eq name "memcpy") (return "i8*") (do 0))
+      (if-stmt (string-eq name "strlen") (return "i32") (do 0))
+      (if-stmt (string-eq name "printf") (return "i32") (do 0))
+      (if-stmt (string-eq name "puts") (return "i32") (do 0))
+      ;; Unknown function - return empty string to use parsed type
+      (return "")
+    ))
+    (tests
+      (test get-c-function-ret-type-malloc
+        (doc "malloc returns i8*")
+        (tags unit ir ccall)
+        (body
+          (let result String (get-c-function-ret-type "malloc"))
+          (expect-eq (string-eq result "i8*") 1)
+        )
+      )
+      (test get-c-function-ret-type-unknown
+        (doc "unknown function returns empty string")
+        (tags unit ir ccall)
+        (body
+          (let result String (get-c-function-ret-type "unknown_func"))
+          (expect-eq (string-eq result "") 1)
+        )
+      )
+    )
+  )
+
   ;; Emit a ccall; currently supports Int32 and String args/returns.
   (fn compile-ccall
     (doc "Lower (ccall ...) to a call instruction, declaring the callee if needed.")
@@ -74,16 +110,26 @@
         ) ;; do
       ) ;; while
 
-      ;; Declare (simple, may duplicate). Special-case malloc to unify as i8* return.
+      ;; Declare (simple, may duplicate). Check C library function registry first.
       (if-stmt (== (array-str-contains declared sym) 0)
         (do
           (array-str-append declared sym)
           (buffer-append-string decls "declare ")
-          (if-stmt (string-eq sym "malloc")
-            (buffer-append-string decls "i8*")
-            (if-stmt (== ret-ty-node (- 0 1))
-              (buffer-append-string decls "i32")
-              (emit-type-node decls a ret-ty-node)
+          (let c-ret-type String (get-c-function-ret-type sym))
+          (if-stmt (string-eq c-ret-type "")
+            (do
+              ;; Not in registry - use parsed type or default
+              (if-stmt (string-eq sym "malloc")
+                (buffer-append-string decls "i8*")
+                (if-stmt (== ret-ty-node (- 0 1))
+                  (buffer-append-string decls "i32")
+                  (emit-type-node decls a ret-ty-node struct-names)
+                )
+              )
+            )
+            (do
+              ;; Use registry type
+              (buffer-append-string decls c-ret-type)
             )
           )
           (buffer-append-string decls " @")
@@ -96,7 +142,7 @@
                 (buffer-append-string decls ", ")
                 (do (buffer-append-string decls ""))
               ) ;; if-stmt
-              (emit-type-node decls a (array-i32-get type-nodes i))
+              (emit-type-node decls a (array-i32-get type-nodes i) struct-names)
               (set i (+ i 1))
             ) ;; do
           ) ;; while
@@ -105,10 +151,24 @@
         (do 0)
       ) ;; if-stmt
 
-      ;; Call
+      ;; Call - use C library function registry if available
       (let t Int32 (load Int32 temp))
       (buffer-append-string out "  ")
-      (let ret-ty-str String (map-type-node a ret-ty-node))
+      (let c-ret-type String (get-c-function-ret-type sym))
+      (let ret-ty-str String "")
+      (if-stmt (string-eq c-ret-type "")
+        (do
+          ;; Not in registry - use parsed type
+          (if-stmt (== ret-ty-node (- 0 1))
+            (set ret-ty-str "i32")
+            (set ret-ty-str (map-type-node a ret-ty-node struct-names))
+          )
+        )
+        (do
+          ;; Use registry type
+          (set ret-ty-str c-ret-type)
+        )
+      )
       (let ret-reg Int32 t)
       (if-stmt (string-eq sym "malloc")
         (do
@@ -136,7 +196,7 @@
                 (do
                   (emit-temp out t)
                   (buffer-append-string out " = call ")
-                  (emit-type-node out a ret-ty-node)
+                  (buffer-append-string out ret-ty-str)
                   (buffer-append-string out " @")
                   (buffer-append-string out sym)
                   (buffer-append-string out "(")
@@ -153,7 +213,7 @@
             (buffer-append-string out ", ")
             (do (buffer-append-string out ""))
           ) ;; if-stmt
-          (emit-type-node out a (array-i32-get type-nodes i))
+          (emit-type-node out a (array-i32-get type-nodes i) struct-names)
           (buffer-append-string out " ")
           (emit-temp out (array-i32-get evaluated i))
           (set i (+ i 1))
@@ -174,7 +234,7 @@
                   (buffer-append-string out " = bitcast i8* ")
                   (emit-temp out t)
                   (buffer-append-string out " to ")
-                  (emit-type-node out a ret-ty-node)
+                  (emit-type-node out a ret-ty-node struct-names)
                   (buffer-append-string out "\n")
                   (store Int32 temp (+ t 2))
                   (set ret-reg (+ t 1))
