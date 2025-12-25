@@ -4,8 +4,10 @@
   (version "0.1")
 
   (include "string.weave")
+  (include "file_io.weave")
   (include "buffers.weave")
   (include "arrays.weave")
+  (include "cli.weave")
   (include "tokenizer.weave")
   (include "arena.weave")
   (include "sexpr_parser.weave")
@@ -20,25 +22,25 @@
 
   (entry main
     (doc "Compile input file: default executable; -S for assembly; -emit-llvm for LLVM IR; -c for object.")
-    (params ())
+    (params (argc Int32) (argv (ptr String)))
     (returns ExitCode)
     (body
       (do
-        ;; Parse command-line arguments via runtime helpers (clang-compatible)
-        (let input-path String (ccall "weave_get_input" (returns String) (args)))
-        (let output-path String (ccall "weave_get_option" (returns String) (args (String "o"))))
-        (let has-emit-llvm Int32 (ccall "weave_has_flag" (returns Int32) (args (String "emit-llvm"))))
-        (let has-S Int32 (ccall "weave_has_flag" (returns Int32) (args (String "S"))))
-        (let has-c Int32 (ccall "weave_has_flag" (returns Int32) (args (String "c"))))
+        ;; Parse command-line arguments via Weave CLI helpers (clang-compatible)
+        (let input-path String (weave-get-input argc argv))
+        (let output-path String (weave-get-option "o" argc argv))
+        (let has-emit-llvm Int32 (weave-has-flag "emit-llvm" argc argv))
+        (let has-S Int32 (weave-has-flag "S" argc argv))
+        (let has-c Int32 (weave-has-flag "c" argc argv))
         ;; Optimization, includes and linking flags
-        (let opt-O String (ccall "weave_get_option" (returns String) (args (String "O"))))
-        (let opt-I String (ccall "weave_get_option" (returns String) (args (String "I"))))
+        (let opt-O String (weave-get-option "O" argc argv))
+        (let opt-I String (weave-get-option "I" argc argv))
         ;; Normalize NULL options to empty strings to avoid libc NULL deref
-        (if-stmt (== (string-length input-path) 0) (set input-path "") (do 0))
-        (if-stmt (== (string-length output-path) 0) (set output-path "") (do 0))
-        (if-stmt (== (string-length opt-O) 0) (set opt-O "") (do 0))
-        (if-stmt (== (string-length opt-I) 0) (set opt-I "") (do 0))
-        (let has-static Int32 (ccall "weave_has_flag" (returns Int32) (args (String "static"))))
+        (if-stmt (== input-path 0) (set input-path "") (do 0))
+        (if-stmt (== output-path 0) (set output-path "") (do 0))
+        (if-stmt (== opt-O 0) (set opt-O "") (do 0))
+        (if-stmt (== opt-I 0) (set opt-I "") (do 0))
+        (let has-static Int32 (weave-has-flag "static" argc argv))
         ;; Build extra clang flags string
         (let extra String "")
         (if-stmt (!= (string-length opt-O) 0)
@@ -148,39 +150,37 @@
         (if-stmt (!= has-emit-llvm 0)
           (do
             ;; Write IR directly
-            (let write-rc Int32
-              (ccall "weave_write_file" (returns Int32)
-                (args (String output-path) (String (buffer-to-string ir-buf)))
-              )
-            )
+            (let write-rc Int32 (weave_write_file output-path (buffer-to-string ir-buf)))
             (if-stmt (== write-rc 0) (return 0) (return 1))
           )
           (do
-            ;; Write IR to temp for further lowering
-            (let ll-tmp-path String "/tmp/weavec1_tmp.ll")
-            (let write-rc Int32
-              (ccall "weave_write_file" (returns Int32)
-                (args (String ll-tmp-path) (String (buffer-to-string ir-buf)))
-              )
+            ;; Parse optimization level from -O flag (default to 0)
+            (let opt-level Int32 0)
+            (if-stmt (!= (string-length opt-O) 0)
+              (set opt-level (c-atoi opt-O))
+              (do 0)
             )
-            (if-stmt (!= write-rc 0) (return 1) (do 0))
+            ;; Clamp opt-level to valid range (0-3)
+            (if-stmt (< opt-level 0) (set opt-level 0) (do 0))
+            (if-stmt (> opt-level 3) (set opt-level 3) (do 0))
+            
+            ;; Get IR string from buffer
+            (let ir-string String (buffer-to-string ir-buf))
             
             (if-stmt (!= has-S 0)
               (do
-                ;; Assembly
-                (let cmd String (string-concat "clang -S" (string-concat extra (string-concat " -o " (string-concat output-path (string-concat " " ll-tmp-path))))))
-                (let rc Int32 (ccall "system" (returns Int32) (args (String cmd))))
+                ;; Assembly - use LLVM API
+                (let rc Int32 (ccall "llvm-compile-ir-to-assembly" (returns Int32) (args (String ir-string) (String output-path) (Int32 opt-level))))
                 (if-stmt (== rc 0) (return 0) (return 1))
               )
               (if-stmt (!= has-c 0)
                 (do
-                  ;; Object file
-                  (let cmd String (string-concat "clang -c" (string-concat extra (string-concat " -o " (string-concat output-path (string-concat " " ll-tmp-path))))))
-                  (let rc Int32 (ccall "system" (returns Int32) (args (String cmd))))
+                  ;; Object file - use LLVM API
+                  (let rc Int32 (ccall "llvm-compile-ir-to-object" (returns Int32) (args (String ir-string) (String output-path) (Int32 opt-level))))
                   (if-stmt (== rc 0) (return 0) (return 1))
                 )
                 (do
-                  ;; Executable
+                  ;; Executable - compile to object first, then link
                   (let runtime-path String (ccall "getenv" (returns String) (args (String "WEAVE_RUNTIME"))))
                   (let has-runtime Int32 0)
                   (if-stmt (!= (string-length runtime-path) 0) (set has-runtime 1) (do 0))
@@ -191,9 +191,14 @@
                     )
                     (do 0)
                   )
-                  (let cmd String (string-concat "clang" (string-concat extra (string-concat " -o " (string-concat output-path (string-concat " " (string-concat ll-tmp-path (string-concat " " (string-concat runtime-path " -lm")))))))))
-                  (let rc Int32 (ccall "system" (returns Int32) (args (String cmd))))
-                  (if-stmt (== rc 0) (return 0) (return 1))
+                  ;; Compile IR to object file using LLVM API
+                  (let obj-tmp-path String "/tmp/weavec1_tmp.o")
+                  (let rc Int32 (ccall "llvm-compile-ir-to-object" (returns Int32) (args (String ir-string) (String obj-tmp-path) (Int32 opt-level))))
+                  (if-stmt (!= rc 0) (return 1) (do 0))
+                  ;; Link object file to executable using system linker
+                  (let cmd String (string-concat "clang" (string-concat extra (string-concat " -o " (string-concat output-path (string-concat " " (string-concat obj-tmp-path (string-concat " " (string-concat runtime-path " -lm")))))))))
+                  (let link-rc Int32 (ccall "system" (returns Int32) (args (String cmd))))
+                  (if-stmt (== link-rc 0) (return 0) (return 1))
                 )
               )
             )

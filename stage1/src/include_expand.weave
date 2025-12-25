@@ -6,6 +6,7 @@
   (include "tokenizer.weave")
   (include "sexpr_parser.weave")
   (include "arena.weave")
+  (include "file_io.weave")
   (include "ir/util_strings_core.weave")
 
   (fn log-include
@@ -147,16 +148,16 @@
         (set p (string-literal-value p))
         (set p p)
       )
-      (let src String (ccall "weave_read_file" (returns String) (args (String p))))
+      (let src String (weave_read_file p))
       (ccall "puts" (returns Int32) (args (String "[include_expand] read file attempted")))
       (if-stmt (== (string-length src) 0)
         (do
           (let alt String (string-concat "bootstrap/" p))
-          (set src (ccall "weave_read_file" (returns String) (args (String alt))))
+          (set src (weave_read_file alt))
            (if-stmt (== (string-length src) 0)
             (do
               (let alt2 String (string-concat "stdlib/" p))
-              (set src (ccall "weave_read_file" (returns String) (args (String alt2))))
+              (set src (weave_read_file alt2))
                (if-stmt (== (string-length src) 0) (return (- 0 1)) (do 0))
             )
             (do 0)
