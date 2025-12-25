@@ -1,0 +1,23 @@
+(program
+  (name "test_llvm_jit_simple")
+  (doc "Simple test of llvm-jit special form")
+
+  (entry main
+    (params (argc Int32) (argv (ptr String)))
+    (returns Int32)
+    (body
+      (do
+        ;; Use llvm-jit to compile and execute a simple add function
+        (let result Int32 (llvm-jit 
+          "define i32 @add(i32 %a, i32 %b) {\n  %sum = add i32 %a, %b\n  ret i32 %sum\n}\n"
+          "add"
+          (args 10 20)))
+        (if-stmt (== result 30)
+          (return 0)
+          (return 1)
+        )
+      )
+    )
+  )
+)
+
