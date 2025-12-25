@@ -7,9 +7,6 @@ endif()
 if(NOT DEFINED TEST_FILE)
   message(FATAL_ERROR "TEST_FILE not set")
 endif()
-if(NOT DEFINED RUNTIME)
-  message(FATAL_ERROR "RUNTIME not set")
-endif()
 if(NOT DEFINED OUT_DIR)
   message(FATAL_ERROR "OUT_DIR not set")
 endif()
@@ -28,8 +25,9 @@ if(NOT rc EQUAL 0)
   message(FATAL_ERROR "weavec0 failed (rc=${rc}) on ${TEST_FILE}")
 endif()
 
+# Link (no runtime needed - arena-create uses only malloc which is in libc)
 execute_process(
-  COMMAND "${CLANG}" -Wno-null-character "${LL}" "${RUNTIME}" -lm -o "${EXE}"
+  COMMAND "${CLANG}" -Wno-null-character "${LL}" -lm -o "${EXE}"
   RESULT_VARIABLE rc
 )
 if(NOT rc EQUAL 0)

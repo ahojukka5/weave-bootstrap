@@ -7,9 +7,6 @@ endif()
 if(NOT DEFINED SRC_FILE)
   message(FATAL_ERROR "SRC_FILE not set")
 endif()
-if(NOT DEFINED RUNTIME)
-  message(FATAL_ERROR "RUNTIME not set")
-endif()
 if(NOT DEFINED OUT_DIR)
   message(FATAL_ERROR "OUT_DIR not set")
 endif()
@@ -62,9 +59,9 @@ if(NOT rc EQUAL 0)
   endif()
 endif()
 
-# Link with runtime
+# Link (no runtime needed - arena-create uses only malloc which is in libc)
 execute_process(
-  COMMAND "${CLANG}" -Wno-null-character "${LL}" "${RUNTIME}" -lm -o "${EXE}"
+  COMMAND "${CLANG}" -Wno-null-character "${LL}" -lm -o "${EXE}"
   RESULT_VARIABLE rc
 )
 if(NOT rc EQUAL 0)
