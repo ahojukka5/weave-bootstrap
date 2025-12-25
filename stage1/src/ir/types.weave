@@ -9,7 +9,7 @@
 
   (fn map-type-node
     (doc "Lower a type AST node into an LLVM spelling.")
-    (params (a (ptr Arena)) (node Int32)) (returns String)
+    (params (a (ptr Arena)) (node Int32) (struct-names ArrayString)) (returns String)
     (body (do
       (if-stmt (== (arena-kind a node) (node-kind-atom))
         (do
@@ -26,11 +26,25 @@
           (if-stmt (string-eq name "ArrayString") (return "i8*") (do 0))
           (if-stmt (string-eq name "ArrayInt32") (return "i8*") (do 0))
           (if-stmt (string-eq name "NodeKind") (return "i32") (do 0))
-          ;; Unknown atom - treat as user-defined struct type, prefix with %
-          (let b Buffer (buffer-new))
-          (buffer-append-string b "%")
-          (buffer-append-string b (sanitize-name name))
-          (return (buffer-to-string b))
+          ;; Check for non-type identifiers that should not be treated as types
+          (if-stmt (|| (|| (|| (string-eq name "program") (string-eq name "fn")) (string-eq name "entry")) (string-eq name "module"))
+            (return "i32") ;; Fallback to i32 for non-type identifiers
+            (do 0)
+          )
+          ;; Unknown atom - check if it's a declared struct type
+          (if-stmt (== (array-str-contains struct-names name) 1)
+            (do
+              ;; Valid struct type - prefix with %
+              (let b Buffer (buffer-new))
+              (buffer-append-string b "%")
+              (buffer-append-string b (sanitize-name name))
+              (return (buffer-to-string b))
+            )
+            (do
+              ;; Not a struct type - fallback to i32 (safer than generating invalid type)
+              (return "i32")
+            )
+          )
         )
         (do
           ;; List type: (ptr T) or (struct Name)
@@ -42,7 +56,7 @@
               ;; (ptr InnerType) -> mapped(InnerType)*
               (let inner Int32 (arena-next-sibling a head))
               (if-stmt (== inner (- 0 1)) (return "i8*") (do 0))
-              (let mapped String (map-type-node a inner))
+              (let mapped String (map-type-node a inner struct-names))
               (let b Buffer (buffer-new))
               (buffer-append-string b mapped)
               (buffer-append-string b "*")
@@ -63,8 +77,8 @@
             )
             (do 0)
           )
-          ;; Unknown list form, return head value
-          (return head-val)
+          ;; Unknown list form - default to i32 (should not happen for valid type nodes)
+          (return "i32")
         )
       )
     )) ;; body
@@ -75,7 +89,7 @@
         (body
           (let a (ptr Arena) (arena-create 256))
           (let node Int32 (parse-string a "Int32"))
-          (let result String (map-type-node a node))
+          (let result String (map-type-node a node (array-str-new)))
           (expect-eq (string-eq result "i32") 1)
         )
       )
@@ -85,7 +99,7 @@
         (body
           (let a (ptr Arena) (arena-create 256))
           (let node Int32 (parse-string a "String"))
-          (let result String (map-type-node a node))
+          (let result String (map-type-node a node (array-str-new)))
           (expect-eq (string-eq result "i8*") 1)
         )
       )
@@ -95,18 +109,42 @@
         (body
           (let a (ptr Arena) (arena-create 256))
           (let node Int32 (parse-string a "Void"))
-          (let result String (map-type-node a node))
+          (let result String (map-type-node a node (array-str-new)))
           (expect-eq (string-eq result "void") 1)
         )
       )
       (test map-type-node-custom-type
-        (doc "Unknown atom treated as struct with % prefix")
+        (doc "Declared struct type treated as struct with % prefix")
         (tags unit ir types)
         (body
           (let a (ptr Arena) (arena-create 256))
           (let node Int32 (parse-string a "MyStruct"))
-          (let result String (map-type-node a node))
+          (let struct-names ArrayString (array-str-new))
+          (array-str-append struct-names "MyStruct")
+          (let result String (map-type-node a node struct-names))
           (expect-eq (string-eq result "%MyStruct") 1)
+        )
+      )
+      (test map-type-node-unknown-type
+        (doc "Unknown type not in struct-names falls back to i32")
+        (tags unit ir types)
+        (body
+          (let a (ptr Arena) (arena-create 256))
+          (let node Int32 (parse-string a "UnknownType"))
+          (let struct-names ArrayString (array-str-new))
+          (let result String (map-type-node a node struct-names))
+          (expect-eq (string-eq result "i32") 1)
+        )
+      )
+      (test map-type-node-program-identifier
+        (doc "Non-type identifier 'program' falls back to i32")
+        (tags unit ir types)
+        (body
+          (let a (ptr Arena) (arena-create 256))
+          (let node Int32 (parse-string a "program"))
+          (let struct-names ArrayString (array-str-new))
+          (let result String (map-type-node a node struct-names))
+          (expect-eq (string-eq result "i32") 1)
         )
       )
       (test map-type-node-ptr-int32
@@ -115,7 +153,7 @@
         (body
           (let a (ptr Arena) (arena-create 256))
           (let node Int32 (parse-string a "(ptr Int32)"))
-          (let result String (map-type-node a node))
+          (let result String (map-type-node a node (array-str-new)))
           (expect-eq (string-eq result "i32*") 1)
         )
       )
@@ -125,7 +163,7 @@
         (body
           (let a (ptr Arena) (arena-create 256))
           (let node Int32 (parse-string a "(ptr (ptr Int32))"))
-          (let result String (map-type-node a node))
+          (let result String (map-type-node a node (array-str-new)))
           (expect-eq (string-eq result "i32**") 1)
         )
       )
@@ -135,7 +173,7 @@
         (body
           (let a (ptr Arena) (arena-create 256))
           (let node Int32 (parse-string a "(struct Arena)"))
-          (let result String (map-type-node a node))
+          (let result String (map-type-node a node (array-str-new)))
           (expect-eq (string-eq result "%Arena") 1)
         )
       )
@@ -145,7 +183,7 @@
         (body
           (let a (ptr Arena) (arena-create 256))
           (let node Int32 (parse-string a "(ptr (struct Node))"))
-          (let result String (map-type-node a node))
+          (let result String (map-type-node a node (array-str-new)))
           (expect-eq (string-eq result "%Node*") 1)
         )
       )
@@ -154,9 +192,9 @@
 
   (fn emit-type-node
     (doc "Append the mapped type from an AST node to the buffer.")
-    (params (out Buffer) (a (ptr Arena)) (node Int32)) (returns Int32)
+    (params (out Buffer) (a (ptr Arena)) (node Int32) (struct-names ArrayString)) (returns Int32)
     (body (do
-      (buffer-append-string out (map-type-node a node))
+      (buffer-append-string out (map-type-node a node struct-names))
       (return 0)
     )) ;; body
     (tests
@@ -167,7 +205,7 @@
           (let a (ptr Arena) (arena-create 256))
           (let node Int32 (parse-string a "Int32"))
           (let buf Buffer (buffer-new))
-          (emit-type-node buf a node)
+          (emit-type-node buf a node (array-str-new))
           (let result String (buffer-to-string buf))
           (expect-eq (string-eq result "i32") 1)
         )
@@ -179,7 +217,7 @@
           (let a (ptr Arena) (arena-create 256))
           (let node Int32 (parse-string a "(ptr String)"))
           (let buf Buffer (buffer-new))
-          (emit-type-node buf a node)
+          (emit-type-node buf a node (array-str-new))
           (let result String (buffer-to-string buf))
           (expect-eq (string-eq result "i8**") 1)
         )
@@ -189,9 +227,9 @@
 
   (fn emit-pointer-type-node
     (doc "Append mapped pointer type from AST node (adds a trailing *).")
-    (params (out Buffer) (a (ptr Arena)) (node Int32)) (returns Int32)
+    (params (out Buffer) (a (ptr Arena)) (node Int32) (struct-names ArrayString)) (returns Int32)
     (body (do
-      (emit-type-node out a node)
+      (emit-type-node out a node struct-names)
       (buffer-append-string out "*")
       (return 0)
     )) ;; body
@@ -203,7 +241,7 @@
           (let a (ptr Arena) (arena-create 256))
           (let node Int32 (parse-string a "Int32"))
           (let buf Buffer (buffer-new))
-          (emit-pointer-type-node buf a node)
+          (emit-pointer-type-node buf a node (array-str-new))
           (let result String (buffer-to-string buf))
           (expect-eq (string-eq result "i32*") 1)
         )
@@ -215,7 +253,7 @@
           (let a (ptr Arena) (arena-create 256))
           (let node Int32 (parse-string a "(ptr Int32)"))
           (let buf Buffer (buffer-new))
-          (emit-pointer-type-node buf a node)
+          (emit-pointer-type-node buf a node (array-str-new))
           (let result String (buffer-to-string buf))
           (expect-eq (string-eq result "i32**") 1)
         )
@@ -237,6 +275,11 @@
       (if-stmt (string-eq name "ArrayInt32") (return "i8*") (do 0))
       (if-stmt (string-eq name "Arena") (return "i8*") (do 0))
       (if-stmt (string-eq name "NodeKind") (return "i32") (do 0))
+      ;; Check for non-type identifiers that should not be treated as types
+      (if-stmt (|| (|| (|| (string-eq name "program") (string-eq name "fn")) (string-eq name "entry")) (string-eq name "module"))
+        (return "i32") ;; Fallback to i32 for non-type identifiers
+        (do 0)
+      )
       ;; User-defined struct type - return as %Name
       (let b Buffer (buffer-new))
       (buffer-append-string b "%")
