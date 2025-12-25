@@ -2,16 +2,10 @@ cmake_minimum_required(VERSION 3.16)
 
 project(weave_bootstrap C)
 
-# Runtime path - configurable, defaults to slim internal runtime
+# Runtime path - no longer needed (Weave defines main() directly)
+# Kept for backward compatibility if external runtime is provided
 if(NOT DEFINED WEAVE_RUNTIME)
-  set(WEAVE_RUNTIME ${CMAKE_SOURCE_DIR}/stage0/runtime/stdlib_runtime.c)
-endif()
-
-if(NOT EXISTS ${WEAVE_RUNTIME})
-  message(WARNING "Runtime not found at ${WEAVE_RUNTIME}. You can:")
-  message(WARNING "  1. Set -DWEAVE_RUNTIME=/path/to/runtime.c when running cmake")
-  message(WARNING "  2. Use internal slim runtime at stage0/runtime/stdlib_runtime.c (default)")
-  message(WARNING "  Note: stage0/runtime/runtime.c is a minimal shim; helpers live in stdlib_runtime.c")
+  set(WEAVE_RUNTIME "")
 endif()
 
 # Build Stage0 via its CMake

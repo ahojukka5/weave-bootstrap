@@ -10,10 +10,7 @@ if (NOT CLANG_EXE)
   message(FATAL_ERROR "clang not found (required for linking tests)")
 endif()
 
-# Runtime path inherited from parent
-if(NOT DEFINED WEAVE_RUNTIME)
-  message(FATAL_ERROR "WEAVE_RUNTIME must be set by parent CMakeLists.txt")
-endif()
+# Runtime no longer needed - Weave defines main() directly
 
 # Build Stage1 using Stage0 compiler
 set(STAGE1_SRC ${CMAKE_CURRENT_SOURCE_DIR}/src/weavec1.weave)
@@ -23,9 +20,8 @@ file(MAKE_DIRECTORY ${CMAKE_BINARY_DIR}/stage1)
 
 add_custom_command(
   OUTPUT ${STAGE1_OUT}
-  COMMAND ${CMAKE_COMMAND} -E env WEAVE_RUNTIME=${WEAVE_RUNTIME} 
-    $<TARGET_FILE:weavec0> -I${CMAKE_CURRENT_SOURCE_DIR}/src -o ${STAGE1_OUT} ${STAGE1_SRC}
-  DEPENDS weavec0 ${STAGE1_SRC} ${STAGE1_ALL_SRC} ${WEAVE_RUNTIME}
+  COMMAND $<TARGET_FILE:weavec0> -I${CMAKE_CURRENT_SOURCE_DIR}/src -o ${STAGE1_OUT} ${STAGE1_SRC}
+  DEPENDS weavec0 ${STAGE1_SRC} ${STAGE1_ALL_SRC}
   COMMENT "Building stage1 compiler (weavec1) via weavec0"
   VERBATIM
 )
@@ -54,39 +50,23 @@ foreach(test_file IN LISTS STAGE1_TESTS)
     # Expected to succeed - compile, link, run, check exit 42
     add_test(
       NAME stage1_${test_name}
-      COMMAND bash -c "${STAGE1_OUT} ${test_file} --emit-llvm -o ${out_dir}/${test_name}.ll && ${CLANG_EXE} -Wno-null-character ${out_dir}/${test_name}.ll ${WEAVE_RUNTIME} -lm -o ${out_dir}/${test_name} && ${out_dir}/${test_name}; test $? -eq 42"
+      COMMAND bash -c "${STAGE1_OUT} ${test_file} --emit-llvm -o ${out_dir}/${test_name}.ll && ${CLANG_EXE} -Wno-null-character ${out_dir}/${test_name}.ll -lm -o ${out_dir}/${test_name} && ${out_dir}/${test_name}; test $? -eq 42"
     )
   endif()
   
   set_tests_properties(stage1_${test_name} PROPERTIES LABELS "stage1")
 endforeach()
 
-# Embedded tests for Stage1 source aggregated via weavec0
-# Discover test names from source files using CMake regex (no Python).
-set(STAGE1_EMBED_TESTS)
-foreach(src IN LISTS STAGE1_ALL_SRC)
-  file(READ ${src} SRC_CONTENT)
-  # Match occurrences like: (test name
-  string(REGEX MATCHALL "[\(]test[ \t\n]+[A-Za-z0-9_\-]+" TEST_MATCHES "${SRC_CONTENT}")
-  foreach(m IN LISTS TEST_MATCHES)
-    string(REGEX REPLACE "^[\(]test[ \t\n]+" "" tname "${m}")
-    list(APPEND STAGE1_EMBED_TESTS "${tname}")
-  endforeach()
-endforeach()
-# Deduplicate
-list(REMOVE_DUPLICATES STAGE1_EMBED_TESTS)
-foreach(tname IN LISTS STAGE1_EMBED_TESTS)
-  add_test(
-    NAME stage1_embedded_${tname}
-    COMMAND ${CMAKE_COMMAND}
-      -DWEAVEC0=$<TARGET_FILE:weavec0>
-      -DCLANG=${CLANG_EXE}
-      -DSRC_FILE=${STAGE1_SRC}
-      -DTEST_NAME=${tname}
-      -DWEAVEC_ARGS=-I${CMAKE_CURRENT_SOURCE_DIR}/src\;-I${CMAKE_SOURCE_DIR}/stdlib
-      -DRUNTIME=${WEAVE_RUNTIME}
-      -DOUT_DIR=${CMAKE_BINARY_DIR}/tests/stage1_embedded
-      -P ${CMAKE_SOURCE_DIR}/stage0/tests/run_embedded_tests.cmake
-  )
-  set_tests_properties(stage1_embedded_${tname} PROPERTIES LABELS "stage1;embedded")
-endforeach()
+# Embedded tests for Stage1 source: compile ONCE with all tests, run together
+# This is much faster than compiling the entire stage1 source for each individual test
+add_test(
+  NAME stage1_embedded_all
+  COMMAND ${CMAKE_COMMAND}
+    -DWEAVEC0=$<TARGET_FILE:weavec0>
+    -DCLANG=${CLANG_EXE}
+    -DSRC_FILE=${STAGE1_SRC}
+    -DWEAVEC_ARGS=-I${CMAKE_CURRENT_SOURCE_DIR}/src\;-I${CMAKE_SOURCE_DIR}/stdlib
+    -DOUT_DIR=${CMAKE_BINARY_DIR}/tests/stage1_embedded
+    -P ${CMAKE_SOURCE_DIR}/stage0/tests/run_embedded_tests.cmake
+)
+set_tests_properties(stage1_embedded_all PROPERTIES LABELS "stage1;embedded")
