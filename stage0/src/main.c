@@ -1,6 +1,9 @@
 #include "common.h"
 #include "fs.h"
 #include "compiler.h"
+#ifdef USE_LLVM_API
+#include "llvm_compile.h"
+#endif
 
 #include <stdio.h>
 #include <stdlib.h>
@@ -234,7 +237,98 @@ int main(int argc, char **argv) {
         fwrite(ir.data ? ir.data : "", 1, ir.len, f);
         fclose(f);
     } else {
-        /* Compile to object or executable using clang */
+#ifdef USE_LLVM_API
+        /* Compile to object or executable using LLVM directly */
+        int opt_level = optimize ? 2 : 0;
+        const char *use_asan_env = getenv("WEAVE_ASAN");
+        int use_asan = (use_asan_env && use_asan_env[0] == '1');
+        
+        if (mode == OUTPUT_OBJECT) {
+            /* Compile to object file using LLVM */
+            int rc;
+            if (use_asan) {
+                rc = llvm_compile_ir_to_object_asan(ir.data ? ir.data : "", ir.len,
+                                                    output, opt_level, 1);
+            } else {
+                rc = llvm_compile_ir_to_object_internal(ir.data ? ir.data : "", ir.len,
+                                                        output, opt_level);
+            }
+            if (rc != 0) {
+                fprintf(stderr, "weavec: LLVM compilation failed\n");
+                return 1;
+            }
+        } else if (mode == OUTPUT_EXECUTABLE) {
+            /* For executables, we still need to link.
+             * First compile to object file, then link with system linker.
+             * TODO: In future, we could use lld for full LLVM integration.
+             */
+            char obj_tmp[256];
+            pid_t pid;
+            int status;
+            
+            /* Check runtime for executable output */
+            if (!runtime_path) {
+                fprintf(stderr, "weavec: runtime path required for executable output\n");
+                fprintf(stderr, "  Use --runtime PATH or set WEAVE_RUNTIME environment variable\n");
+                return 1;
+            }
+            
+            /* Compile IR to object file using LLVM */
+            snprintf(obj_tmp, sizeof(obj_tmp), "/tmp/weavec_%d.o", getpid());
+            int rc;
+            if (use_asan) {
+                rc = llvm_compile_ir_to_object_asan(ir.data ? ir.data : "", ir.len,
+                                                     obj_tmp, opt_level, 1);
+            } else {
+                rc = llvm_compile_ir_to_object_internal(ir.data ? ir.data : "", ir.len,
+                                                        obj_tmp, opt_level);
+            }
+            if (rc != 0) {
+                fprintf(stderr, "weavec: LLVM compilation failed\n");
+                return 1;
+            }
+            
+            /* Link object file to executable using system linker */
+            pid = fork();
+            if (pid == 0) {
+                /* Child process - exec linker */
+                const char *linker_args[16];
+                int arg_idx = 0;
+                
+                linker_args[arg_idx++] = "clang";  /* Use clang as linker for now */
+                if (use_asan) {
+                    linker_args[arg_idx++] = "-fsanitize=address";
+                    linker_args[arg_idx++] = "-fno-omit-frame-pointer";
+                }
+                if (use_static) {
+                    linker_args[arg_idx++] = "-static";
+                }
+                linker_args[arg_idx++] = "-o";
+                linker_args[arg_idx++] = output;
+                linker_args[arg_idx++] = obj_tmp;
+                linker_args[arg_idx++] = runtime_path;
+                linker_args[arg_idx++] = "-lm";
+                linker_args[arg_idx] = NULL;
+                
+                execvp("clang", (char *const *)linker_args);
+                fprintf(stderr, "weavec: failed to execute linker\n");
+                _exit(1);
+            } else if (pid > 0) {
+                /* Parent - wait for linker */
+                waitpid(pid, &status, 0);
+                unlink(obj_tmp);  /* Clean up temp file */
+                if (!WIFEXITED(status) || WEXITSTATUS(status) != 0) {
+                    fprintf(stderr, "weavec: linking failed\n");
+                    return 1;
+                }
+            } else {
+                fprintf(stderr, "weavec: fork failed\n");
+                unlink(obj_tmp);
+                return 1;
+            }
+        }
+#else
+        /* Fallback: Compile to object or executable using clang */
         char ll_tmp[256];
         pid_t pid;
         int status;
@@ -305,6 +399,7 @@ int main(int argc, char **argv) {
             fprintf(stderr, "weavec: fork failed\n");
             return 1;
         }
+#endif
     }
 
     return 0;
