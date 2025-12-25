@@ -1,0 +1,107 @@
+(module
+  (name "stage1-file-io")
+  (doc "File I/O functions implemented in Weave using libc wrappers.")
+  (include "libc.weave")
+  (include "string.weave")
+
+  ;; Constants for fseek
+  (let SEEK_SET Int32 0)
+  (let SEEK_CUR Int32 1)
+  (let SEEK_END Int32 2)
+
+  (fn weave_read_file
+    (doc "Read entire file into a newly allocated string. Returns NULL on failure. C-compatible name for ccall.")
+    (params (path String)) (returns String)
+    (body
+      (do
+        (if-stmt (== path 0) (return 0) (do 0))
+        (let f String (c-fopen path "rb"))
+        (if-stmt (== f 0) (return 0) (do 0))
+        (let seek-rc Int32 (c-fseek f 0 SEEK_END))
+        (if-stmt (!= seek-rc 0)
+          (do
+            (c-fclose f)
+            (return 0)
+          )
+          (do 0)
+        )
+        (let size Int32 (c-ftell f))
+        (if-stmt (< size 0)
+          (do
+            (c-fclose f)
+            (return 0)
+          )
+          (do 0)
+        )
+        ;; Rewind to beginning
+        (c-fseek f 0 SEEK_SET)
+        (let buf String (c-malloc (+ size 1)))
+        (if-stmt (== buf 0)
+          (do
+            (c-fclose f)
+            (return 0)
+          )
+          (do 0)
+        )
+        (let rd Int32 (c-fread buf 1 size f))
+        (c-fclose f)
+        (if-stmt (!= rd size)
+          (do
+            (c-free buf)
+            (return 0)
+          )
+          (do 0)
+        )
+        ;; Null-terminate
+        (let null-ptr (ptr Int8) (ptr-add Int8 buf size))
+        (store Int8 null-ptr 0)
+        (return buf)
+      )
+    )
+    (tests
+      (test weave_read_file-nonexistent
+        (doc "reading nonexistent file returns NULL")
+        (tags unit file-io)
+        (body
+          (let result String (weave_read_file "/nonexistent/file/path"))
+          (expect-eq result 0)
+        )
+      )
+    )
+  )
+
+  (fn weave_write_file
+    (doc "Write string content to file. Returns 0 on success, -1 on failure. C-compatible name for ccall.")
+    (params (path String) (content String)) (returns Int32)
+    (body
+      (do
+        (if-stmt (|| (== path 0) (== content 0)) (return (- 0 1)) (do 0))
+        (let f String (c-fopen path "wb"))
+        (if-stmt (== f 0) (return (- 0 1)) (do 0))
+        (let len Int32 (c-strlen content))
+        (let wr Int32 (c-fwrite content 1 len f))
+        (c-fclose f)
+        (if-stmt (== wr len) (return 0) (return (- 0 1)))
+      )
+    )
+    (tests
+      (test weave_write_file-basic
+        (doc "writing to /dev/null should succeed")
+        (tags unit file-io)
+        (body
+          (let result Int32 (weave_write_file "/dev/null" "test"))
+          (expect-eq result 0)
+        )
+      )
+      (test weave_write_file-null-path
+        (doc "writing with null path should fail")
+        (tags unit file-io)
+        (body
+          (let result Int32 (weave_write_file 0 "test"))
+          (expect-eq result (- 0 1))
+        )
+      )
+    )
+  )
+)
+

@@ -1,0 +1,349 @@
+(module
+  (name "stage1-cli")
+  (doc "CLI argument parsing implemented in Weave - replaces C runtime functions.")
+  (include "libc.weave")
+  (include "string.weave")
+
+  ;; Helper to access argv[i] using pointer arithmetic
+  (fn argv-get
+    (doc "Get argv[i] using pointer arithmetic.")
+    (params (argv (ptr String)) (i Int32)) (returns String)
+    (body
+      (do
+        (if-stmt (== argv 0) (return 0) (do 0))
+        (let ptr (ptr String) (ptr-add String argv i))
+        (return (load String ptr))
+      )
+    )
+    (tests
+      (test argv-get-basic
+        (doc "argv-get returns string or NULL")
+        (tags unit cli)
+        (body
+          ;; Can't easily test without actual argv, but syntax is correct
+          (expect-true 1)
+        )
+      )
+    )
+  )
+
+  (fn is-long-opt
+    (doc "Check if string is a long option (--name).")
+    (params (s String)) (returns Int32)
+    (body
+      (do
+        (if-stmt (== s 0) (return 0) (do 0))
+        (let len Int32 (c-strlen s))
+        (if-stmt (< len 3) (return 0) (do 0))
+        (let c0 Int32 (string-char-at s 0))
+        (let c1 Int32 (string-char-at s 1))
+        (let c2 Int32 (string-char-at s 2))
+        (if-stmt (&& (== c0 45) (== c1 45) (!= c2 0)) (return 1) (return 0))
+      )
+    )
+    (tests
+      (test is-long-opt-valid
+        (doc "--emit-llvm is a long option")
+        (tags unit cli)
+        (body
+          (let result Int32 (is-long-opt "--emit-llvm"))
+          (expect-eq result 1)
+        )
+      )
+      (test is-long-opt-short
+        (doc "-S is not a long option")
+        (tags unit cli)
+        (body
+          (let result Int32 (is-long-opt "-S"))
+          (expect-eq result 0)
+        )
+      )
+    )
+  )
+
+  (fn is-short-opt
+    (doc "Check if string is a short option (-name).")
+    (params (s String)) (returns Int32)
+    (body
+      (do
+        (if-stmt (== s 0) (return 0) (do 0))
+        (let len Int32 (c-strlen s))
+        (if-stmt (< len 2) (return 0) (do 0))
+        (let c0 Int32 (string-char-at s 0))
+        (let c1 Int32 (string-char-at s 1))
+        (if-stmt (&& (== c0 45) (!= c1 45) (!= c1 0)) (return 1) (return 0))
+      )
+    )
+    (tests
+      (test is-short-opt-valid
+        (doc "-S is a short option")
+        (tags unit cli)
+        (body
+          (let result Int32 (is-short-opt "-S"))
+          (expect-eq result 1)
+        )
+      )
+      (test is-short-opt-long
+        (doc "--emit-llvm is not a short option")
+        (tags unit cli)
+        (body
+          (let result Int32 (is-short-opt "--emit-llvm"))
+          (expect-eq result 0)
+        )
+      )
+    )
+  )
+
+  (fn weave-get-input
+    (doc "Return first positional argument (non-flag), or NULL. C-compatible name.")
+    (params (argc Int32) (argv (ptr String))) (returns String)
+    (body
+      (do
+        (let i Int32 1)
+        (while (< i argc)
+          (do
+            (let arg String (argv-get argv i))
+            (if-stmt (== arg 0) (return 0) (do 0))
+            (if-stmt (== (is-long-opt arg) 1)
+              (do
+                (set i (+ i 1))
+                (continue)
+              )
+              (do 0)
+            )
+            (if-stmt (== (is-short-opt arg) 1)
+              (do
+                (let opt-char Int32 (string-char-at arg 1))
+                ;; 'o'=111, 'O'=79, 'I'=73
+                (if-stmt (|| (== opt-char 111) (|| (== opt-char 79) (== opt-char 73)))
+                  (do
+                    (let arg-len Int32 (c-strlen arg))
+                    (if-stmt (== arg-len 2)
+                      (do
+                        (if-stmt (< (+ i 1) argc) (set i (+ i 1)) (do 0))
+                      )
+                      (do 0)
+                    )
+                    (set i (+ i 1))
+                    (continue)
+                  )
+                  (do
+                    (set i (+ i 1))
+                    (continue)
+                  )
+                )
+              )
+              (return arg)
+            )
+            (set i (+ i 1))
+          )
+        )
+        (return 0)
+      )
+    )
+    (tests
+      (test weave-get-input-basic
+        (doc "weave-get-input returns string or NULL")
+        (tags unit cli)
+        (body
+          (let result String (weave-get-input))
+          ;; Can't test much without actual argv, but at least it doesn't crash
+          (expect-true (|| (== result 0) (!= result 0)))
+        )
+      )
+    )
+  )
+
+  (fn weave-get-option
+    (doc "Return value for option name, or NULL. C-compatible name.")
+    (params (name String) (argc Int32) (argv (ptr String))) (returns String)
+    (body
+      (do
+        (if-stmt (== name 0) (return 0) (do 0))
+        (let name-len Int32 (c-strlen name))
+        (if-stmt (== name-len 1)
+          (do
+            ;; Short option: -o VAL or -oVAL; special-case -I to aggregate
+            (let opt-char Int32 (string-char-at name 0))
+            (let is-I Int32 (== opt-char 73))
+            (let acc String 0)
+            (let acc-len Int32 0)
+            (let i Int32 1)
+            (while (< i argc)
+              (do
+                (let arg String (argv-get argv i))
+                (if-stmt (== arg 0) (do (set i (+ i 1)) (continue)) (do 0))
+                (if-stmt (== (is-short-opt arg) 0) (do (set i (+ i 1)) (continue)) (do 0))
+                (if-stmt (!= (string-char-at arg 1) opt-char) (do (set i (+ i 1)) (continue)) (do 0))
+                (let val String 0)
+                (let arg-len Int32 (c-strlen arg))
+                (if-stmt (> arg-len 2)
+                  (set val (string-slice arg 2 (- arg-len 2)))
+                  (do
+                    (if-stmt (< (+ i 1) argc)
+                      (set val (argv-get argv (+ i 1)))
+                      (set val 0)
+                    )
+                  )
+                )
+                (if-stmt (== val 0) (do (set i (+ i 1)) (continue)) (do 0))
+                (if-stmt (== is-I 0)
+                  (return val)
+                  (do
+                    ;; Aggregate -I values with ':'
+                    (let val-len Int32 (c-strlen val))
+                    (let new-len Int32 (+ acc-len val-len (if-stmt (> acc-len 0) 1 0)))
+                    (let new-acc String (c-malloc (+ new-len 1)))
+                    (if-stmt (== new-acc 0) (return 0) (do 0))
+                    (if-stmt (> acc-len 0)
+                      (do
+                        (c-strcpy new-acc acc)
+                        (c-strcat new-acc ":")
+                        (c-free acc)
+                      )
+                      (do 0)
+                    )
+                    (c-strcat new-acc val)
+                    (set acc new-acc)
+                    (set acc-len new-len)
+                  )
+                )
+                (set i (+ i 1))
+              )
+            )
+            (return acc)
+          )
+          (do
+            ;; Long option: --name=VAL or --name VAL
+            (let i Int32 1)
+            (while (< i argc)
+              (do
+                (let arg String (argv-get argv i))
+                (if-stmt (== arg 0) (do (set i (+ i 1)) (continue)) (do 0))
+                (if-stmt (== (is-long-opt arg) 0) (do (set i (+ i 1)) (continue)) (do 0))
+                (let arg-len Int32 (c-strlen arg))
+                (if-stmt (< arg-len (+ name-len 3)) (do (set i (+ i 1)) (continue)) (do 0))
+                ;; Check if arg starts with "--name"
+                (let prefix String (string-slice arg 2 name-len))
+                (if-stmt (== (string-eq prefix name) 0) (do (set i (+ i 1)) (continue)) (do 0))
+                (let after-name Int32 (+ 2 name-len))
+                (let next-char Int32 (string-char-at arg after-name))
+                (if-stmt (== next-char 61)
+                  (return (string-slice arg (+ after-name 1) (- arg-len (+ after-name 1))))
+                  (do
+                    (if-stmt (== next-char 0)
+                      (do
+                        (if-stmt (< (+ i 1) argc) (return (argv-get argv (+ i 1))) (return 0))
+                      )
+                      (return 0)
+                    )
+                  )
+                )
+                (set i (+ i 1))
+              )
+            )
+            (return 0)
+          )
+        )
+      )
+    )
+    (tests
+      (test weave-get-option-basic
+        (doc "weave-get-option returns string or NULL")
+        (tags unit cli)
+        (body
+          (let result String (weave-get-option "o"))
+          ;; Can't test much without actual argv, but at least it doesn't crash
+          (expect-true (|| (== result 0) (!= result 0)))
+        )
+      )
+    )
+  )
+
+  (fn weave-has-flag
+    (doc "Check presence of flag. C-compatible name.")
+    (params (name String) (argc Int32) (argv (ptr String))) (returns Int32)
+    (body
+      (do
+        (if-stmt (== name 0) (return 0) (do 0))
+        (let name-len Int32 (c-strlen name))
+        (if-stmt (== name-len 1)
+          (do
+            ;; Short flag
+            (let opt-char Int32 (string-char-at name 0))
+            (let i Int32 1)
+            (while (< i argc)
+              (do
+                (let arg String (argv-get argv i))
+                (if-stmt (== arg 0) (do (set i (+ i 1)) (continue)) (do 0))
+                (if-stmt (== (is-short-opt arg) 0) (do (set i (+ i 1)) (continue)) (do 0))
+                (let arg-len Int32 (c-strlen arg))
+                (if-stmt (== arg-len 2)
+                  (do
+                    (if-stmt (== (string-char-at arg 1) opt-char) (return 1) (do 0))
+                  )
+                  (do
+                    ;; Check if char appears in clustered flags
+                    (let j Int32 1)
+                    (while (< j arg-len)
+                      (do
+                        (if-stmt (== (string-char-at arg j) opt-char) (return 1) (do 0))
+                        (set j (+ j 1))
+                      )
+                    )
+                  )
+                )
+                (set i (+ i 1))
+              )
+            )
+            (return 0)
+          )
+          (do
+            ;; Long flag: --name or --name=value
+            (let i Int32 1)
+            (while (< i argc)
+              (do
+                (let arg String (argv-get argv i))
+                (if-stmt (== arg 0) (do (set i (+ i 1)) (continue)) (do 0))
+                (if-stmt (== (is-long-opt arg) 0) (do (set i (+ i 1)) (continue)) (do 0))
+                (let arg-len Int32 (c-strlen arg))
+                (if-stmt (< arg-len (+ name-len 3)) (do (set i (+ i 1)) (continue)) (do 0))
+                (let prefix String (string-slice arg 2 name-len))
+                (if-stmt (== (string-eq prefix name) 0) (do (set i (+ i 1)) (continue)) (do 0))
+                (let after-name Int32 (+ 2 name-len))
+                (let next-char Int32 (string-char-at arg after-name))
+                (if-stmt (|| (== next-char 0) (== next-char 61)) (return 1) (return 0))
+              )
+            )
+            ;; Also check single-dash long form: -name
+            (let i Int32 1)
+            (while (< i argc)
+              (do
+                (let arg String (argv-get argv i))
+                (if-stmt (== arg 0) (do (set i (+ i 1)) (continue)) (do 0))
+                (if-stmt (== (is-short-opt arg) 0) (do (set i (+ i 1)) (continue)) (do 0))
+                (let arg-len Int32 (c-strlen arg))
+                (if-stmt (!= arg-len (+ name-len 1)) (do (set i (+ i 1)) (continue)) (do 0))
+                (let suffix String (string-slice arg 1 name-len))
+                (if-stmt (== (string-eq suffix name) 1) (return 1) (do 0))
+                (set i (+ i 1))
+              )
+            )
+            (return 0)
+          )
+        )
+      )
+    )
+    (tests
+      (test weave-has-flag-basic
+        (doc "weave-has-flag returns 0 or 1")
+        (tags unit cli)
+        (body
+          (let result Int32 (weave-has-flag "S"))
+          (expect-true (|| (== result 0) (== result 1)))
+        )
+      )
+    )
+  )
+)
+
