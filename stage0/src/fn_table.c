@@ -1,5 +1,7 @@
 #include "fn_table.h"
 
+#include <stdio.h>
+#include <stdlib.h>
 #include <string.h>
 
 static void fn_table_reserve(FnTable *t, int need) {
@@ -44,6 +46,14 @@ void fn_table_add(FnTable *t, const char *name, TypeRef *ret_type, int param_cou
     int idx = fn_table_find(t, name);
     TypeRef **pt = copy_param_types(param_count, param_types);
     if (idx >= 0) {
+        /* Free old param_types array before overwriting */
+        if (t->param_types[idx]) free(t->param_types[idx]);
+        /* Debug: verify overwrite */
+        if (getenv("WEAVEC0_DEBUG_SIGS") && strcmp(name, "arena-kind") == 0) {
+            fprintf(stderr, "[dbg] Overwriting arena-kind: old param[0] kind=%d, new param[0] kind=%d\n",
+                    t->param_types[idx] && t->param_types[idx][0] ? t->param_types[idx][0]->kind : -1,
+                    pt && pt[0] ? pt[0]->kind : -1);
+        }
         t->ret_types[idx] = ret_type;
         t->param_counts[idx] = param_count;
         t->param_types[idx] = pt;
@@ -73,6 +83,13 @@ TypeRef *fn_table_param_type(FnTable *t, const char *name, int index, TypeRef *d
     int idx = fn_table_find(t, name);
     if (idx < 0) return default_ty;
     if (index < 0 || index >= t->param_counts[idx]) return default_ty;
-    return t->param_types[idx][index];
+    TypeRef *result = t->param_types[idx][index];
+    /* Debug: verify retrieval */
+    if (getenv("WEAVEC0_DEBUG_SIGS") && strcmp(name, "arena-kind") == 0 && index == 0) {
+        fprintf(stderr, "[dbg] Retrieving arena-kind param[0]: kind=%d, pointee_kind=%d\n",
+                result ? result->kind : -1,
+                result && result->pointee ? result->pointee->kind : -1);
+    }
+    return result;
 }
 
