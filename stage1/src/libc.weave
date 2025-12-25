@@ -129,4 +129,171 @@
       )
     )
   )
+
+  (fn c-realloc
+    (doc "libc realloc")
+    (params (ptr String) (size Int32)) (returns String)
+    (body (return (ccall "realloc" (returns String)
+      (args (String ptr) (Int32 size)))))
+    (tests
+      (test c-realloc-basic
+        (doc "realloc should return a pointer")
+        (tags unit libc)
+        (body
+          (let result String (c-realloc (string-literal "") 10))
+          (expect-true (!= result (string-literal "")))
+        )
+      )
+    )
+  )
+
+  (fn c-free
+    (doc "libc free")
+    (params (ptr String)) (returns Void)
+    (body (return (ccall "free" (returns Void)
+      (args (String ptr)))))
+    (tests
+      (test c-free-basic
+        (doc "free should not crash")
+        (tags unit libc)
+        (body
+          (let ptr String (string-literal "test"))
+          (c-free ptr)
+          (expect-eq 0 0)
+        )
+      )
+    )
+  )
+
+  (fn c-memcpy
+    (doc "libc memcpy")
+    (params (dest String) (src String) (n Int32)) (returns String)
+    (body (return (ccall "memcpy" (returns String)
+      (args (String dest) (String src) (Int32 n)))))
+    (tests
+      (test c-memcpy-basic
+        (doc "memcpy should copy memory")
+        (tags unit libc)
+        (body
+          (let dest String (c-malloc 10))
+          (let src String "test")
+          (c-memcpy dest src 5)
+          (expect-eq 0 0)
+        )
+      )
+    )
+  )
+
+  (fn c-fopen
+    (doc "libc fopen - returns FILE* as opaque pointer (String)")
+    (params (path String) (mode String)) (returns String)
+    (body (return (ccall "fopen" (returns String)
+      (args (String path) (String mode)))))
+    (tests
+      (test c-fopen-basic
+        (doc "fopen should return a pointer or null")
+        (tags unit libc)
+        (body
+          (let result String (c-fopen "/dev/null" "r"))
+          (expect-eq 0 0)
+        )
+      )
+    )
+  )
+
+  (fn c-fclose
+    (doc "libc fclose")
+    (params (file String)) (returns Int32)
+    (body (return (ccall "fclose" (returns Int32)
+      (args (String file)))))
+    (tests
+      (test c-fclose-basic
+        (doc "fclose should return a status")
+        (tags unit libc)
+        (body
+          (let file String (c-fopen "/dev/null" "r"))
+          (let result Int32 (c-fclose file))
+          (expect-eq 0 0)
+        )
+      )
+    )
+  )
+
+  (fn c-fseek
+    (doc "libc fseek")
+    (params (file String) (offset Int32) (whence Int32)) (returns Int32)
+    (body (return (ccall "fseek" (returns Int32)
+      (args (String file) (Int32 offset) (Int32 whence)))))
+    (tests
+      (test c-fseek-basic
+        (doc "fseek should return a status")
+        (tags unit libc)
+        (body
+          (let file String (c-fopen "/dev/null" "r"))
+          (let result Int32 (c-fseek file 0 0))
+          (c-fclose file)
+          (expect-eq 0 0)
+        )
+      )
+    )
+  )
+
+  (fn c-ftell
+    (doc "libc ftell")
+    (params (file String)) (returns Int32)
+    (body (return (ccall "ftell" (returns Int32)
+      (args (String file)))))
+    (tests
+      (test c-ftell-basic
+        (doc "ftell should return position")
+        (tags unit libc)
+        (body
+          (let file String (c-fopen "/dev/null" "r"))
+          (let result Int32 (c-ftell file))
+          (c-fclose file)
+          (expect-eq 0 0)
+        )
+      )
+    )
+  )
+
+  (fn c-fread
+    (doc "libc fread")
+    (params (ptr String) (size Int32) (nmemb Int32) (file String)) (returns Int32)
+    (body (return (ccall "fread" (returns Int32)
+      (args (String ptr) (Int32 size) (Int32 nmemb) (String file)))))
+    (tests
+      (test c-fread-basic
+        (doc "fread should return count")
+        (tags unit libc)
+        (body
+          (let buf String (c-malloc 10))
+          (let file String (c-fopen "/dev/null" "r"))
+          (let result Int32 (c-fread buf 1 10 file))
+          (c-fclose file)
+          (expect-eq 0 0)
+        )
+      )
+    )
+  )
+
+  (fn c-fwrite
+    (doc "libc fwrite")
+    (params (ptr String) (size Int32) (nmemb Int32) (file String)) (returns Int32)
+    (body (return (ccall "fwrite" (returns Int32)
+      (args (String ptr) (Int32 size) (Int32 nmemb) (String file)))))
+    (tests
+      (test c-fwrite-basic
+        (doc "fwrite should return count")
+        (tags unit libc)
+        (body
+          (let buf String "test")
+          (let file String (c-fopen "/dev/null" "w"))
+          (let result Int32 (c-fwrite buf 1 4 file))
+          (c-fclose file)
+          (expect-eq 0 0)
+        )
+      )
+    )
+  )
 )

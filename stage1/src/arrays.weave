@@ -1,9 +1,22 @@
 (module
   (name "stage1-arrays")
-  (doc "Array runtime bindings (strings and i32) consolidated; no prelude wrapper.")
+  (doc "Array implementation in Weave - replaces C runtime functions.")
+  (include "libc.weave")
 
-  (type ArrayString (alias String))
-  (type ArrayInt32 (alias String))
+  (struct ArrayInt32Data
+    (field data (ptr Int32))
+    (field len Int32)
+    (field cap Int32)
+  )
+
+  (struct ArrayStringData
+    (field data (ptr String))
+    (field len Int32)
+    (field cap Int32)
+  )
+
+  (type ArrayString (alias (ptr ArrayStringData)))
+  (type ArrayInt32 (alias (ptr ArrayInt32Data)))
 
   ;; Compatibility wrappers for legacy call sites
   (fn array-string-create
@@ -40,16 +53,61 @@
     )
   )
 
+  (fn array-str-grow
+    (doc "Internal: grow String array to at least 'need' capacity.")
+    (params (a ArrayString) (need Int32)) (returns Int32)
+    (body
+      (do
+        (if-stmt (< need 0) (return (- 0 1)) (do 0))
+        (let current-cap Int32 (get-field a cap))
+        (if-stmt (>= current-cap need) (return 0) (do 0))
+        (let ncap Int32 (if-stmt (== current-cap 0) 8 current-cap))
+        (while (< ncap need) (set ncap (* ncap 2)))
+        (let old-data (ptr String) (get-field a data))
+        (let new-data (ptr String) (bitcast (ptr String) (c-malloc (* ncap 8))))
+        (if-stmt (== new-data 0) (return (- 0 1)) (do 0))
+        (if-stmt (!= old-data 0)
+          (do
+            (let current-len Int32 (get-field a len))
+            (if-stmt (> current-len 0)
+              (c-memcpy (bitcast (ptr Int8) new-data) (bitcast (ptr Int8) old-data) (* current-len 8))
+              (do 0)
+            )
+            (c-free (bitcast (ptr Int8) old-data))
+          )
+          (do 0)
+        )
+        (set-field a data new-data)
+        (set-field a cap ncap)
+        (return 0)
+      )
+    )
+    (tests
+      (test array-str-grow-basic
+        (doc "grow should increase capacity when needed")
+        (tags unit arrays)
+        (body
+          (let arr ArrayString (array-str-new))
+          (let result Int32 (array-str-grow arr 100))
+          (expect-eq result 0)
+        )
+      )
+    )
+  )
+
   (fn array-str-new
     (doc "Create a new dynamic array of strings.")
     (params ())
     (returns ArrayString)
     (body
-      (return
-        (ccall "weave_array_str_new"
-          (returns ArrayString)
-          (args)
-        )
+      (do
+        (let raw (ptr Int8) (c-malloc 12))
+        (if-stmt (== raw 0) (return 0) (do 0))
+        (let arr (ptr ArrayStringData) (bitcast (ptr ArrayStringData) raw))
+        (set-field arr data (bitcast (ptr String) 0))
+        (set-field arr len 0)
+        (set-field arr cap 0)
+        (return arr)
       )
     )
     (tests
@@ -69,12 +127,7 @@
     (params (a ArrayString))
     (returns Int32)
     (body
-      (return
-        (ccall "weave_array_str_len"
-          (returns Int32)
-          (args (ArrayString a))
-        )
-      )
+      (return (if-stmt (== a 0) 0 (get-field a len)))
     )
     (tests
       (test array-str-len-empty
@@ -94,11 +147,16 @@
     (params (a ArrayString) (v String))
     (returns Int32)
     (body
-      (return
-        (ccall "weave_array_str_append"
-          (returns Int32)
-          (args (ArrayString a) (String v))
-        )
+      (do
+        (if-stmt (== a 0) (return (- 0 1)) (do 0))
+        (let current-len Int32 (get-field a len))
+        (let need Int32 (+ current-len 1))
+        (if-stmt (!= (array-str-grow a need) 0) (return (- 0 1)) (do 0))
+        (let data (ptr String) (get-field a data))
+        (let target (ptr String) (ptr-add String data current-len))
+        (store String v target)
+        (set-field a len need)
+        (return 0)
       )
     )
     (tests
@@ -127,11 +185,13 @@
     (params (a ArrayString) (idx Int32))
     (returns String)
     (body
-      (return
-        (ccall "weave_array_str_get"
-          (returns String)
-          (args (ArrayString a) (Int32 idx))
-        )
+      (do
+        (if-stmt (== a 0) (return 0) (do 0))
+        (let len Int32 (get-field a len))
+        (if-stmt (|| (< idx 0) (>= idx len)) (return 0) (do 0))
+        (let data (ptr String) (get-field a data))
+        (let ptr (ptr String) (ptr-add String data idx))
+        (return (load String ptr))
       )
     )
     (tests
@@ -149,16 +209,61 @@
     )
   )
 
+  (fn array-i32-grow
+    (doc "Internal: grow Int32 array to at least 'need' capacity.")
+    (params (a ArrayInt32) (need Int32)) (returns Int32)
+    (body
+      (do
+        (if-stmt (< need 0) (return (- 0 1)) (do 0))
+        (let current-cap Int32 (get-field a cap))
+        (if-stmt (>= current-cap need) (return 0) (do 0))
+        (let ncap Int32 (if-stmt (== current-cap 0) 16 current-cap))
+        (while (< ncap need) (set ncap (* ncap 2)))
+        (let old-data (ptr Int32) (get-field a data))
+        (let new-data (ptr Int32) (bitcast (ptr Int32) (c-malloc (* ncap 4))))
+        (if-stmt (== new-data 0) (return (- 0 1)) (do 0))
+        (if-stmt (!= old-data 0)
+          (do
+            (let current-len Int32 (get-field a len))
+            (if-stmt (> current-len 0)
+              (c-memcpy (bitcast (ptr Int8) new-data) (bitcast (ptr Int8) old-data) (* current-len 4))
+              (do 0)
+            )
+            (c-free (bitcast (ptr Int8) old-data))
+          )
+          (do 0)
+        )
+        (set-field a data new-data)
+        (set-field a cap ncap)
+        (return 0)
+      )
+    )
+    (tests
+      (test array-i32-grow-basic
+        (doc "grow should increase capacity when needed")
+        (tags unit arrays)
+        (body
+          (let arr ArrayInt32 (array-i32-new))
+          (let result Int32 (array-i32-grow arr 100))
+          (expect-eq result 0)
+        )
+      )
+    )
+  )
+
   (fn array-i32-new
     (doc "Create a new dynamic array of 32-bit integers.")
     (params ())
     (returns ArrayInt32)
     (body
-      (return
-        (ccall "weave_array_i32_new"
-          (returns ArrayInt32)
-          (args)
-        )
+      (do
+        (let raw (ptr Int8) (c-malloc 12))
+        (if-stmt (== raw 0) (return 0) (do 0))
+        (let arr (ptr ArrayInt32Data) (bitcast (ptr ArrayInt32Data) raw))
+        (set-field arr data (bitcast (ptr Int32) 0))
+        (set-field arr len 0)
+        (set-field arr cap 0)
+        (return arr)
       )
     )
     (tests
@@ -178,12 +283,7 @@
     (params (a ArrayInt32))
     (returns Int32)
     (body
-      (return
-        (ccall "weave_array_i32_len"
-          (returns Int32)
-          (args (ArrayInt32 a))
-        )
-      )
+      (return (if-stmt (== a 0) 0 (get-field a len)))
     )
     (tests
       (test array-i32-len-empty
@@ -203,11 +303,16 @@
     (params (a ArrayInt32) (v Int32))
     (returns Int32)
     (body
-      (return
-        (ccall "weave_array_i32_append"
-          (returns Int32)
-          (args (ArrayInt32 a) (Int32 v))
-        )
+      (do
+        (if-stmt (== a 0) (return (- 0 1)) (do 0))
+        (let current-len Int32 (get-field a len))
+        (let need Int32 (+ current-len 1))
+        (if-stmt (!= (array-i32-grow a need) 0) (return (- 0 1)) (do 0))
+        (let data (ptr Int32) (get-field a data))
+        (let target (ptr Int32) (ptr-add Int32 data current-len))
+        (store Int32 v target)
+        (set-field a len need)
+        (return 0)
       )
     )
     (tests
@@ -234,11 +339,13 @@
     (params (a ArrayInt32) (idx Int32))
     (returns Int32)
     (body
-      (return
-        (ccall "weave_array_i32_get"
-          (returns Int32)
-          (args (ArrayInt32 a) (Int32 idx))
-        )
+      (do
+        (if-stmt (== a 0) (return 0) (do 0))
+        (let len Int32 (get-field a len))
+        (if-stmt (|| (< idx 0) (>= idx len)) (return 0) (do 0))
+        (let data (ptr Int32) (get-field a data))
+        (let ptr (ptr Int32) (ptr-add Int32 data idx))
+        (return (load Int32 ptr))
       )
     )
     (tests
@@ -260,11 +367,14 @@
     (params (a ArrayInt32) (idx Int32) (v Int32))
     (returns Int32)
     (body
-      (return
-        (ccall "weave_array_i32_set"
-          (returns Int32)
-          (args (ArrayInt32 a) (Int32 idx) (Int32 v))
-        )
+      (do
+        (if-stmt (== a 0) (return (- 0 1)) (do 0))
+        (let len Int32 (get-field a len))
+        (if-stmt (|| (< idx 0) (>= idx len)) (return (- 0 1)) (do 0))
+        (let data (ptr Int32) (get-field a data))
+        (let ptr (ptr Int32) (ptr-add Int32 data idx))
+        (store Int32 v ptr)
+        (return 0)
       )
     )
     (tests

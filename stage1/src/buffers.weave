@@ -1,8 +1,16 @@
 (module
   (name "stage1-buffers")
-  (doc "Buffer runtime bindings consolidated; no prelude wrapper.")
+  (doc "Buffer implementation in Weave - replaces C runtime functions.")
+  (include "libc.weave")
+  (include "string.weave")
 
-  (type Buffer (alias String))
+  (struct BufferData
+    (field data (ptr Int8))
+    (field len Int32)
+    (field cap Int32)
+  )
+
+  (type Buffer (alias (ptr BufferData)))
 
   ;; Compatibility wrapper for legacy call sites
   (fn buffer-create
@@ -21,15 +29,60 @@
     )
   )
 
+  (fn buffer-grow
+    (doc "Internal: grow buffer to at least 'need' capacity.")
+    (params (buf Buffer) (need Int32)) (returns Int32)
+    (body
+      (do
+        (if-stmt (< need 0) (return (- 0 1)) (do 0))
+        (let current-cap Int32 (get-field buf cap))
+        (if-stmt (>= current-cap need) (return 0) (do 0))
+        (let ncap Int32 (if-stmt (== current-cap 0) 64 current-cap))
+        (while (< ncap need) (set ncap (* ncap 2)))
+        (let old-data (ptr Int8) (get-field buf data))
+        (let current-len Int32 (get-field buf len))
+        (let new-data (ptr Int8) (c-malloc ncap))
+        (if-stmt (== new-data 0) (return (- 0 1)) (do 0))
+        (if-stmt (!= old-data 0)
+          (do
+            (if-stmt (> current-len 0)
+              (c-memcpy new-data old-data current-len)
+              (do 0)
+            )
+            (c-free old-data)
+          )
+          (do 0)
+        )
+        (set-field buf data new-data)
+        (set-field buf cap ncap)
+        (return 0)
+      )
+    )
+    (tests
+      (test buffer-grow-basic
+        (doc "grow should increase capacity when needed")
+        (tags unit buffers)
+        (body
+          (let buf Buffer (buffer-new))
+          (let result Int32 (buffer-grow buf 100))
+          (expect-eq result 0)
+        )
+      )
+    )
+  )
+
   (fn buffer-new
     (doc "Allocate a new growable byte buffer.")
     (params ()) (returns Buffer)
     (body
-      (return
-        (ccall "weave_buffer_new"
-          (returns Buffer)
-          (args)
-        )
+      (do
+        (let raw (ptr Int8) (c-malloc 12))
+        (if-stmt (== raw 0) (return 0) (do 0))
+        (let buf (ptr BufferData) (bitcast (ptr BufferData) raw))
+        (set-field buf data (bitcast (ptr Int8) 0))
+        (set-field buf len 0)
+        (set-field buf cap 0)
+        (return buf)
       )
     )
     (tests
@@ -48,11 +101,9 @@
     (doc "Reset buffer length to zero, preserving capacity.")
     (params (b Buffer)) (returns Int32)
     (body
-      (return
-        (ccall "weave_buffer_clear"
-          (returns Int32)
-          (args (Buffer b))
-        )
+      (do
+        (set-field b len 0)
+        (return 0)
       )
     )
     (tests
@@ -85,11 +136,15 @@
     (doc "Append a single byte to the buffer.")
     (params (b Buffer) (byte Int32)) (returns Int32)
     (body
-      (return
-        (ccall "weave_buffer_append_byte"
-          (returns Int32)
-          (args (Buffer b) (Int32 byte))
-        )
+      (do
+        (let current-len Int32 (get-field b len))
+        (let need Int32 (+ current-len 1))
+        (if-stmt (!= (buffer-grow b need) 0) (return (- 0 1)) (do 0))
+        (let data (ptr Int8) (get-field b data))
+        (let target (ptr Int8) (ptr-add Int8 data current-len))
+        (store Int8 (bitcast Int8 byte) target)
+        (set-field b len need)
+        (return 0)
       )
     )
     (tests
@@ -109,11 +164,17 @@
     (doc "Append a null-terminated string to the buffer.")
     (params (b Buffer) (s String)) (returns Int32)
     (body
-      (return
-        (ccall "weave_buffer_append_string"
-          (returns Int32)
-          (args (Buffer b) (String s))
-        )
+      (do
+        (if-stmt (== s 0) (return 0) (do 0))
+        (let slen Int32 (c-strlen s))
+        (let current-len Int32 (get-field b len))
+        (let need Int32 (+ current-len slen))
+        (if-stmt (!= (buffer-grow b need) 0) (return (- 0 1)) (do 0))
+        (let data (ptr Int8) (get-field b data))
+        (let target (ptr Int8) (ptr-add Int8 data current-len))
+        (c-memcpy target s slen)
+        (set-field b len need)
+        (return 0)
       )
     )
     (tests
@@ -134,11 +195,24 @@
     (doc "Return the current contents of the buffer as a String view.")
     (params (b Buffer)) (returns String)
     (body
-      (return
-        (ccall "weave_buffer_to_string"
-          (returns String)
-          (args (Buffer b))
+      (do
+        (let len Int32 (get-field b len))
+        (if-stmt (== len 0)
+          (do
+            (let empty (ptr Int8) (c-malloc 1))
+            (if-stmt (== empty 0) (return 0) (do 0))
+            (store Int8 0 empty)
+            (return (bitcast String empty))
+          )
+          (do 0)
         )
+        (let out (ptr Int8) (c-malloc (+ len 1)))
+        (if-stmt (== out 0) (return 0) (do 0))
+        (let data (ptr Int8) (get-field b data))
+        (c-memcpy out data len)
+        (let null-pos (ptr Int8) (ptr-add Int8 out len))
+        (store Int8 0 null-pos)
+        (return (bitcast String out))
       )
     )
     (tests

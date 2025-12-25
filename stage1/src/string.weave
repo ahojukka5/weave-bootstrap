@@ -138,7 +138,13 @@
     (doc "Return byte value at index or 0 if out of bounds.")
     (params (s String) (idx Int32)) (returns Int32)
     (body
-      (return (ccall "weave_string_char_at" (returns Int32) (args (String s) (Int32 idx))))
+      (do
+        (if-stmt (|| (== s 0) (< idx 0)) (return 0) (do 0))
+        (let len Int32 (c-strlen s))
+        (if-stmt (>= idx len) (return 0) (do 0))
+        (let ptr (ptr Int8) (ptr-add Int8 s idx))
+        (return (load Int8 ptr))
+      )
     )
     (tests
       (test string-char-at-basic
