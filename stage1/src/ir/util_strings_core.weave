@@ -1,5 +1,5 @@
 (fn sanitize-name
-  (doc "Replace '-' with '_' and default empty to v0.")
+  (doc "Sanitize name for LLVM: replace invalid chars with '_', ensure valid identifier.")
   (params
     (name String)
   ) ;; params
@@ -9,20 +9,46 @@
       (return "v0")
       (do 0)
     ) ;; if-stmt
-    ;; Replace '-' with '_'; keep the rest as-is for now.
+    ;; LLVM identifiers can contain: letters, digits, _, $, -, .
+    ;; But we'll be conservative and only allow: letters, digits, _
+    ;; Replace all invalid characters with '_'
     (let b Buffer (buffer-new))
     (let i Int32 0)
+    (let first-char Int32 1) ;; Track if this is the first character
     (while (< i (string-length name))
       (do
         (let ch Int32 (string-char-at name i))
-        (if-stmt (== ch 45) ;; '-'
-          (buffer-append-byte b 95) ;; '_'
+        (let is-valid Int32 0)
+        ;; First char must be letter or underscore
+        (if-stmt (== first-char 1)
+          (do
+            (if-stmt (|| (&& (>= ch 65) (<= ch 90)) (&& (>= ch 97) (<= ch 122)) (== ch 95)) ;; A-Z, a-z, _
+              (set is-valid 1)
+              (do 0)
+            )
+          )
+          (do
+            ;; Subsequent chars can be letter, digit, or underscore
+            (if-stmt (|| (&& (>= ch 65) (<= ch 90)) (&& (>= ch 97) (<= ch 122)) (&& (>= ch 48) (<= ch 57)) (== ch 95)) ;; A-Z, a-z, 0-9, _
+              (set is-valid 1)
+              (do 0)
+            )
+          )
+        )
+        (if-stmt (!= is-valid 0)
           (buffer-append-byte b ch)
-        ) ;; if-stmt
+          (buffer-append-byte b 95) ;; '_' for invalid chars
+        )
+        (set first-char 0)
         (set i (+ i 1))
       ) ;; do
     ) ;; while
-    (return (buffer-to-string b))
+    ;; Ensure result is not empty (all chars were invalid)
+    (let result String (buffer-to-string b))
+    (if-stmt (== (string-length result) 0)
+      (return "v0")
+      (return result)
+    )
   )) ;; body
   (tests
     (test sanitize-empty

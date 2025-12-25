@@ -26,7 +26,7 @@
           (compile-expr a arg-node env-names env-safe env-types declared struct-names struct-fields decls str-counter out temp fn-sig-names fn-sig-ret-types)
           (let reg Int32 (- (load Int32 temp) 1))
           (array-i32-append arg-regs reg)
-          (let aty String (infer-arg-type a arg-node env-names env-types struct-names struct-fields fn-sig-names fn-sig-ret-types))
+          (let aty String (infer-arg-type a arg-node env-names env-types fn-sig-names fn-sig-ret-types))
           (array-str-append arg-types aty)
           (set arg-node (arena-next-sibling a arg-node))
         )

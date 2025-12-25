@@ -48,7 +48,7 @@
                     (do
                       (let reg Int32 (compile-expr a item env-names env-safe env-types declared struct-names struct-fields decls str-counter out temp fn-sig-names fn-sig-ret-types))
                       (buffer-append-string out "  ret ")
-                      (emit-type-node out a ret-type-node)
+                      (emit-type-node out a ret-type-node struct-names)
                       (buffer-append-string out " ")
                       (emit-temp out reg)
                       (buffer-append-string out "\n")
@@ -63,7 +63,7 @@
               ;; Atom in function body: treat as expression and auto-return
               (let reg Int32 (compile-expr a item env-names env-safe env-types declared struct-names struct-fields decls str-counter out temp fn-sig-names fn-sig-ret-types))
               (buffer-append-string out "  ret ")
-              (emit-type-node out a ret-type-node)
+              (emit-type-node out a ret-type-node struct-names)
               (buffer-append-string out " ")
               (emit-temp out reg)
               (buffer-append-string out "\n")
@@ -120,7 +120,7 @@
                     (buffer-append-string out ", ")
                     (store Int32 is-first 0)
                   )
-                  (emit-type-node out a ptype-node)
+                  (emit-type-node out a ptype-node struct-names)
                   (buffer-append-string out " %p_v_")
                   (buffer-append-string out safe-name)
                 )
@@ -178,15 +178,15 @@
                   (buffer-append-string out "  %")
                   (buffer-append-string out safe-name)
                   (buffer-append-string out " = alloca ")
-                  (emit-type-node out a ptype-node)
+                  (emit-type-node out a ptype-node struct-names)
                   (buffer-append-string out "\n")
                   ;; Store param into local
                   (buffer-append-string out "  store ")
-                  (emit-type-node out a ptype-node)
+                  (emit-type-node out a ptype-node struct-names)
                   (buffer-append-string out " %p_v_")
                   (buffer-append-string out safe-name)
                   (buffer-append-string out ", ")
-                  (emit-pointer-type-node out a ptype-node)
+                  (emit-pointer-type-node out a ptype-node struct-names)
                   (buffer-append-string out " %")
                   (buffer-append-string out safe-name)
                   (buffer-append-string out "\n")
@@ -285,7 +285,7 @@
 
       ;; Emit function header
       (buffer-append-string out "define ")
-      (emit-type-node out a ret-type-node)
+      (emit-type-node out a ret-type-node struct-names)
       (buffer-append-string out " @")
       (buffer-append-string out fn-name)
       (buffer-append-string out "(")
@@ -310,7 +310,7 @@
         (buffer-append-string out "}\n\n")
         (do
           ;; Add default return based on return type
-          (let ty String (map-type-node a ret-type-node))
+          (let ty String (map-type-node a ret-type-node struct-names))
           (if-stmt (string-eq ty "void")
             (do
               (buffer-append-string out "  ret void\n}\n\n")
@@ -432,7 +432,7 @@
                   (if-stmt (is-list-with-head a mchild "entry")
                     (do
                       (buffer-append-string out "; debug: entry found\n")
-                      (compile-fn a mchild "weave_main" declared
+                      (compile-fn a mchild "main" declared
                         struct-names struct-fields decls str-counter out
                         fn-sig-names fn-sig-ret-types)
                     )
@@ -468,7 +468,7 @@
           (if-stmt (is-list-with-head a child "entry")
             (do
               (buffer-append-string out "; debug: entry found\n")
-              (compile-fn a child "weave_main" declared struct-names struct-fields decls str-counter out fn-sig-names fn-sig-ret-types)
+              (compile-fn a child "main" declared struct-names struct-fields decls str-counter out fn-sig-names fn-sig-ret-types)
             )
             (do 0)
           )

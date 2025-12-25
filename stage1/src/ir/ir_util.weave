@@ -92,7 +92,7 @@
           )
           (if-stmt (is-list-with-head a child "entry")
             (do
-              (array-str-append fn-sig-names "weave_main")
+              (array-str-append fn-sig-names "main")
               (array-i32-append fn-sig-ret-types (- 0 1))
             )
             (do 0)
@@ -165,7 +165,7 @@
           ;; Top-level entry
           (if-stmt (is-list-with-head a child "entry")
             (do
-              (array-str-append fn-sig-names "weave_main")
+              (array-str-append fn-sig-names "main")
               (array-i32-append fn-sig-ret-types (- 0 1))
             )
             (do 0)
