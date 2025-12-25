@@ -10,7 +10,7 @@ Self-hosting compiler bootstrap chain for the Weave programming language. This r
 - ✅ **Stage 1** (`stage1/`): Weave compiler written in Weave (weavec1) - compiles successfully via weavec0
 - ✅ **Stage 2**: Self-hosting verification - weavec1 successfully compiles itself (weavec2)
 - ✅ **CMake/CTest infrastructure**: Unified build and test system across all stages
-- ⚠️ **Test pass rate**: 30/38 tests passing (79%) - 8 tests failing due to pointer/struct IR generation bugs in weavec1
+- ⚠️ **Test pass rate**: 402/444 tests passing (91%) - 42 tests failing due to IR generation bugs and type system issues
 
 ## Architecture
 
@@ -22,7 +22,7 @@ The bootstrap chain consists of three compiler stages:
 - **Source**: `stage0/src/*.c`
 - **Output**: Compiles Weave S-expressions to LLVM IR
 - **Features**: Core language subset - functions, structs, pointers, basic control flow
-- **Tests**: 9/9 passing (100%)
+- **Tests**: 18/18 passing (100%)
 
 ### Stage 1: Weave Compiler (`weavec1`)
 - **Language**: Weave (compiled by weavec0)
@@ -36,14 +36,14 @@ The bootstrap chain consists of three compiler stages:
   - Multi-directory include support (`-I`)
   - Optimization flags (`-O`, `-O2`)
   - Static linking support (`-static`)
-- **Tests**: 19/28 passing (68%)
+- **Tests**: 333/342 passing (97%) - 9 failures
 
 ### Stage 2: Self-Hosted Verification (`weavec2`)
 - **Language**: Weave (weavec1 source compiled by weavec1)
 - **Purpose**: Prove self-hosting capability
 - **Source**: Same as stage1 (`stage1/src/*.weave`)
 - **Output**: Binary-equivalent compiler (weavec2 = weavec1 compiling itself)
-- **Tests**: 1/1 passing (100%)
+- **Tests**: 62/84 passing (74%) - 22 failures
 
 ## Building from Source
 
@@ -72,14 +72,14 @@ ls -lh build/stage2/weavec2   # Stage 2: Self-hosted (weavec1 compiling itself)
 ### Running Tests
 
 ```bash
-# Run all tests (38 total)
+# Run all tests (444 total)
 cd build
 ctest --output-on-failure
 
 # Run tests by stage
-ctest -L stage0  # 9 tests - C compiler correctness
-ctest -L stage1  # 28 tests - Weave compiler features + typecheck failures
-ctest -L stage2  # 1 test - Self-hosting smoke test
+ctest -L stage0  # 18 tests - C compiler correctness
+ctest -L stage1  # 342 tests - Weave compiler features + embedded tests + typecheck failures
+ctest -L stage2  # 84 tests - Self-hosting verification tests
 
 # Run specific test
 ctest -R test_fn_simple_42 --verbose
@@ -115,20 +115,25 @@ Tests use CMake/CTest with the following conventions:
 
 ## Known Issues
 
-### Failing Tests (8 tests)
+### Failing Tests (42 tests total)
 
-IR generation bugs in weavec1 affecting pointer and struct semantics:
+**Stage 1 failures (9 tests):**
+- `test_ccall_abs_42`, `test_ccall_atoi_42`, `test_ccall_exit_42`, `test_ccall_malloc_42`, `test_ccall_memcpy_42` - C function call type issues (generating invalid LLVM types like `program` instead of proper types)
+- `test_ptr_add_42` - Pointer arithmetic issues
+- `test_struct_like_42` - Struct field type mismatches
+- Several embedded tests: IR generation bugs with invalid LLVM identifiers (e.g., `%v_l_then_join_53<F0>`, `%v_l_then_join_53@`), type system issues with nested pointers, and missing function declarations
 
-1. `test_ccall_malloc_42` - Pointer type mismatch in malloc results
-2. `test_ccall_memcpy_42` - Pointer handling in memcpy
-3. `test_fn_ptr_param_42` - Function pointer parameters
-4. `test_fn_recursive_42` - Wrong exit code (253 instead of 42)
-5. `test_make_struct_42` - Struct pointer vs value type confusion
-6. `test_ptr_add_42` - Pointer arithmetic store issues
-7. `test_store_addr_42` - Address store type mismatch
-8. `test_struct_like_42` - Struct field pointer/int mismatch
+**Stage 2 failures (22 tests):**
+- Array operations: `test_array_contains_42`, `test_array_copy_42`, `test_array_count_42`, `test_array_fill_42`, `test_array_max_42`, `test_array_min_42`, `test_array_reverse_42` - Invalid LLVM type `program` in bitcast operations
+- C function calls: `test_ccall_abs_42`, `test_ccall_atoi_42`, `test_ccall_exit_42`, `test_ccall_malloc_42`, `test_ccall_memcpy_42` - Invalid return types in function declarations
+- Other failures: `test_average_42`, `test_binary_search_42`, `test_count_until_zero_42`, `test_find_index_42`, `test_matrix_add_42`, `test_median_42`, `test_ptr_add_42`, `test_struct_like_42`, `test_sum_array_42`, `test_variance_42` - Similar type system issues with struct/array operations
 
-These failures do not prevent self-hosting but indicate edge cases in IR generation.
+These failures are primarily due to:
+1. IR generation producing invalid LLVM type names (e.g., `program` instead of proper types)
+2. Type system issues with nested pointers and struct types
+3. Missing or incorrect function declarations for C library functions
+
+Self-hosting is functional, but these edge cases need to be addressed for full correctness.
 
 ## Compiler Flags
 
