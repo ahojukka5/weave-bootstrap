@@ -1,0 +1,75 @@
+# Commit Message Rules
+
+## Format
+
+Follow Conventional Commits specification with project-specific conventions:
+
+```
+type(scope): short description
+
+Detailed description with bullet points:
+- First change
+- Second change
+- Third change
+
+Optional additional context or rationale.
+```
+
+## Commit Types
+
+- `feat`: New feature or functionality
+- `fix`: Bug fix
+- `docs`: Documentation changes
+- `test`: Test additions or modifications
+- `build`: Build system or configuration changes
+- `refactor`: Code refactoring without changing functionality
+- `perf`: Performance improvements
+- `style`: Code style changes (formatting, etc.)
+- `chore`: Maintenance tasks
+
+## Scopes
+
+Use the affected component as scope:
+- `stage0`: Stage 0 (C compiler) changes
+- `stage1`: Stage 1 (Weave compiler) changes
+- `stage2`: Stage 2 (self-hosting verification) changes
+- `sessions`: Session documentation in docs/sessions/
+- `build`: Build system changes
+- `ci`: Continuous integration changes
+
+## Rules
+
+1. **First line**: Keep under 72 characters, use imperative mood
+2. **Blank line**: Always include blank line after first line
+3. **Body**: Use bullet points for multiple changes, explain what and why
+4. **Scope**: Always include scope in parentheses
+5. **Breaking changes**: Use `!` after type/scope for breaking changes: `feat(stage0)!: ...`
+
+## Examples
+
+```
+feat(stage0): add LLVM optimization passes
+
+Implement optimization pass manager for -O1, -O2, -O3 levels:
+- Add run_optimization_passes() function with support for all optimization levels
+- Integrate passes into object and assembly compilation paths
+- Add conditional includes for different LLVM versions
+```
+
+```
+fix(stage1): add missing C function declarations
+
+Add runtime declarations for commonly used C library functions:
+- abs, atoi, exit, malloc, memcpy
+- Ensures proper LLVM IR type generation
+```
+
+```
+refactor(stage1): migrate linking to LLVM API
+
+Replace system() calls with LLVM API:
+- Add llvm_link_objects() function in stage0
+- Replace system("clang ...") with llvm-link-objects ccall
+- Remove shell dependency from stage1 linking
+```
+

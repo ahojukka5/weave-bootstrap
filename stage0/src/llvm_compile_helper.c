@@ -28,3 +28,7 @@ int llvm_compile_ir_to_object(const char *ir_string, const char *output_path, in
     return llvm_compile_ir_to_object_internal(ir_string, ir_len, output_path, opt_level);
 }
 
+/* Note: llvm_link_objects is implemented directly in llvm_compile.c
+ * No wrapper needed here - it's called directly via ccall
+ */
+

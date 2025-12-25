@@ -195,9 +195,10 @@
                   (let obj-tmp-path String "/tmp/weavec1_tmp.o")
                   (let rc Int32 (ccall "llvm-compile-ir-to-object" (returns Int32) (args (String ir-string) (String obj-tmp-path) (Int32 opt-level))))
                   (if-stmt (!= rc 0) (return 1) (do 0))
-                  ;; Link object file to executable using system linker
-                  (let cmd String (string-concat "clang" (string-concat extra (string-concat " -o " (string-concat output-path (string-concat " " (string-concat obj-tmp-path (string-concat " " (string-concat runtime-path " -lm")))))))))
-                  (let link-rc Int32 (ccall "system" (returns Int32) (args (String cmd))))
+                  ;; Link object file to executable using LLVM API
+                  (let obj-files String (string-concat obj-tmp-path (string-concat " " runtime-path)))
+                  (let link-flags String (string-concat extra " -lm"))
+                  (let link-rc Int32 (ccall "llvm-link-objects" (returns Int32) (args (String obj-files) (String link-flags) (String output-path))))
                   (if-stmt (== link-rc 0) (return 0) (return 1))
                 )
               )

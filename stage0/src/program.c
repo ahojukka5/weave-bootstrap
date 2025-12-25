@@ -1146,6 +1146,13 @@ void compile_to_llvm_ir(Node *top, StrBuf *out, int run_tests_mode, StrList *sel
             obj_param_types[1] = str_type;   /* output path */
             obj_param_types[2] = type_i32(); /* opt_level */
             fn_table_add(&fns, "llvm-compile-ir-to-object", type_i32(), 3, obj_param_types);
+            
+            /* llvm-link-objects: returns Int32 (0=success), takes String object_files, String extra_flags, String output_path */
+            TypeRef *link_param_types[3];
+            link_param_types[0] = str_type;  /* object files (space-separated) */
+            link_param_types[1] = str_type;   /* extra flags */
+            link_param_types[2] = str_type;   /* output path */
+            fn_table_add(&fns, "llvm-link-objects", type_i32(), 3, link_param_types);
         }
 
           /* Define Arena struct type only if not already defined by user code.
@@ -1196,6 +1203,10 @@ void compile_to_llvm_ir(Node *top, StrBuf *out, int run_tests_mode, StrList *sel
         if (!sl_contains(&ir.declared_ccalls, "llvm_compile_ir_to_object")) {
             sl_push(&ir.declared_ccalls, "llvm_compile_ir_to_object");
             sb_append(&ir.decls, "declare i32 @llvm_compile_ir_to_object(i8*, i8*, i32)\n");
+        }
+        if (!sl_contains(&ir.declared_ccalls, "llvm_link_objects")) {
+            sl_push(&ir.declared_ccalls, "llvm_link_objects");
+            sb_append(&ir.decls, "declare i32 @llvm_link_objects(i8*, i8*, i8*)\n");
         }
 
         /* Ensure built-in functions are registered with correct types before compilation */

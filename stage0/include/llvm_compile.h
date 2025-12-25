@@ -29,6 +29,14 @@ int llvm_compile_ir_to_assembly_internal(const char *ir_string, size_t ir_len,
 /* Wrapper for ccall - takes string and computes length automatically */
 int llvm_compile_ir_to_assembly(const char *ir_string, const char *output_path, int opt_level);
 
+/* Link object files into an executable using system linker (clang).
+ * Returns 0 on success, non-zero on error.
+ * object_files: space-separated list of object file paths
+ * extra_flags: additional flags to pass to linker (e.g., "-static -lm")
+ * output_path: path to output executable
+ */
+int llvm_link_objects(const char *object_files, const char *extra_flags, const char *output_path);
+
 /* Compile LLVM IR string to object file with address sanitizer.
  * Returns 0 on success, non-zero on error.
  * opt_level: 0=none, 1=less, 2=default, 3=aggressive

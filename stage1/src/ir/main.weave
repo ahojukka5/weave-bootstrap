@@ -239,6 +239,12 @@
         (emit-runtime-decl "weave_get_cli_string" "declare i8* @weave_get_cli_string(i8*)" decls declared)
         (emit-runtime-decl "weave_read_file" "declare i8* @weave_read_file(i8*)" decls declared)
         (emit-runtime-decl "weave_write_file" "declare i32 @weave_write_file(i8*, i8*)" decls declared)
+        ;; Declare commonly used C library functions with correct signatures
+        (emit-runtime-decl "abs" "declare i32 @abs(i32)" decls declared)
+        (emit-runtime-decl "atoi" "declare i32 @atoi(i8*)" decls declared)
+        (emit-runtime-decl "exit" "declare void @exit(i32)" decls declared)
+        (emit-runtime-decl "malloc" "declare i8* @malloc(i32)" decls declared)
+        (emit-runtime-decl "memcpy" "declare i8* @memcpy(i8*, i8*, i32)" decls declared)
         ;; Decls for common prelude helpers used in tests are emitted only when wrappers are generated below
 
         (let str-counter Int32 0)
