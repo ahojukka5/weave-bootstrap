@@ -70,7 +70,7 @@
                   (let head-val String (arena-value a head))
                   (if-stmt (|| (string-eq head-val "fn") (string-eq head-val "entry"))
                     (do
-                      (let fname String "weave_main")
+                      (let fname String "main")
                       (if-stmt (string-eq head-val "fn")
                         (let name-node Int32 (arena-next-sibling a head)
                           (set fname (arena-value a name-node))

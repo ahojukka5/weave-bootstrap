@@ -23,9 +23,9 @@
                   (if-stmt (|| (string-eq head-val "fn") (string-eq head-val "entry"))
                     (do
                       (let name-node Int32 (arena-next-sibling a head))
-                      (let fname String "weave_main")
+                      (let fname String "main")
                       (if-stmt (string-eq head-val "entry")
-                        (set fname "weave_main")
+                        (set fname "main")
                         (set fname (arena-value a name-node))
                       )
                       (let params-node Int32 (arena-next-sibling a name-node))
