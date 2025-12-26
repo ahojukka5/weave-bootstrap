@@ -1,0 +1,45 @@
+(program
+  (name "test-is-even-42")
+  (doc "Check if number is even using division remainder pattern.")
+  (version "0.1")
+
+  (type ExitCode
+    (alias Int32)
+  )
+
+  (fn is-even
+    (doc "Return 1 if even, 0 if odd.")
+    (params (n Int32))
+    (returns Int32)
+    (body
+      (do
+        ;; n / 2 * 2 == n if even
+        (let half Int32 (/ n 2))
+        (let doubled Int32 (* half 2))
+        (if-stmt (== doubled n)
+          (return 1)
+          (return 0)
+        )
+      )
+    )
+  )
+
+  (entry main
+    (doc "Count even numbers in [10, 15, 20, 22, 8, 5] = 4, multiply by 10, add 2.")
+    (params ())
+    (returns ExitCode)
+    (body
+      (do
+        (let count Int32 0)
+        (if-stmt (!= (is-even 10) 0) (set count (+ count 1)) (do 0))
+        (if-stmt (!= (is-even 15) 0) (set count (+ count 1)) (do 0))
+        (if-stmt (!= (is-even 20) 0) (set count (+ count 1)) (do 0))
+        (if-stmt (!= (is-even 22) 0) (set count (+ count 1)) (do 0))
+        (if-stmt (!= (is-even 8) 0) (set count (+ count 1)) (do 0))
+        (if-stmt (!= (is-even 5) 0) (set count (+ count 1)) (do 0))
+        ;; count = 4 (10, 20, 22, 8 are even), 4 * 10 + 2 = 42
+        (return (+ (* count 10) 2))
+      )
+    )
+  )
+)
