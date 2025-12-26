@@ -1,0 +1,46 @@
+(program
+  (name "test-min-max-42")
+  (doc "Find minimum and maximum in a sequence.")
+  (version "0.1")
+
+  (type ExitCode
+    (alias Int32)
+  )
+
+  (fn min
+    (doc "Return minimum of two integers.")
+    (params (a Int32) (b Int32))
+    (returns Int32)
+    (body
+      (if-stmt (< a b) a b)
+    )
+  )
+
+  (fn max
+    (doc "Return maximum of two integers.")
+    (params (a Int32) (b Int32))
+    (returns Int32)
+    (body
+      (if-stmt (> a b) a b)
+    )
+  )
+
+  (entry main
+    (doc "Find min and max of 10, 42, 5, 30, 15 and compute max - min + 10.")
+    (params ())
+    (returns ExitCode)
+    (body
+      (do
+        (let a Int32 10)
+        (let b Int32 42)
+        (let c Int32 5)
+        (let d Int32 30)
+        (let e Int32 15)
+        (let minimum Int32 (min (min (min (min a b) c) d) e))
+        (let maximum Int32 (max (max (max (max a b) c) d) e))
+        ;; maximum = 42, minimum = 5, result = 42 - 5 + 5 = 42
+        (return (+ (- maximum minimum) c))
+      )
+    )
+  )
+)
