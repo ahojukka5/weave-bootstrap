@@ -1,0 +1,44 @@
+(program
+  (name "test-average-42")
+  (doc "Calculate average of array elements.")
+  (version "0.1")
+
+  (type ExitCode
+    (alias Int32)
+  )
+
+  (fn average
+    (doc "Return average of array elements (integer division).")
+    (params (arr (ptr Int32)) (len Int32))
+    (returns Int32)
+    (body
+      (do
+        (let sum Int32 0)
+        (let i Int32 0)
+        (while (< i len)
+          (do
+            (set sum (+ sum (load Int32 (ptr-add Int32 arr i))))
+            (set i (+ i 1))
+          )
+        )
+        (return (/ sum len))
+      )
+    )
+  )
+
+  (entry main
+    (doc "Average of [40,42,44] = 42.")
+    (params ())
+    (returns ExitCode)
+    (body
+      (do
+        (let arr-raw (ptr Int8) (ccall "malloc" (returns (ptr Int8)) (args (Int32 12))))
+        (let arr (ptr Int32) (bitcast (ptr Int32) arr-raw))
+        (store Int32 40 (ptr-add Int32 arr 0))
+        (store Int32 42 (ptr-add Int32 arr 1))
+        (store Int32 44 (ptr-add Int32 arr 2))
+        (return (average arr 3))
+      )
+    )
+  )
+)
