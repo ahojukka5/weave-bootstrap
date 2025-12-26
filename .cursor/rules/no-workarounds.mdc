@@ -1,0 +1,57 @@
+---
+description: Never use workarounds - always fix code properly, no matter how long it takes
+globs: **/*
+alwaysApply: true
+---
+
+# No Workarounds Policy
+
+## Core Principle
+
+**We never do workarounds. Never.**
+
+If there is a design question where we have to choose between:
+- A dirty quick fix or workaround
+- Doing the right thing and fixing code properly
+
+**We always choose the latter.**
+
+We don't care how long it takes. We are proud software developers and never compromise our quality standards.
+
+## Guidelines
+
+1. **No shortcuts**: If a problem requires a proper fix, take the time to implement it correctly
+2. **No temporary solutions**: Temporary fixes become permanent problems
+3. **No type system hacks**: If there's a type error, fix the root cause, don't work around it
+4. **No comment-based workarounds**: Don't add comments like "TODO: fix this properly" - fix it now
+5. **No "good enough" solutions**: If it's not the right solution, it's not acceptable
+
+## Examples
+
+### ❌ Bad: Workaround
+```weave
+;; Workaround: avoid type check by using different pattern
+(let head Int32 (arena-first-child a node))
+(if-stmt (!= head (- 0 1))
+  ;; Assume it's a list if head exists
+  (do ...)
+)
+```
+
+### ✅ Good: Proper Fix
+```weave
+;; Properly check the node kind
+(if-stmt (== (arena-kind a node) (node-kind-list))
+  (do ...)
+)
+```
+
+## When Facing a Problem
+
+1. Understand the root cause
+2. Design the proper solution
+3. Implement it correctly
+4. Test thoroughly
+5. Never compromise on quality
+
+Quality is not negotiable. Time spent on proper fixes is time well invested.
