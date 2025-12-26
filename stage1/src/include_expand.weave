@@ -1,15 +1,17 @@
 ;;; @weave-allow-long-file: include expansion involves multiple helpers
 (module
-  (name "stage1-include-expand-core-a")
+  (name "include-expand-core-a")
   (doc "Core helpers for include expansion: printable path, dirname, resolve, parse.")
 
   (include "tokenizer.weave")
   (include "sexpr_parser.weave")
   (include "arena.weave")
   (include "file_io.weave")
-  (include "ir/util_strings_core.weave")
 
-  (fn log-include
+  (namespace "compiler"
+    (include "ir/util_strings_core.weave")
+
+    (fn log-include
     (doc "Debug helper: print include path, current dir, and resolved path.")
     (params (label String) (inc String) (cur String) (resolved String)) (returns Int32)
     (body
@@ -182,12 +184,14 @@
       )
     )
   ) ;; fn parse-file-into
+  ) ;; namespace "compiler"
 ) ;; module
 (module
-  (name "stage1-include-expand-core-b")
+  (name "include-expand-core-b")
   (doc "Core expansion routines: copy-subtree, append-child, expand-children, expand-root.")
 
-  (fn copy-subtree
+  (namespace "compiler"
+    (fn copy-subtree
     (doc "Deep-copy node from src arena into dst arena; returns new node id.")
     (params (src (ptr Arena)) (dst (ptr Arena)) (node Int32)) (returns Int32)
     (body
@@ -522,4 +526,5 @@
       )
     )
   ) ;; fn expand-root
+  ) ;; namespace "compiler"
 ) ;; module

@@ -1,5 +1,5 @@
 (module
-  (name "stage1-debug")
+  (name "debug")
   (doc "Arena inspection helpers for debugging and tests.")
 
   (include "string.weave")
@@ -7,8 +7,9 @@
   (include "arrays.weave")
   (include "arena.weave")
 
-  ;; Simple tree dump for debugging the arena contents.
-  (fn dump-indent
+  (namespace "compiler"
+    ;; Simple tree dump for debugging the arena contents.
+    (fn dump-indent
     (doc "Indent the buffer by n two-space groups.")
     (params
       (out Buffer)
@@ -184,4 +185,5 @@
       )
     )
   ) ;; fn dump-sibling-chain
+  ) ;; namespace "compiler"
 ) ;; module

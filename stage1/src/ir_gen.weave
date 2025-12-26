@@ -1,7 +1,9 @@
 (module
-  (name "stage1-ir-gen")
+  (name "ir-gen")
   (doc "Tiny wrapper that exposes generate-ir from the IR submodules.")
 
-  ;; Keep this file tiny: it just wires together the IR generator pieces.
-  (include "ir/main.weave")
+  (namespace "compiler"
+    ;; Keep this file tiny: it just wires together the IR generator pieces.
+    (include "ir/main.weave")
+  ) ;; namespace "compiler"
 ) ;; module
