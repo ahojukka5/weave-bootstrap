@@ -1,0 +1,69 @@
+(program
+  (name "test-matrix-add-42")
+  (doc "Add two 2x2 matrices and sum result.")
+  (version "0.1")
+
+  (type ExitCode
+    (alias Int32)
+  )
+
+  (fn matrix-add
+    (doc "Add two 2x2 matrices stored as flat arrays.")
+    (params (a (ptr Int32)) (b (ptr Int32)) (result (ptr Int32)))
+    (returns Int32)
+    (body
+      (do
+        (let i Int32 0)
+        (while (< i 4)
+          (do
+            (let a-ptr (ptr Int32) (ptr-add Int32 a i))
+            (let b-ptr (ptr Int32) (ptr-add Int32 b i))
+            (let result-ptr (ptr Int32) (ptr-add Int32 result i))
+            (let sum Int32 (+ (load Int32 a-ptr) (load Int32 b-ptr)))
+            (store Int32 sum result-ptr)
+            (set i (+ i 1))
+          )
+        )
+        (return 0)
+      )
+    )
+  )
+
+  (entry main
+    (doc "Add [[10,5],[8,4]] + [[2,7],[3,3]] = [[12,12],[11,7]], sum = 42.")
+    (params ())
+    (returns ExitCode)
+    (body
+      (do
+        (let a-raw (ptr Int8) (ccall "malloc" (returns (ptr Int8)) (args (Int32 16))))
+        (let a (ptr Int32) (bitcast (ptr Int32) a-raw))
+        (let b-raw (ptr Int8) (ccall "malloc" (returns (ptr Int8)) (args (Int32 16))))
+        (let b (ptr Int32) (bitcast (ptr Int32) b-raw))
+        (let result-raw (ptr Int8) (ccall "malloc" (returns (ptr Int8)) (args (Int32 16))))
+        (let result (ptr Int32) (bitcast (ptr Int32) result-raw))
+        
+        ;; Initialize matrix a: [[10,5],[8,4]]
+        (store Int32 10 (ptr-add Int32 a 0))
+        (store Int32 5 (ptr-add Int32 a 1))
+        (store Int32 8 (ptr-add Int32 a 2))
+        (store Int32 4 (ptr-add Int32 a 3))
+        
+        ;; Initialize matrix b: [[2,7],[3,3]]
+        (store Int32 2 (ptr-add Int32 b 0))
+        (store Int32 7 (ptr-add Int32 b 1))
+        (store Int32 3 (ptr-add Int32 b 2))
+        (store Int32 3 (ptr-add Int32 b 3))
+        
+        (matrix-add a b result)
+        
+        ;; Sum all elements: 12+12+11+7 = 42
+        (let sum Int32 0)
+        (set sum (+ sum (load Int32 (ptr-add Int32 result 0))))
+        (set sum (+ sum (load Int32 (ptr-add Int32 result 1))))
+        (set sum (+ sum (load Int32 (ptr-add Int32 result 2))))
+        (set sum (+ sum (load Int32 (ptr-add Int32 result 3))))
+        (return sum)
+      )
+    )
+  )
+)
