@@ -1,0 +1,77 @@
+---
+description: Commit procedure - one file at a time with semantic commit messages
+globs: **/*
+alwaysApply: true
+---
+
+# Commit Procedure
+
+## Core Principle
+
+**Commit ONE file at a time with a clear, semantic commit message.**
+
+## Rules
+
+1. **One file per commit**: Never commit multiple files in a single commit unless they are logically inseparable (e.g., header + implementation file that must be added together)
+
+2. **Examine the file first**: Before committing, always:
+   - Read the file with `cat` or `read_file` to understand what it contains
+   - Use `git diff` to see exactly what changed
+   - Understand the purpose and context of the change
+
+3. **Semantic commit message**: Based on the file content and changes:
+   - Use appropriate type: `feat`, `fix`, `docs`, `test`, `refactor`, etc.
+   - Use appropriate scope: `stage0`, `stage1`, `stage2`, `sessions`, `build`, etc.
+   - Write clear description of what the file does or what changed
+   - Include bullet points explaining the changes if needed
+
+4. **Follow commit message conventions**: See `.cursor/rules/commit-message-convention.mdc`
+
+## Procedure
+
+1. **Reset staging area**: `git reset` to ensure clean state
+2. **Identify next file**: Look at `git status` to see what files need to be committed
+3. **Examine the file**: 
+   - If new file: `cat <file>` or `read_file <file>` to understand content
+   - If modified: `git diff <file>` to see changes
+4. **Stage the file**: `git add <file>`
+5. **Write commit message**: Based on file content/changes, following conventions
+6. **Commit**: `git commit -m "..."` with proper semantic message
+7. **Repeat**: Go to step 2 for next file
+
+## When to Commit Multiple Files Together
+
+Only when files are **logically inseparable**:
+- Header file + implementation file (e.g., `builtins.h` + `builtins.c`)
+- Test file + test data file
+- Configuration file + its template
+
+Even then, prefer separate commits unless the files truly cannot exist independently.
+
+## Examples
+
+### ✅ Good: One file at a time
+```bash
+git add .cursor/rules/stage-architecture.mdc
+git commit -m "docs(rules): add stage architecture rule
+
+Document the multi-stage bootstrap architecture:
+- Stage 0: C bootstrap compiler
+- Stage 1: Weave compiler (development target)
+- Stage 2: Self-hosting verification
+- Test organization principles"
+```
+
+### ❌ Bad: Multiple files
+```bash
+git add .cursor/rules/* docs/sessions/* stage0/src/*
+git commit -m "Update various files"
+```
+
+## Why This Matters
+
+1. **Clear history**: Each commit has a single, clear purpose
+2. **Easy review**: Reviewers can understand each change in isolation
+3. **Easy rollback**: Can revert specific changes without affecting others
+4. **Better git log**: `git log` shows meaningful progression of changes
+5. **Easier debugging**: `git blame` and `git bisect` work better with focused commits
