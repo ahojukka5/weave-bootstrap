@@ -1,0 +1,71 @@
+(program
+  (name "test-concat-ints-42")
+  (doc "Concatenate two integers (e.g., 4 and 2 become 42).")
+  (version "0.1")
+
+  (type ExitCode
+    (alias Int32)
+  )
+
+  (fn count-digits
+    (doc "Count number of digits in n.")
+    (params (n Int32))
+    (returns Int32)
+    (body
+      (do
+        (if-stmt (== n 0)
+          (return 1)
+          (do 0)
+        )
+        (let count Int32 0)
+        (let temp Int32 n)
+        (while (!= temp 0)
+          (do
+            (set temp (/ temp 10))
+            (set count (+ count 1))
+          )
+        )
+        (return count)
+      )
+    )
+  )
+
+  (fn power-of-10
+    (doc "Calculate 10^n.")
+    (params (n Int32))
+    (returns Int32)
+    (body
+      (do
+        (let result Int32 1)
+        (let i Int32 0)
+        (while (< i n)
+          (do
+            (set result (* result 10))
+            (set i (+ i 1))
+          )
+        )
+        (return result)
+      )
+    )
+  )
+
+  (fn concat-ints
+    (doc "Concatenate two integers: a and b become ab.")
+    (params (a Int32) (b Int32))
+    (returns Int32)
+    (body
+      (do
+        (let b-digits Int32 (count-digits b))
+        (let multiplier Int32 (power-of-10 b-digits))
+        (return (+ (* a multiplier) b))
+      )
+    )
+  )
+
+  (entry main
+    (doc "Concatenate 4 and 2 to get 42.")
+    (params ())
+    (returns ExitCode)
+    (body (concat-ints 4 2))
+  )
+)
