@@ -1,0 +1,58 @@
+(program
+  (name "test-bitwise-and-pattern-42")
+  (doc "Implement bitwise AND using arithmetic.")
+  (version "0.1")
+
+  (type ExitCode
+    (alias Int32)
+  )
+
+  (fn is-power-of-two
+    (doc "Check if n is power of two using n AND (n-1) == 0 pattern.")
+    (params (n Int32))
+    (returns Int32)
+    (body
+      (do
+        (if-stmt (<= n 0)
+          (return 0)
+          (do 0)
+        )
+        ;; For power of 2: n has single bit set
+        ;; Count set bits by repeatedly dividing by 2
+        (let temp Int32 n)
+        (let bits Int32 0)
+        (while (> temp 0)
+          (do
+            (let remainder Int32 (- temp (* (/ temp 2) 2)))
+            (set bits (+ bits remainder))
+            (set temp (/ temp 2))
+          )
+        )
+        (if-stmt (== bits 1)
+          (return 1)
+          (return 0)
+        )
+      )
+    )
+  )
+
+  (entry main
+    (doc "Count powers of 2 in [1,2,4,8,16,32,64], which is 7, multiply by 6.")
+    (params ())
+    (returns ExitCode)
+    (body
+      (do
+        (let count Int32 0)
+        (if-stmt (!= (is-power-of-two 1) 0) (set count (+ count 1)) (do 0))
+        (if-stmt (!= (is-power-of-two 2) 0) (set count (+ count 1)) (do 0))
+        (if-stmt (!= (is-power-of-two 4) 0) (set count (+ count 1)) (do 0))
+        (if-stmt (!= (is-power-of-two 8) 0) (set count (+ count 1)) (do 0))
+        (if-stmt (!= (is-power-of-two 16) 0) (set count (+ count 1)) (do 0))
+        (if-stmt (!= (is-power-of-two 32) 0) (set count (+ count 1)) (do 0))
+        (if-stmt (!= (is-power-of-two 64) 0) (set count (+ count 1)) (do 0))
+        ;; count = 7, 7 * 6 = 42
+        (return (* count 6))
+      )
+    )
+  )
+)
