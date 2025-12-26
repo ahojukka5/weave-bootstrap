@@ -1,0 +1,123 @@
+(program
+  (name "test-linear-regression-42")
+  (doc "Simple linear regression y = mx + b - statistical modeling.")
+  (version "0.1")
+
+  (type ExitCode
+    (alias Int32)
+  )
+
+  ;; Linear regression: y = mx + b
+  ;; m = Σ(xi-x̄)(yi-ȳ) / Σ(xi-x̄)²
+  ;; b = ȳ - m*x̄
+
+  (fn mean
+    (doc "Calculate mean of array.")
+    (params (arr (ptr Int32)) (len Int32))
+    (returns Int32)
+    (body
+      (do
+        (let sum Int32 0)
+        (let i Int32 0)
+        (while (< i len)
+          (do
+            (set sum (+ sum (load Int32 (ptr-add Int32 arr i))))
+            (set i (+ i 1))
+          )
+        )
+        (return (/ sum len))
+      )
+    )
+  )
+
+  (fn linear-regression
+    (doc "Calculate linear regression coefficients m and b for y = mx + b.")
+    (params (x (ptr Int32)) (y (ptr Int32)) (len Int32) (m-out (ptr Int32)) (b-out (ptr Int32)))
+    (returns Int32)
+    (body
+      (do
+        (let x-mean Int32 (mean x len))
+        (let y-mean Int32 (mean y len))
+        
+        ;; Calculate slope: m = Σ(xi-x̄)(yi-ȳ) / Σ(xi-x̄)²
+        (let numerator Int32 0)
+        (let denominator Int32 0)
+        
+        (let i Int32 0)
+        (while (< i len)
+          (do
+            (let xi Int32 (load Int32 (ptr-add Int32 x i)))
+            (let yi Int32 (load Int32 (ptr-add Int32 y i)))
+            (let x-diff Int32 (- xi x-mean))
+            (let y-diff Int32 (- yi y-mean))
+            
+            (set numerator (+ numerator (* x-diff y-diff)))
+            (set denominator (+ denominator (* x-diff x-diff)))
+            
+            (set i (+ i 1))
+          )
+        )
+        
+        (let m Int32 0)
+        (if-stmt (== denominator 0)
+          (set m 0)
+          (set m (/ numerator denominator))
+        )
+        
+        ;; Calculate intercept: b = ȳ - m*x̄
+        (let b Int32 (- y-mean (* m x-mean)))
+        
+        (store Int32 m m-out)
+        (store Int32 b b-out)
+        
+        (return 0)
+      )
+    )
+  )
+
+  (entry main
+    (doc "Fit linear regression to data points. Calculate m*10 + b to get 42.")
+    (params ())
+    (returns ExitCode)
+    (body
+      (do
+        (let len Int32 5)
+        (let bytes Int32 (* len 4))
+        
+        ;; Data points: x = [1,2,3,4,5], y = [3,5,7,9,11] (y = 2x + 1)
+        (let x-raw (ptr Int8) (ccall "malloc" (returns (ptr Int8)) (args bytes)))
+        (let x (ptr Int32) (bitcast (ptr Int32) x-raw))
+        (store Int32 1 (ptr-add Int32 x 0))
+        (store Int32 2 (ptr-add Int32 x 1))
+        (store Int32 3 (ptr-add Int32 x 2))
+        (store Int32 4 (ptr-add Int32 x 3))
+        (store Int32 5 (ptr-add Int32 x 4))
+        
+        (let y-raw (ptr Int8) (ccall "malloc" (returns (ptr Int8)) (args bytes)))
+        (let y (ptr Int32) (bitcast (ptr Int32) y-raw))
+        (store Int32 3 (ptr-add Int32 y 0))
+        (store Int32 5 (ptr-add Int32 y 1))
+        (store Int32 7 (ptr-add Int32 y 2))
+        (store Int32 9 (ptr-add Int32 y 3))
+        (store Int32 11 (ptr-add Int32 y 4))
+        
+        ;; Storage for coefficients
+        (let m-raw (ptr Int8) (ccall "malloc" (returns (ptr Int8)) (args (Int32 4))))
+        (let m (ptr Int32) (bitcast (ptr Int32) m-raw))
+        (let b-raw (ptr Int8) (ccall "malloc" (returns (ptr Int8)) (args (Int32 4))))
+        (let b (ptr Int32) (bitcast (ptr Int32) b-raw))
+        
+        (linear-regression x y len m b)
+        
+        ;; Should get m ≈ 2, b ≈ 1
+        ;; Calculate y = m*10 + b = 2*10 + 1 = 21
+        ;; Then 21 * 2 = 42
+        (let m-val Int32 (load Int32 m))
+        (let b-val Int32 (load Int32 b))
+        (let predicted Int32 (+ (* m-val 10) b-val))
+        (return (* predicted 2))
+      )
+    )
+  )
+)
+
