@@ -1,0 +1,52 @@
+(program
+  (name "test-lcm-42")
+  (doc "Calculate least common multiple.")
+  (version "0.1")
+
+  (type ExitCode
+    (alias Int32)
+  )
+
+  (fn gcd
+    (doc "Calculate greatest common divisor using Euclidean algorithm.")
+    (params (a Int32) (b Int32))
+    (returns Int32)
+    (body
+      (do
+        (let x Int32 a)
+        (let y Int32 b)
+        (while (!= y 0)
+          (do
+            (let temp Int32 y)
+            (while (>= x y)
+              (set x (- x y))
+            )
+            (set y x)
+            (set x temp)
+          )
+        )
+        (return x)
+      )
+    )
+  )
+
+  (fn lcm
+    (doc "Calculate least common multiple using LCM(a,b) = a*b/GCD(a,b).")
+    (params (a Int32) (b Int32))
+    (returns Int32)
+    (body
+      (do
+        (let g Int32 (gcd a b))
+        (let product Int32 (* a b))
+        (return (/ product g))
+      )
+    )
+  )
+
+  (entry main
+    (doc "LCM(6, 7) = 42.")
+    (params ())
+    (returns ExitCode)
+    (body (lcm 6 7))
+  )
+)
