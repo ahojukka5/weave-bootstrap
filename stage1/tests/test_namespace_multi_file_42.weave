@@ -1,0 +1,37 @@
+(program
+  (name "test-namespace-multi-file-42")
+  (version "0.1")
+
+  ;; Simulate multiple files contributing to the same namespace
+  (module
+    (name "file-basic")
+    (namespace "file")
+    (fn read
+      (params (path String))
+      (returns String)
+      (body path)
+    )
+  )
+
+  (module
+    (name "file-extended")
+    (namespace "file")
+    (fn write
+      (params (path String) (content String))
+      (returns Int32)
+      (body 0)
+    )
+  )
+
+  (entry main
+    (params ())
+    (returns Int32)
+    (body
+      (let path String "test.txt")
+      (let content String (file::read path))
+      (file::write path content)
+      42
+    )
+  )
+)
+

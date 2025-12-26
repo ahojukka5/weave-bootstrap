@@ -1,0 +1,23 @@
+(program
+  (name "test-namespace-basic-42")
+  (version "0.1")
+
+  (module
+    (name "math-module")
+    (namespace "math")
+    (fn add
+      (params (a Int32) (b Int32))
+      (returns Int32)
+      (body (+ a b))
+    )
+  )
+
+  (entry main
+    (params ())
+    (returns Int32)
+    (body
+      (math::add 20 22)
+    )
+  )
+)
+

@@ -1,0 +1,27 @@
+(program
+  (name "test-namespace-collection-simple-42")
+  (version "0.1")
+
+  (module
+    (name "test-module")
+    (namespace "io"
+      (fn test-fn
+        (params ())
+        (returns String)
+        (body "hello")
+      )
+    )
+  )
+
+  (entry main
+    (params ())
+    (returns Int32)
+    (body
+      ;; Just verify the module compiles - if functions aren't collected,
+      ;; this will fail with wrong return type
+      (let result String (test-fn))
+      42
+    )
+  )
+)
+
