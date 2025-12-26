@@ -1,0 +1,85 @@
+(program
+  (name "test-namespace-ast-structure-42")
+  (version "0.1")
+
+  (include "../src/string.weave")
+  (include "../src/buffers.weave")
+  (include "../src/arrays.weave")
+  (include "../src/arena.weave")
+  (include "../src/sexpr_parser.weave")
+  (include "../src/ir/util.weave")
+
+  (entry main
+    (params ())
+    (returns Int32)
+    (body
+      (do
+        ;; Parse a simple module with namespace block
+        (let a (ptr Arena) (arena-create 4096))
+        (let root Int32 (parser::parse-string a "(module (name \"test\") (namespace \"io\" (fn test-fn (params ()) (returns String) (body \"hello\"))))"))
+        
+        ;; Check if root is a module
+        (if-stmt (!= (arena-kind a root) (node-kind-list))
+          (return 1)
+          (do 0)
+        )
+        
+        ;; Get first child of module (should be "name" or "namespace")
+        (let first-child Int32 (arena-first-child a root))
+        (if-stmt (== first-child (- 0 1))
+          (return 2)
+          (do 0)
+        )
+        
+        ;; Find the namespace block by checking all children
+        (let found-namespace Int32 0)
+        (let child Int32 (arena-first-child a root))
+        (while (!= child (- 0 1))
+          (do
+            (if-stmt (ir::is-list-with-head a child "namespace")
+              (set found-namespace 1)
+              (do 0)
+            )
+            (set child (arena-next-sibling a child))
+          )
+        )
+        (if-stmt (!= found-namespace 1)
+          (return 3)
+          (do 0)
+        )
+        
+        ;; Now test collection
+        (let names ArrayString (array-string-create))
+        (let types ArrayInt32 (array-int32-create))
+        (ir::collect-fn-sigs-from-module a root names types "")
+        
+        ;; Should find 2 entries (qualified and unqualified)
+        (if-stmt (!= (array-str-len names) 2)
+          (return 4)
+          (do 0)
+        )
+        
+        ;; Check that test-fn is found
+        (let found-fn Int32 0)
+        (let i Int32 0)
+        (while (< i (array-str-len names))
+          (do
+            (let name String (array-str-get names i))
+            (if-stmt (|| (string-eq name "test-fn") (string-eq name "io::test-fn"))
+              (set found-fn 1)
+              (do 0)
+            )
+            (set i (+ i 1))
+          )
+        )
+        (if-stmt (!= found-fn 1)
+          (return 5)
+          (do 0)
+        )
+        
+        42
+      )
+    )
+  )
+)
+

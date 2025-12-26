@@ -1,0 +1,52 @@
+(program
+  (name "test-collect-top-level-direct-42")
+  (version "0.1")
+
+  (module
+    (name "test-module")
+    ;; Top-level function (not in namespace)
+    (fn top-level-fn
+      (params ())
+      (returns String)
+      (body "test")
+      (tests
+        (test top-level-fn-basic
+          (doc "top-level-fn works")
+          (tags unit)
+          (body
+            (expect-true (string-eq (top-level-fn) "test"))
+          )
+        )
+      )
+    )
+    ;; Namespace function
+    (namespace "io"
+      (fn namespace-fn
+        (params ())
+        (returns Int32)
+        (body 42)
+        (tests
+          (test namespace-fn-basic
+            (doc "namespace-fn works")
+            (tags unit)
+            (body
+              (expect-eq (io::namespace-fn) 42)
+            )
+          )
+        )
+      )
+    )
+  )
+
+  (entry main
+    (params ())
+    (returns Int32)
+    (body
+      ;; Both should work
+      (let s String (top-level-fn))
+      (let n Int32 (io::namespace-fn))
+      (if-stmt (&& (string-eq s "test") (== n 42)) 42 1)
+    )
+  )
+)
+

@@ -1,0 +1,41 @@
+(program
+  (name "test-collect-top-level-fn-42")
+  (version "0.1")
+
+  (module
+    (name "test-module")
+    (namespace "io"
+      (fn namespace-fn
+        (params ())
+        (returns Int32)
+        (body 10)
+      )
+    )
+    (fn top-level-fn
+      (params ())
+      (returns Int32)
+      (body 32)
+      (tests
+        (test top-level-fn-basic
+          (doc "top-level-fn returns 32")
+          (tags unit)
+          (body
+            (expect-eq (top-level-fn) 32)
+          )
+        )
+      )
+    )
+  )
+
+  (entry main
+    (params ())
+    (returns Int32)
+    (body
+      ;; Both should be collectable
+      (let ns-result Int32 (io::namespace-fn))
+      (let top-result Int32 (top-level-fn))
+      (+ ns-result top-result)
+    )
+  )
+)
+

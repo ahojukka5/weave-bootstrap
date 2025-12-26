@@ -1,0 +1,18 @@
+(module
+  (name "helper-module")
+  (fn helper-fn
+    (params ())
+    (returns String)
+    (body "hello")
+    (tests
+      (test helper-fn-basic
+        (doc "helper-fn returns hello")
+        (tags unit)
+        (body
+          (expect-true (string-eq (helper-fn) "hello"))
+        )
+      )
+    )
+  )
+)
+

@@ -1,0 +1,35 @@
+(module
+  (name "cli-like-module")
+  (namespace "io"
+    (fn namespace-fn
+      (params ())
+      (returns Int32)
+      (body 10)
+      (tests
+        (test namespace-fn-basic
+          (doc "namespace-fn works")
+          (tags unit)
+          (body
+            (expect-eq (io::namespace-fn) 10)
+          )
+        )
+      )
+    )
+  )
+
+  (fn top-level-fn
+    (params ())
+    (returns String)
+    (body "test")
+    (tests
+      (test top-level-fn-basic
+        (doc "top-level-fn works")
+        (tags unit)
+        (body
+          (expect-true (string-eq (top-level-fn) "test"))
+        )
+      )
+    )
+  )
+)
+
