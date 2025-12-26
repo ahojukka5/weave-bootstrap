@@ -1,8 +1,11 @@
 #include "codegen.h"
 #include "diagnostics.h"
+#include "stats.h"
+#include "cgutils.h"
 
 #include "fn_table.h"
 #include "type_env.h"
+#include "builtins.h"
 
 #include <stdlib.h>
 #include <string.h>
@@ -770,140 +773,70 @@ Value cg_expr(IrCtx *ir, VarEnv *env, Node *expr) {
             return cg_make_struct(ir, env, expr);
         }
 
+        /* Check builtin registry first - Julia-style central dispatch */
+        const char *head_name = atom_text(head);
+        BuiltinId bid = builtin_id(head_name);
+        if (bid != BUILTIN_ID_NONE) {
+            Value result = cg_builtin(ir, env, bid, expr);
+            if (result.type) {  /* If codegen function returned a valid value */
+                return result;
+            }
+            /* Fall through if no codegen function registered (e.g., get-field) */
+        }
+        
+        /* Handle get-field separately for now (still uses cg_get_field from expr.c) */
         if (is_atom(head, "get-field")) {
             return cg_get_field(ir, env, expr);
         }
 
-        if (is_atom(head, "bitcast")) {
-            TypeEnv *tenv = (TypeEnv *)ir->type_env;
-            TypeRef *to_ty = parse_type_node(tenv, list_nth(expr, 1));
-            Value src = cg_expr(ir, env, list_nth(expr, 2));
-            int t = ir_fresh_temp(ir);
-            sb_append(ir->out, "  ");
-            ir_emit_temp(ir->out, t);
-            sb_append(ir->out, " = bitcast ");
-            emit_llvm_type(ir->out, src.type);
-            sb_append(ir->out, " ");
-            emit_value(ir->out, src);
-            sb_append(ir->out, " to ");
-            emit_llvm_type(ir->out, to_ty);
-            sb_append(ir->out, "\n");
-            return value_temp(to_ty, t);
-        }
-
         if (is_atom(head, "+") || is_atom(head, "-") || is_atom(head, "*") || is_atom(head, "/")) {
-            lhs = ensure_type_ctx_at(ir, cg_expr(ir, env, list_nth(expr, 1)), type_i32(), "arith", expr);
-            rhs = ensure_type_ctx_at(ir, cg_expr(ir, env, list_nth(expr, 2)), type_i32(), "arith", expr);
-            t = ir_fresh_temp(ir);
-            sb_append(ir->out, "  ");
-            ir_emit_temp(ir->out, t);
-            sb_append(ir->out, " = ");
-            if (is_atom(head, "+")) sb_append(ir->out, "add");
-            else if (is_atom(head, "-")) sb_append(ir->out, "sub");
-            else if (is_atom(head, "*")) sb_append(ir->out, "mul");
-            else sb_append(ir->out, "sdiv");
-            sb_append(ir->out, " i32 ");
-            emit_value_i32(ir->out, lhs);
-            sb_append(ir->out, ", ");
-            emit_value_i32(ir->out, rhs);
-            sb_append(ir->out, "\n");
-            return value_temp(type_i32(), t);
+            ArithOp op;
+            if (is_atom(head, "+")) {
+                op = ARITH_ADD;
+                STAT_INC_ADD();
+            } else if (is_atom(head, "-")) {
+                op = ARITH_SUB;
+                STAT_INC_SUB();
+            } else if (is_atom(head, "*")) {
+                op = ARITH_MUL;
+                STAT_INC_MUL();
+            } else {
+                op = ARITH_DIV;
+                STAT_INC_DIV();
+            }
+            return cg_arith(ir, env, expr, op);
         }
 
         /* Comparisons return i32 0/1 */
         if (is_atom(head, "==") || is_atom(head, "!=") || is_atom(head, "<") ||
             is_atom(head, "<=") || is_atom(head, ">") || is_atom(head, ">=")) {
-            const char *pred = "eq";
-            int tcmp, tout;
-            Value raw_lhs = cg_expr(ir, env, list_nth(expr, 1));
-            Value raw_rhs = cg_expr(ir, env, list_nth(expr, 2));
-
-            /* Determine comparison mode: integer vs pointer */
-            int lhs_is_i32 = (raw_lhs.type && raw_lhs.type->kind == TY_I32);
-            int rhs_is_i32 = (raw_rhs.type && raw_rhs.type->kind == TY_I32);
-            int lhs_is_ptr = (raw_lhs.type && (raw_lhs.type->kind == TY_PTR || raw_lhs.type->kind == TY_I8PTR));
-            int rhs_is_ptr = (raw_rhs.type && (raw_rhs.type->kind == TY_PTR || raw_rhs.type->kind == TY_I8PTR));
-
-            if (is_atom(head, "==")) pred = "eq";
-            else if (is_atom(head, "!=")) pred = "ne";
-            else if (is_atom(head, "<")) pred = "slt";
-            else if (is_atom(head, "<=")) pred = "sle";
-            else if (is_atom(head, ">")) pred = "sgt";
-            else pred = "sge";
-
-            tcmp = ir_fresh_temp(ir);
-            tout = ir_fresh_temp(ir);
-
-            /* Pointer-aware equality: bitcast both to i8* when needed */
-            if ((is_atom(head, "==") || is_atom(head, "!=")) && (lhs_is_ptr || rhs_is_ptr)) {
-                lhs = ensure_type_ctx_at(ir, raw_lhs, type_i8ptr(), "cmp", expr);
-                rhs = ensure_type_ctx_at(ir, raw_rhs, type_i8ptr(), "cmp", expr);
-                sb_append(ir->out, "  ");
-                ir_emit_temp(ir->out, tcmp);
-                sb_append(ir->out, " = icmp ");
-                sb_append(ir->out, pred);
-                sb_append(ir->out, " i8* ");
-                emit_value(ir->out, lhs);
-                sb_append(ir->out, ", ");
-                emit_value(ir->out, rhs);
-                sb_append(ir->out, "\n");
+            CmpOp op;
+            if (is_atom(head, "==")) {
+                op = CMP_EQ;
+                STAT_INC(emitted_eq);
+            } else if (is_atom(head, "!=")) {
+                op = CMP_NE;
+                STAT_INC(emitted_ne);
+            } else if (is_atom(head, "<")) {
+                op = CMP_LT;
+                STAT_INC(emitted_lt);
+            } else if (is_atom(head, "<=")) {
+                op = CMP_LE;
+                STAT_INC(emitted_le);
+            } else if (is_atom(head, ">")) {
+                op = CMP_GT;
+                STAT_INC(emitted_gt);
             } else {
-                /* Fallback to integer comparison; ptrs become i32 via ptrtoint */
-                lhs = ensure_type_ctx_at(ir, raw_lhs, type_i32(), "cmp", expr);
-                rhs = ensure_type_ctx_at(ir, raw_rhs, type_i32(), "cmp", expr);
-                sb_append(ir->out, "  ");
-                ir_emit_temp(ir->out, tcmp);
-                sb_append(ir->out, " = icmp ");
-                sb_append(ir->out, pred);
-                sb_append(ir->out, " i32 ");
-                emit_value_i32(ir->out, lhs);
-                sb_append(ir->out, ", ");
-                emit_value_i32(ir->out, rhs);
-                sb_append(ir->out, "\n");
+                op = CMP_GE;
+                STAT_INC(emitted_ge);
             }
-
-            sb_append(ir->out, "  ");
-            ir_emit_temp(ir->out, tout);
-            sb_append(ir->out, " = zext i1 ");
-            ir_emit_temp(ir->out, tcmp);
-            sb_append(ir->out, " to i32\n");
-            return value_temp(type_i32(), tout);
+            STAT_INC_CMP();
+            return cg_cmp(ir, env, expr, op);
         }
 
         if (is_atom(head, "&&") || is_atom(head, "||")) {
-            int tb1, tb2, tb3, tout;
-            lhs = ensure_type_ctx_at(ir, cg_expr(ir, env, list_nth(expr, 1)), type_i32(), "logic", expr);
-            rhs = ensure_type_ctx_at(ir, cg_expr(ir, env, list_nth(expr, 2)), type_i32(), "logic", expr);
-            tb1 = ir_fresh_temp(ir);
-            tb2 = ir_fresh_temp(ir);
-            tb3 = ir_fresh_temp(ir);
-            tout = ir_fresh_temp(ir);
-            sb_append(ir->out, "  ");
-            ir_emit_temp(ir->out, tb1);
-            sb_append(ir->out, " = icmp ne i32 ");
-            emit_value_i32(ir->out, lhs);
-            sb_append(ir->out, ", 0\n");
-            sb_append(ir->out, "  ");
-            ir_emit_temp(ir->out, tb2);
-            sb_append(ir->out, " = icmp ne i32 ");
-            emit_value_i32(ir->out, rhs);
-            sb_append(ir->out, ", 0\n");
-            sb_append(ir->out, "  ");
-            ir_emit_temp(ir->out, tb3);
-            sb_append(ir->out, " = ");
-            if (is_atom(head, "&&")) sb_append(ir->out, "and");
-            else sb_append(ir->out, "or");
-            sb_append(ir->out, " i1 ");
-            ir_emit_temp(ir->out, tb1);
-            sb_append(ir->out, ", ");
-            ir_emit_temp(ir->out, tb2);
-            sb_append(ir->out, "\n");
-            sb_append(ir->out, "  ");
-            ir_emit_temp(ir->out, tout);
-            sb_append(ir->out, " = zext i1 ");
-            ir_emit_temp(ir->out, tb3);
-            sb_append(ir->out, " to i32\n");
-            return value_temp(type_i32(), tout);
+            LogicOp op = is_atom(head, "&&") ? LOGIC_AND : LOGIC_OR;
+            return cg_logic(ir, env, expr, op);
         }
 
         Value result = cg_call(ir, env, expr);
@@ -921,3 +854,145 @@ Value cg_expr(IrCtx *ir, VarEnv *env, Node *expr) {
     }
     return result;
 }
+
+/* Enum-based operation implementations - Julia-style */
+
+Value cg_arith(IrCtx *ir, VarEnv *env, Node *expr, ArithOp op) {
+    Value lhs = ensure_type_ctx_at(ir, cg_expr(ir, env, list_nth(expr, 1)), type_i32(), "arith", expr);
+    Value rhs = ensure_type_ctx_at(ir, cg_expr(ir, env, list_nth(expr, 2)), type_i32(), "arith", expr);
+    int t = ir_fresh_temp(ir);
+    sb_append(ir->out, "  ");
+    ir_emit_temp(ir->out, t);
+    sb_append(ir->out, " = ");
+    switch (op) {
+    case ARITH_ADD:
+        sb_append(ir->out, "add");
+        break;
+    case ARITH_SUB:
+        sb_append(ir->out, "sub");
+        break;
+    case ARITH_MUL:
+        sb_append(ir->out, "mul");
+        break;
+    case ARITH_DIV:
+        sb_append(ir->out, "sdiv");
+        break;
+    }
+    sb_append(ir->out, " i32 ");
+    emit_value_i32(ir->out, lhs);
+    sb_append(ir->out, ", ");
+    emit_value_i32(ir->out, rhs);
+    sb_append(ir->out, "\n");
+    return value_temp(type_i32(), t);
+}
+
+Value cg_cmp(IrCtx *ir, VarEnv *env, Node *expr, CmpOp op) {
+    const char *pred;
+    int tcmp, tout;
+    Value raw_lhs = cg_expr(ir, env, list_nth(expr, 1));
+    Value raw_rhs = cg_expr(ir, env, list_nth(expr, 2));
+    Value lhs, rhs;
+
+    /* Determine comparison mode: integer vs pointer */
+    int lhs_is_ptr = (raw_lhs.type && (raw_lhs.type->kind == TY_PTR || raw_lhs.type->kind == TY_I8PTR));
+    int rhs_is_ptr = (raw_rhs.type && (raw_rhs.type->kind == TY_PTR || raw_rhs.type->kind == TY_I8PTR));
+
+    switch (op) {
+    case CMP_EQ: pred = "eq"; break;
+    case CMP_NE: pred = "ne"; break;
+    case CMP_LT: pred = "slt"; break;
+    case CMP_LE: pred = "sle"; break;
+    case CMP_GT: pred = "sgt"; break;
+    case CMP_GE: pred = "sge"; break;
+    }
+
+    tcmp = ir_fresh_temp(ir);
+    tout = ir_fresh_temp(ir);
+
+    /* Pointer-aware equality: bitcast both to i8* when needed */
+    if ((op == CMP_EQ || op == CMP_NE) && (lhs_is_ptr || rhs_is_ptr)) {
+        lhs = ensure_type_ctx_at(ir, raw_lhs, type_i8ptr(), "cmp", expr);
+        rhs = ensure_type_ctx_at(ir, raw_rhs, type_i8ptr(), "cmp", expr);
+        sb_append(ir->out, "  ");
+        ir_emit_temp(ir->out, tcmp);
+        sb_append(ir->out, " = icmp ");
+        sb_append(ir->out, pred);
+        sb_append(ir->out, " i8* ");
+        emit_value(ir->out, lhs);
+        sb_append(ir->out, ", ");
+        emit_value(ir->out, rhs);
+        sb_append(ir->out, "\n");
+    } else {
+        /* Fallback to integer comparison; ptrs become i32 via ptrtoint */
+        lhs = ensure_type_ctx_at(ir, raw_lhs, type_i32(), "cmp", expr);
+        rhs = ensure_type_ctx_at(ir, raw_rhs, type_i32(), "cmp", expr);
+        sb_append(ir->out, "  ");
+        ir_emit_temp(ir->out, tcmp);
+        sb_append(ir->out, " = icmp ");
+        sb_append(ir->out, pred);
+        sb_append(ir->out, " i32 ");
+        emit_value_i32(ir->out, lhs);
+        sb_append(ir->out, ", ");
+        emit_value_i32(ir->out, rhs);
+        sb_append(ir->out, "\n");
+    }
+
+    sb_append(ir->out, "  ");
+    ir_emit_temp(ir->out, tout);
+    sb_append(ir->out, " = zext i1 ");
+    ir_emit_temp(ir->out, tcmp);
+    sb_append(ir->out, " to i32\n");
+    return value_temp(type_i32(), tout);
+}
+
+Value cg_logic(IrCtx *ir, VarEnv *env, Node *expr, LogicOp op) {
+    int tb1, tb2, tb3, tout;
+    Value lhs = ensure_type_ctx_at(ir, cg_expr(ir, env, list_nth(expr, 1)), type_i32(), "logic", expr);
+    Value rhs = ensure_type_ctx_at(ir, cg_expr(ir, env, list_nth(expr, 2)), type_i32(), "logic", expr);
+    
+    if (op == LOGIC_AND) {
+        STAT_INC(emitted_and);
+    } else {
+        STAT_INC(emitted_or);
+    }
+    
+    tb1 = ir_fresh_temp(ir);
+    tb2 = ir_fresh_temp(ir);
+    tb3 = ir_fresh_temp(ir);
+    tout = ir_fresh_temp(ir);
+    
+    sb_append(ir->out, "  ");
+    ir_emit_temp(ir->out, tb1);
+    sb_append(ir->out, " = icmp ne i32 ");
+    emit_value_i32(ir->out, lhs);
+    sb_append(ir->out, ", 0\n");
+    
+    sb_append(ir->out, "  ");
+    ir_emit_temp(ir->out, tb2);
+    sb_append(ir->out, " = icmp ne i32 ");
+    emit_value_i32(ir->out, rhs);
+    sb_append(ir->out, ", 0\n");
+    
+    sb_append(ir->out, "  ");
+    ir_emit_temp(ir->out, tb3);
+    sb_append(ir->out, " = ");
+    if (op == LOGIC_AND) {
+        sb_append(ir->out, "and");
+    } else {
+        sb_append(ir->out, "or");
+    }
+    sb_append(ir->out, " i1 ");
+    ir_emit_temp(ir->out, tb1);
+    sb_append(ir->out, ", ");
+    ir_emit_temp(ir->out, tb2);
+    sb_append(ir->out, "\n");
+    
+    sb_append(ir->out, "  ");
+    ir_emit_temp(ir->out, tout);
+    sb_append(ir->out, " = zext i1 ");
+    ir_emit_temp(ir->out, tb3);
+    sb_append(ir->out, " to i32\n");
+    return value_temp(type_i32(), tout);
+}
+
+/* is_pointer_type is now in cgutils.c - removed duplicate */
