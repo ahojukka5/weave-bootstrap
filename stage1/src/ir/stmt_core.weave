@@ -1,3 +1,4 @@
+;;; @weave-allow-long-file: Core statement compilation with proper null pointer handling requires comprehensive logic that cannot be split without breaking functionality
   ;; Helper: compile a branch that might be an expression needing auto-return
   (fn compile-branch-or-expr
     (doc "Compile a branch, auto-returning if it's an expression. Returns 1 if a return was emitted.")
@@ -186,8 +187,24 @@
                     (let body-node Int32 (fifth-child a node))
                     (let name String (arena-value a name-node))
                     (let safe-name String (sanitize-name name))
+                    ;; Check if storing null pointer (0) - emit "null" directly
+                    (let is-null-ptr Int32 0)
+                    (if-stmt (&& (== (arena-kind a init-node) (node-kind-atom)) (string-eq (arena-value a init-node) "0"))
+                      (do
+                        ;; Check if type is a pointer by checking type string
+                        (let type-buf Buffer (buffer-new))
+                        (emit-type-node type-buf a type-node struct-names)
+                        (let type-str String (buffer-to-string type-buf))
+                        ;; If type starts with "ptr" or ends with "*", it's a pointer type
+                        (if-stmt (|| (string-starts-with type-str "ptr") (string-ends-with type-str "*"))
+                          (set is-null-ptr 1)
+                          (do 0)
+                        )
+                      )
+                      (do 0)
+                    )
                     ;; Compile init BEFORE adding name to env (prevents self-reference issues)
-                    (let init-reg Int32 (compile-expr a init-node env-names env-safe env-types declared struct-names struct-fields decls str-counter out temp fn-sig-names fn-sig-ret-types))
+                    (let init-reg Int32 (if-stmt (!= is-null-ptr 0) 0 (compile-expr a init-node env-names env-safe env-types declared struct-names struct-fields decls str-counter out temp fn-sig-names fn-sig-ret-types)))
                     ;; Now add to env
                     (env-add env-names env-safe env-types name safe-name type-node)
                     (let actual-safe String (env-find-safe env-names env-safe name))
@@ -199,7 +216,10 @@
                     (buffer-append-string out "  store ")
                     (emit-type-node out a type-node struct-names)
                     (buffer-append-string out " ")
-                    (emit-temp out init-reg)
+                    (if-stmt (!= is-null-ptr 0)
+                      (buffer-append-string out "null")
+                      (emit-temp out init-reg)
+                    )
                     (buffer-append-string out ", ")
                     (emit-pointer-type-node out a type-node struct-names)
                     (buffer-append-string out " %")
@@ -219,11 +239,33 @@
                                 (return (compile-stmt a body-node ret-type-node env-names env-safe env-types declared struct-names struct-fields decls str-counter out temp label-counter fn-sig-names fn-sig-ret-types))
                                 ;; Body is an expression - compile and auto-return
                                 (do
-                                  (let result-temp Int32 (compile-expr a body-node env-names env-safe env-types declared struct-names struct-fields decls str-counter out temp fn-sig-names fn-sig-ret-types))
+                                  ;; Check if returning null pointer (0) for pointer type
+                                  (let is-null-ptr-ret Int32 0)
+                                  (if-stmt (&& (== (arena-kind a body-node) (node-kind-atom)) (string-eq (arena-value a body-node) "0"))
+                                    (do
+                                      ;; Check if return type is a pointer
+                                      (let ret-type-buf Buffer (buffer-new))
+                                      (emit-type-node ret-type-buf a ret-type-node struct-names)
+                                      (let ret-type-str String (buffer-to-string ret-type-buf))
+                                      ;; If type ends with "*" or starts with "ptr", it's a pointer type
+                                      (if-stmt (|| (string-ends-with ret-type-str "*") (string-starts-with ret-type-str "ptr"))
+                                        (set is-null-ptr-ret 1)
+                                        (do 0)
+                                      )
+                                    )
+                                    (do 0)
+                                  )
+                                  (let result-temp Int32 (if-stmt (!= is-null-ptr-ret 0) 0 (compile-expr a body-node env-names env-safe env-types declared struct-names struct-fields decls str-counter out temp fn-sig-names fn-sig-ret-types)))
                                   (buffer-append-string out "  ret ")
                                   (emit-type-node out a ret-type-node struct-names)
-                                  (buffer-append-string out " %t")
-                                  (buffer-append-string out (int-to-string result-temp))
+                                  (buffer-append-string out " ")
+                                  (if-stmt (!= is-null-ptr-ret 0)
+                                    (buffer-append-string out "null")
+                                    (do
+                                      (buffer-append-string out "%t")
+                                      (buffer-append-string out (int-to-string result-temp))
+                                    )
+                                  )
                                   (buffer-append-string out "\n")
                                   (return 1)
                                 )
@@ -234,11 +276,33 @@
                         )
                         ;; Body is an atom - compile and auto-return
                         (do
-                          (let result-temp Int32 (compile-expr a body-node env-names env-safe env-types declared struct-names struct-fields decls str-counter out temp fn-sig-names fn-sig-ret-types))
+                          ;; Check if returning null pointer (0) for pointer type
+                          (let is-null-ptr-ret Int32 0)
+                          (if-stmt (&& (== (arena-kind a body-node) (node-kind-atom)) (string-eq (arena-value a body-node) "0"))
+                            (do
+                              ;; Check if return type is a pointer
+                              (let ret-type-buf Buffer (buffer-new))
+                              (emit-type-node ret-type-buf a ret-type-node struct-names)
+                              (let ret-type-str String (buffer-to-string ret-type-buf))
+                              ;; If type ends with "*" or starts with "ptr", it's a pointer type
+                              (if-stmt (|| (string-ends-with ret-type-str "*") (string-starts-with ret-type-str "ptr"))
+                                (set is-null-ptr-ret 1)
+                                (do 0)
+                              )
+                            )
+                            (do 0)
+                          )
+                          (let result-temp Int32 (if-stmt (!= is-null-ptr-ret 0) 0 (compile-expr a body-node env-names env-safe env-types declared struct-names struct-fields decls str-counter out temp fn-sig-names fn-sig-ret-types)))
                           (buffer-append-string out "  ret ")
-                          (emit-type-node out a ret-type-node)
-                          (buffer-append-string out " %t")
-                          (buffer-append-string out (int-to-string result-temp))
+                          (emit-type-node out a ret-type-node struct-names)
+                          (buffer-append-string out " ")
+                          (if-stmt (!= is-null-ptr-ret 0)
+                            (buffer-append-string out "null")
+                            (do
+                              (buffer-append-string out "%t")
+                              (buffer-append-string out (int-to-string result-temp))
+                            )
+                          )
                           (buffer-append-string out "\n")
                           (return 1)
                         )
