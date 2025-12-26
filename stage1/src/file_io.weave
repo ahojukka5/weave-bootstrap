@@ -1,15 +1,16 @@
 (module
-  (name "stage1-file-io")
+  (name "file-io")
   (doc "File I/O functions implemented in Weave using libc wrappers.")
   (include "libc.weave")
   (include "string.weave")
 
-  ;; Constants for fseek
-  (let SEEK_SET Int32 0)
-  (let SEEK_CUR Int32 1)
-  (let SEEK_END Int32 2)
+  (namespace "io"
+    ;; Constants for fseek
+    (let SEEK_SET Int32 0)
+    (let SEEK_CUR Int32 1)
+    (let SEEK_END Int32 2)
 
-  (fn weave_read_file
+    (fn weave_read_file
     (doc "Read entire file into a newly allocated string. Returns NULL on failure. C-compatible name for ccall.")
     (params (path String)) (returns String)
     (body
@@ -70,7 +71,7 @@
     )
   )
 
-  (fn weave_write_file
+    (fn weave_write_file
     (doc "Write string content to file. Returns 0 on success, -1 on failure. C-compatible name for ccall.")
     (params (path String) (content String)) (returns Int32)
     (body
@@ -103,5 +104,6 @@
       )
     )
   )
+  ) ;; namespace "io"
 )
 
