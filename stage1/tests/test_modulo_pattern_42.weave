@@ -1,0 +1,35 @@
+(program
+  (name "test-modulo-pattern-42")
+  (doc "Calculate modulo using division pattern.")
+  (version "0.1")
+
+  (type ExitCode
+    (alias Int32)
+  )
+
+  (fn modulo
+    (doc "Calculate a mod b using division: a - (a/b)*b.")
+    (params (a Int32) (b Int32))
+    (returns Int32)
+    (body
+      (do
+        (let quotient Int32 (/ a b))
+        (let product Int32 (* quotient b))
+        (return (- a product))
+      )
+    )
+  )
+
+  (entry main
+    (doc "Calculate 100 mod 29 = 13, multiply by 3, add 3.")
+    (params ())
+    (returns ExitCode)
+    (body
+      (do
+        (let result Int32 (modulo 100 29))  ;; 13
+        ;; 13 * 3 + 3 = 42
+        (return (+ (* result 3) 3))
+      )
+    )
+  )
+)
