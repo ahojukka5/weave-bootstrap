@@ -1,0 +1,28 @@
+(program
+  (name "test-arith-ops-42")
+  (doc "Test arithmetic operators: +, -, *, /")
+  (version "0.1")
+
+  (type ExitCode
+    (alias Int32)
+  )
+
+  (entry main
+    (doc "Use all arithmetic operators to compute 42.")
+    (params ())
+    (returns ExitCode)
+    (body
+      (do
+        ;; (10 * 5) - 8 = 50 - 8 = 42
+        (let prod Int32 (* 10 5))
+        (let diff Int32 (- prod 8))
+        ;; Also test division: 84 / 2 = 42
+        (let div Int32 (/ 84 2))
+        (if-stmt (== diff div)
+          (return 42)
+          (return 0)
+        )
+      )
+    )
+  )
+)
