@@ -196,7 +196,7 @@ int main(int argc, char **argv) {
         fprintf(stderr, "  -c                Emit object file\n");
         fprintf(stderr, "  -O, --optimize    Enable optimizations\n");
         fprintf(stderr, "  --static          Produce static executable\n");
-        fprintf(stderr, "  --runtime PATH    Path to runtime.c (or set WEAVE_RUNTIME env var)\n");
+        fprintf(stderr, "  --runtime PATH    Optional path to runtime.c (for backward compatibility, not required)\n");
         fprintf(stderr, "  -generate-tests   Generate & run embedded tests (emit synthetic main)\n");
         fprintf(stderr, "  -run-tests        Alias for -generate-tests\n");
         fprintf(stderr, "  -list-tests       List embedded tests by name (one per line)\n");
@@ -205,7 +205,7 @@ int main(int argc, char **argv) {
         fprintf(stderr, "  --stats           Print compiler statistics\n");
         fprintf(stderr, "  -I<dir>           Add include directory\n");
         fprintf(stderr, "\nEnvironment:\n");
-        fprintf(stderr, "  WEAVE_RUNTIME     Default path to runtime.c\n");
+        fprintf(stderr, "  WEAVE_RUNTIME     Optional default path to runtime.c (for backward compatibility)\n");
         return 2;
     }
     
@@ -276,12 +276,7 @@ int main(int argc, char **argv) {
             pid_t pid;
             int status;
             
-            /* Check runtime for executable output */
-            if (!runtime_path) {
-                fprintf(stderr, "weavec: runtime path required for executable output\n");
-                fprintf(stderr, "  Use --runtime PATH or set WEAVE_RUNTIME environment variable\n");
-                return 1;
-            }
+            /* Runtime no longer required - Weave programs define main() directly */
             
             /* Compile IR to object file using LLVM */
             snprintf(obj_tmp, sizeof(obj_tmp), "/tmp/weavec_%d.o", getpid());
@@ -316,7 +311,10 @@ int main(int argc, char **argv) {
                 linker_args[arg_idx++] = "-o";
                 linker_args[arg_idx++] = output;
                 linker_args[arg_idx++] = obj_tmp;
-                linker_args[arg_idx++] = runtime_path;
+                /* Runtime no longer needed - Weave programs define main() directly */
+                if (runtime_path) {
+                    linker_args[arg_idx++] = runtime_path;
+                }
                 linker_args[arg_idx++] = "-lm";
                 linker_args[arg_idx] = NULL;
                 
@@ -343,12 +341,7 @@ int main(int argc, char **argv) {
         pid_t pid;
         int status;
         
-        /* Check runtime for executable output */
-        if (mode == OUTPUT_EXECUTABLE && !runtime_path) {
-            fprintf(stderr, "weavec: runtime path required for executable output\n");
-            fprintf(stderr, "  Use --runtime PATH or set WEAVE_RUNTIME environment variable\n");
-            return 1;
-        }
+        /* Runtime no longer required - Weave programs define main() directly */
         
         /* Write IR to temp file */
         snprintf(ll_tmp, sizeof(ll_tmp), "/tmp/weavec_%d.ll", getpid());
