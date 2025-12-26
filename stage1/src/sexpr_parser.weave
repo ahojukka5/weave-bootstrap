@@ -1,5 +1,5 @@
 (module
-  (name "stage1-sexpr-parser")
+  (name "sexpr-parser")
   (doc "Recursive descent that builds an arena from the token stream.")
 
   (include "string.weave")
@@ -7,7 +7,8 @@
   (include "arrays.weave")
   (include "arena.weave")
 
-  (fn token-value
+  (namespace "parser"
+    (fn token-value
     (doc "Strip the TOKEN: prefix, returning the raw value portion.")
     (params
       (tok String)
@@ -258,4 +259,5 @@
       )
     )
   ) ;; fn parse-string
+  ) ;; namespace "parser"
 ) ;; module

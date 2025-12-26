@@ -1,13 +1,15 @@
 (module
-  (name "stage1-tokenizer")
+  (name "tokenizer")
   (doc "Tokenize source text into a flat list of atoms/strings/parens.")
 
   (include "string.weave")
   (include "buffers.weave")
   (include "arrays.weave")
 
-  (include "tokenizer/core_chars.weave")
-  (include "tokenizer/core_read.weave")
-  (include "tokenizer/tokenize.weave")
-  (include "tokenizer/tests.weave")
+  (namespace "parser"
+    (include "tokenizer/core_chars.weave")
+    (include "tokenizer/core_read.weave")
+    (include "tokenizer/tokenize.weave")
+    (include "tokenizer/tests.weave")
+  ) ;; namespace "parser"
 ) ;; module
