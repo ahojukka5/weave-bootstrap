@@ -1,11 +1,13 @@
 (module
-  (name "stage1-ir-ops")
+  (name "ir-ops")
   (doc "Arithmetic and comparison helpers for IR emission.")
 
   (include "../string.weave")
   (include "../buffers.weave")
   (include "../arrays.weave")
-  (include "./emit.weave")
+
+  (namespace "ir"
+    (include "./emit.weave")
 
   (fn compile-binary-arith
     (doc "Emit i32 add/sub/mul/div based on the op string.")
@@ -211,4 +213,5 @@
       )
     )
   ) ;; fn compile-logical
+  ) ;; namespace "ir"
 ) ;; module

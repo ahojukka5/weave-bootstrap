@@ -1,14 +1,17 @@
 (module
-  (name "stage1-ir-stmt")
+  (name "ir-stmt")
   (doc "Statement lowering to LLVM IR; handles let/set/do/if/while/return.")
 
   (include "../string.weave")
   (include "../buffers.weave")
   (include "../arrays.weave")
   (include "../arena.weave")
-  (include "./emit.weave")
-  (include "./util.weave")
-  (include "./expr.weave")
 
-  (include "./stmt_core.weave")
+  (namespace "ir"
+    (include "./emit.weave")
+    (include "./util.weave")
+    (include "./expr.weave")
+
+    (include "./stmt_core.weave")
+  ) ;; namespace "ir"
 ) ;; module

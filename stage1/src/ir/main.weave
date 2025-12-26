@@ -1,5 +1,5 @@
 (module
-  (name "stage1-ir-main")
+  (name "ir-main")
   (doc "Entry point that lowers parsed S-expressions into LLVM IR.")
 
   (include "../string.weave")
@@ -7,15 +7,17 @@
   (include "../arrays.weave")
   (include "../arena.weave")
   (include "../debug.weave")
-  (include "./emit.weave")
-  (include "./util.weave")
-  (include "./expr.weave")
-  (include "./stmt.weave")
-  (include "./ir_runtime.weave")
-  (include "./ir_util.weave")
-  (include "./ir_fns.weave")
 
-  (fn generate-ir
+  (namespace "ir"
+    (include "./emit.weave")
+    (include "./util.weave")
+    (include "./expr.weave")
+    (include "./stmt.weave")
+    (include "./ir_runtime.weave")
+    (include "./ir_util.weave")
+    (include "./ir_fns.weave")
+
+    (fn generate-ir
     (doc "Builds decls + all function IR from the parsed arena.")
     (params
       (a (ptr Arena))
@@ -272,4 +274,5 @@
       )
     )
   )
+  ) ;; namespace "ir"
 )

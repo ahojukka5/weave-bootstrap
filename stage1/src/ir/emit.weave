@@ -1,12 +1,13 @@
 (module
-  (name "stage1-ir-emit")
+  (name "ir-emit")
   (doc "Tiny helpers to append common LLVM IR fragments.")
 
   (include "../string.weave")
   (include "../buffers.weave")
   (include "../arrays.weave")
 
-  (fn emit-line
+  (namespace "ir"
+    (fn emit-line
     (doc "Append a full line with newline to the buffer.")
     (params
       (out Buffer)
@@ -122,4 +123,5 @@
       )
     )
   ) ;; fn emit-label-def
+  ) ;; namespace "ir"
 ) ;; module

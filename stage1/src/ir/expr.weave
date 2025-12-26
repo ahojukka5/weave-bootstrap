@@ -1,23 +1,26 @@
 (module
-  (name "stage1-ir-expr")
+  (name "ir-expr")
   (doc "Expression lowering to LLVM IR temps and instructions.")
 
   (include "../string.weave")
   (include "../buffers.weave")
   (include "../arrays.weave")
   (include "../arena.weave")
-  (include "./emit.weave")
-  (include "./util.weave")
-  (include "./types.weave")
-  (include "./ops.weave")
-  (include "./pointers.weave")
 
-  (include "./expr_ccall.weave")
-  ;; Split core expression lowering into smaller files under core/
-  (include "./core/expr_core_types.weave")
-  (include "./core/expr_core_atoms.weave")
-  (include "./core/expr_core_ptrs.weave")
-  (include "./core/expr_control.weave")
-  (include "./core/expr_binops.weave")
-  (include "./core/expr_compile.weave")
+  (namespace "ir"
+    (include "./emit.weave")
+    (include "./util.weave")
+    (include "./types.weave")
+    (include "./ops.weave")
+    (include "./pointers.weave")
+
+    (include "./expr_ccall.weave")
+    ;; Split core expression lowering into smaller files under core/
+    (include "./core/expr_core_types.weave")
+    (include "./core/expr_core_atoms.weave")
+    (include "./core/expr_core_ptrs.weave")
+    (include "./core/expr_control.weave")
+    (include "./core/expr_binops.weave")
+    (include "./core/expr_compile.weave")
+  ) ;; namespace "ir"
 ) ;; module

@@ -1,11 +1,13 @@
 (module
-  (name "stage1-ir-types")
+  (name "ir-types")
   (doc "Type mapping and struct layout emission helpers used by IR generation.")
 
   (include "../string.weave")
   (include "../buffers.weave")
   (include "../arrays.weave")
   (include "./util.weave")
+
+  (namespace "ir"
 
   (fn map-type-node
     (doc "Lower a type AST node into an LLVM spelling.")
@@ -405,4 +407,5 @@
       )
     )
   ) ;; fn emit-struct-defs
+  ) ;; namespace "ir"
 ) ;; module
