@@ -1,7 +1,5 @@
 ---
-description: Commit procedure - one file at a time with semantic commit messages
-globs: **/*
-alwaysApply: true
+alwaysApply: false
 ---
 
 # Commit Procedure
