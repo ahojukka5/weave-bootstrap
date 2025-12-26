@@ -37,10 +37,14 @@ int cg_stmt(IrCtx *ir, VarEnv *env, Node *stmt, TypeRef *ret_type, Value *out_la
         Value v = cg_expr(ir, env, list_nth(stmt, 1));
         if (out_last) *out_last = v;
         sb_append(ir->out, "  ret ");
-        emit_llvm_type(ir->out, ret_type);
-        sb_append(ir->out, " ");
-        emit_value(ir->out, v);
-        sb_append(ir->out, "\n");
+        if (ret_type && ret_type->kind == TY_VOID) {
+            sb_append(ir->out, "void\n");
+        } else {
+            emit_llvm_type(ir->out, ret_type);
+            sb_append(ir->out, " ");
+            emit_value(ir->out, v);
+            sb_append(ir->out, "\n");
+        }
         return 1;
     }
 
