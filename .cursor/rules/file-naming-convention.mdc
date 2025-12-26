@@ -1,0 +1,73 @@
+---
+description: File naming conventions for documentation and session files
+alwaysApply: true
+---
+
+# File Naming Convention
+
+All files in the project must follow consistent naming conventions for maintainability and discoverability.
+
+## General Principles
+
+1. **Use kebab-case**: All lowercase letters with hyphens separating words
+2. **No underscores**: Use hyphens (`-`) instead of underscores (`_`)
+3. **No spaces**: Never use spaces in filenames
+4. **Descriptive names**: File names should clearly indicate their content
+
+## Session Documents
+
+Session documents must be placed in `docs/sessions/` and follow this format:
+
+```
+YYYY-MM-DD-descriptive-kebab-case-name.md
+```
+
+### Format Requirements
+
+- **Date prefix**: Always start with `YYYY-MM-DD` (ISO 8601 date format)
+- **Location**: Must be in `docs/sessions/` directory
+- **Extension**: Always use `.md` extension
+- **Naming**: Use kebab-case for the descriptive part
+
+### Examples
+
+✅ **Good**:
+- `docs/sessions/2025-12-23-proposed-high-impact-pull-requests.md`
+- `docs/sessions/2024-12-22-get-field-syntax-and-weavec2-bootstrap-issue.md`
+- `docs/sessions/2025-01-15-type-system-improvements.md`
+
+❌ **Bad**:
+- `docs/PROPOSED_PULL_REQUESTS.md` (wrong location, wrong case, no date)
+- `docs/sessions/proposed_pull_requests.md` (no date, uses underscores)
+- `docs/sessions/2025-12-23 Proposed Pull Requests.md` (has spaces)
+- `docs/sessions/2025-12-23ProposedPullRequests.md` (no hyphens)
+
+## Other Documentation Files
+
+For non-session documentation files in `docs/`:
+
+- Use kebab-case: `failing-tests-report.txt`
+- Be descriptive: `diagnostics-implementation.md`
+- No date prefix needed (unless it's a dated document)
+
+## Code Files
+
+Code files follow language-specific conventions:
+- Weave files: `kebab-case.weave` (e.g., `expr_compile.weave` - note: existing code may use underscores)
+- C files: `snake_case.c` (e.g., `expr.c`)
+- Header files: `snake_case.h` (e.g., `codegen.h`)
+
+## When Creating New Files
+
+1. **Session documents**: Always use `docs/sessions/YYYY-MM-DD-description.md`
+2. **Other docs**: Use `docs/description.md` with kebab-case
+3. **Check existing patterns**: Look at similar files for consistency
+4. **Be consistent**: Follow existing conventions in the same directory
+
+## Migration
+
+When renaming existing files to follow this convention:
+1. Move to correct location if needed
+2. Rename to kebab-case
+3. Add date prefix for session documents
+4. Update any references to the file
