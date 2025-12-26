@@ -176,6 +176,9 @@ add_executable(weavec0
   src/types.c
   src/env.c
   src/value.c
+  src/builtins.c
+  src/stats.c
+  src/cgutils.c
   src/expr.c
   src/stmt.c
   src/program.c
