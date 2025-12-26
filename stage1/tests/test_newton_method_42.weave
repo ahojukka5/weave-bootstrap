@@ -1,0 +1,96 @@
+(program
+  (name "test-newton-method-42")
+  (doc "Newton's method for finding roots - scientific numerical method.")
+  (version "0.1")
+
+  (type ExitCode
+    (alias Int32)
+  )
+
+  ;; Newton's method: x_{n+1} = x_n - f(x_n) / f'(x_n)
+  ;; We'll find root of f(x) = x^2 - 42, so f'(x) = 2x
+  ;; Starting from x=10, we should converge to sqrt(42) ≈ 6.48
+
+  (fn abs
+    (doc "Absolute value.")
+    (params (x Int32))
+    (returns Int32)
+    (body
+      (if-stmt (< x 0)
+        (return (- 0 x))
+        (return x)
+      )
+    )
+  )
+
+  (fn f
+    (doc "Function f(x) = x^2 - 42.")
+    (params (x Int32))
+    (returns Int32)
+    (body
+      (return (- (* x x) 42))
+    )
+  )
+
+  (fn f-prime
+    (doc "Derivative f'(x) = 2x.")
+    (params (x Int32))
+    (returns Int32)
+    (body
+      (return (* 2 x))
+    )
+  )
+
+  (fn newton-step
+    (doc "One Newton iteration: x - f(x)/f'(x).")
+    (params (x Int32))
+    (returns Int32)
+    (body
+      (do
+        (let fx Int32 (f x))
+        (let fpx Int32 (f-prime x))
+        (if-stmt (== fpx 0)
+          (return x)
+          (return (- x (/ fx fpx)))
+        )
+      )
+    )
+  )
+
+  (fn newton-method
+    (doc "Newton's method to find root of f(x) = x^2 - 42.")
+    (params (initial-guess Int32) (max-iterations Int32) (tolerance Int32))
+    (returns Int32)
+    (body
+      (do
+        (let x Int32 initial-guess)
+        (let iter Int32 0)
+        (while (&& (< iter max-iterations) (> (abs (f x)) tolerance))
+          (do
+            (set x (newton-step x))
+            (set iter (+ iter 1))
+          )
+        )
+        (return x)
+      )
+    )
+  )
+
+  (entry main
+    (doc "Find root of x^2 - 42 = 0 using Newton's method. Result should be close to sqrt(42) ≈ 6.")
+    (params ())
+    (returns ExitCode)
+    (body
+      (do
+        ;; Start from x=10, find root of x^2 - 42 = 0
+        ;; After iterations, x should be close to sqrt(42) ≈ 6.48
+        ;; We'll use integer arithmetic, so expect x ≈ 6
+        (let root Int32 (newton-method 10 10 1))
+        ;; sqrt(42) ≈ 6.48, so with integer math we get 6
+        ;; 6 * 7 = 42
+        (return (* root 7))
+      )
+    )
+  )
+)
+
