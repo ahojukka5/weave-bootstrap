@@ -17,5 +17,7 @@
   (include "./core/expr_core_types.weave")
   (include "./core/expr_core_atoms.weave")
   (include "./core/expr_core_ptrs.weave")
+  (include "./core/expr_control.weave")
+  (include "./core/expr_binops.weave")
   (include "./core/expr_compile.weave")
 ) ;; module
