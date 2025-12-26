@@ -1,0 +1,49 @@
+(program
+  (name "test-conditional-chain-42")
+  (doc "Chain of conditional expressions.")
+  (version "0.1")
+
+  (type ExitCode
+    (alias Int32)
+  )
+
+  (fn classify-number
+    (doc "Return 1 if n < 10, 2 if n < 20, 3 if n < 30, else 4.")
+    (params (n Int32))
+    (returns Int32)
+    (body
+      (do
+        (if-stmt (< n 10)
+          (return 1)
+          (do 0)
+        )
+        (if-stmt (< n 20)
+          (return 2)
+          (do 0)
+        )
+        (if-stmt (< n 30)
+          (return 3)
+          (do 0)
+        )
+        (return 4)
+      )
+    )
+  )
+
+  (entry main
+    (doc "Classify numbers and sum: 1 + 2 + 3 + 4 = 10, multiply by 4 plus 2.")
+    (params ())
+    (returns ExitCode)
+    (body
+      (do
+        (let a Int32 (classify-number 5))   ;; 1
+        (let b Int32 (classify-number 15))  ;; 2
+        (let c Int32 (classify-number 25))  ;; 3
+        (let d Int32 (classify-number 35))  ;; 4
+        (let sum Int32 (+ (+ (+ a b) c) d)) ;; 10
+        ;; 10 * 4 + 2 = 42
+        (return (+ (* sum 4) 2))
+      )
+    )
+  )
+)
