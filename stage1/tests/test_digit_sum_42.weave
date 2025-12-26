@@ -1,0 +1,36 @@
+(program
+  (name "test-digit-sum-42")
+  (doc "Calculate sum of digits in a number.")
+  (version "0.1")
+
+  (type ExitCode
+    (alias Int32)
+  )
+
+  (fn digit-sum
+    (doc "Return sum of all digits in n.")
+    (params (n Int32))
+    (returns Int32)
+    (body
+      (do
+        (let sum Int32 0)
+        (let temp Int32 n)
+        (while (!= temp 0)
+          (do
+            (let digit Int32 (- temp (* (/ temp 10) 10)))
+            (set sum (+ sum digit))
+            (set temp (/ temp 10))
+          )
+        )
+        (return sum)
+      )
+    )
+  )
+
+  (entry main
+    (doc "digit-sum(987) = 24, digit-sum(999) = 27, sum = 51, subtract 9.")
+    (params ())
+    (returns ExitCode)
+    (body (- (+ (digit-sum 987) (digit-sum 999)) 9))
+  )
+)
