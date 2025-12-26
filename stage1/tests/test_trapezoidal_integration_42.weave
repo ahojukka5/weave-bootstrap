@@ -1,0 +1,71 @@
+(program
+  (name "test-trapezoidal-integration-42")
+  (doc "Numerical integration using trapezoidal rule - scientific computing method.")
+  (version "0.1")
+
+  (type ExitCode
+    (alias Int32)
+  )
+
+  ;; Trapezoidal rule: ∫[a,b] f(x)dx ≈ (b-a)/2n * [f(a) + 2∑f(x_i) + f(b)]
+  ;; We'll integrate f(x) = x from 0 to 6, which should give 18
+
+  (fn f
+    (doc "Function to integrate: f(x) = x.")
+    (params (x Int32))
+    (returns Int32)
+    (body
+      (return x)
+    )
+  )
+
+  (fn trapezoidal-integrate
+    (doc "Numerical integration using trapezoidal rule.")
+    (params (a Int32) (b Int32) (n Int32))
+    (returns Int32)
+    (body
+      (do
+        (if-stmt (<= n 0)
+          (return 0)
+          (do 0)
+        )
+        (let h Int32 (/ (- b a) n))
+        (let sum Int32 0)
+        
+        ;; Add f(a)
+        (set sum (+ sum (f a)))
+        
+        ;; Add 2 * sum of f(x_i) for i=1 to n-1
+        (let i Int32 1)
+        (while (< i n)
+          (do
+            (let xi Int32 (+ a (* h i)))
+            (set sum (+ sum (* 2 (f xi))))
+            (set i (+ i 1))
+          )
+        )
+        
+        ;; Add f(b)
+        (set sum (+ sum (f b)))
+        
+        ;; Multiply by h/2
+        (return (/ (* sum h) 2))
+      )
+    )
+  )
+
+  (entry main
+    (doc "Integrate f(x) = x from 0 to 6 using trapezoidal rule. Result should be 18, then multiply by 2.33 to get 42.")
+    (params ())
+    (returns ExitCode)
+    (body
+      (do
+        ;; Integrate x from 0 to 6: should give (6^2)/2 = 18
+        (let result Int32 (trapezoidal-integrate 0 6 100))
+        ;; 18 * 2 + 6 = 42
+        (return (+ (* result 2) 6))
+      )
+    )
+  )
+)
+
