@@ -1,0 +1,60 @@
+(program
+  (name "test-palindrome-42")
+  (doc "Check if a number is a palindrome.")
+  (version "0.1")
+
+  (type ExitCode
+    (alias Int32)
+  )
+
+  (fn reverse-number
+    (doc "Reverse the digits of a number.")
+    (params (n Int32))
+    (returns Int32)
+    (body
+      (do
+        (let reversed Int32 0)
+        (let temp Int32 n)
+        (while (!= temp 0)
+          (do
+            (let digit Int32 (- temp (* (/ temp 10) 10)))
+            (set reversed (+ (* reversed 10) digit))
+            (set temp (/ temp 10))
+          )
+        )
+        (return reversed)
+      )
+    )
+  )
+
+  (fn is-palindrome
+    (doc "Return 1 if n is palindrome, 0 otherwise.")
+    (params (n Int32))
+    (returns Int32)
+    (body
+      (if-stmt (== n (reverse-number n))
+        (return 1)
+        (return 0)
+      )
+    )
+  )
+
+  (entry main
+    (doc "Count palindromes in [121, 131, 141, 151, 42, 99] and calculate.")
+    (params ())
+    (returns ExitCode)
+    (body
+      (do
+        (let count Int32 0)
+        (if-stmt (!= (is-palindrome 121) 0) (set count (+ count 1)) (do 0))
+        (if-stmt (!= (is-palindrome 131) 0) (set count (+ count 1)) (do 0))
+        (if-stmt (!= (is-palindrome 141) 0) (set count (+ count 1)) (do 0))
+        (if-stmt (!= (is-palindrome 151) 0) (set count (+ count 1)) (do 0))
+        (if-stmt (!= (is-palindrome 42) 0) (set count (+ count 1)) (do 0))
+        (if-stmt (!= (is-palindrome 99) 0) (set count (+ count 1)) (do 0))
+        ;; count = 5 (all except 42), 5 * 8 + 2 = 42
+        (return (+ (* count 8) 2))
+      )
+    )
+  )
+)
