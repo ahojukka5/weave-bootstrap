@@ -1,6 +1,8 @@
 #include "common.h"
 #include "fs.h"
 #include "compiler.h"
+#include "stats.h"
+#include "builtins.h"
 #ifdef USE_LLVM_API
 #include "llvm_compile.h"
 #endif
@@ -114,10 +116,15 @@ int main(int argc, char **argv) {
     int optimize = 0;
     int generate_tests_mode = 0;
     int list_tests_only = 0;
+    int print_stats = 0;
     StrList selected_test_names;
     StrList selected_tags;
     sl_init(&selected_test_names);
     sl_init(&selected_tags);
+    
+    /* Initialize compiler subsystems */
+    stats_init();
+    builtins_init();
     /* clang-style: we accept -I dir, -Idir, -o outfile, and positional input. */
     int i;
     for (i = 1; i < argc; i++) {
@@ -156,6 +163,8 @@ int main(int argc, char **argv) {
             mode = OUTPUT_EXECUTABLE;
         } else if (strcmp(a, "--list-tests") == 0 || strcmp(a, "-list-tests") == 0) {
             list_tests_only = 1;
+        } else if (strcmp(a, "--stats") == 0 || strcmp(a, "-stats") == 0 || strcmp(a, "--print-stats") == 0) {
+            print_stats = 1;
         } else if (strcmp(a, "-test") == 0 && i + 1 < argc) {
             sl_push(&selected_test_names, argv[i + 1]);
             i++;
@@ -193,6 +202,7 @@ int main(int argc, char **argv) {
         fprintf(stderr, "  -list-tests       List embedded tests by name (one per line)\n");
         fprintf(stderr, "  -test NAME        Select test(s) by name (repeatable)\n");
         fprintf(stderr, "  -tag TAG          Select test(s) by tag (repeatable)\n");
+        fprintf(stderr, "  --stats           Print compiler statistics\n");
         fprintf(stderr, "  -I<dir>           Add include directory\n");
         fprintf(stderr, "\nEnvironment:\n");
         fprintf(stderr, "  WEAVE_RUNTIME     Default path to runtime.c\n");
@@ -400,6 +410,11 @@ int main(int argc, char **argv) {
             return 1;
         }
 #endif
+    }
+
+    /* Print statistics if requested */
+    if (print_stats) {
+        stats_print();
     }
 
     return 0;
