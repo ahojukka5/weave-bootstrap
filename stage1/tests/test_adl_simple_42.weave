@@ -1,0 +1,33 @@
+(program
+  (name "test-adl-simple-42")
+  (version "0.1")
+
+  (module
+    (name "math-module")
+    (namespace "math")
+    (type Vector (struct))
+    (fn new-vector
+      (params ())
+      (returns Vector)
+      (body (make Vector))
+    )
+    ;; Function in same namespace as type - ADL should find this
+    (fn normalize
+      (params (v Vector))
+      (returns Vector)
+      (body v)
+    )
+  )
+
+  (entry main
+    (params ())
+    (returns Int32)
+    (body
+      (let v Vector (math::new-vector))
+      ;; Qualified call works
+      (let v2 Vector (math::normalize v))
+      42
+    )
+  )
+)
+

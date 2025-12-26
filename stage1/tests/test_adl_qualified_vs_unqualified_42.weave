@@ -1,0 +1,48 @@
+(program
+  (name "test-adl-qualified-vs-unqualified-42")
+  (version "0.1")
+
+  (module
+    (name "collections-module")
+    (namespace "collections")
+    (type Stack (struct))
+    (fn new-stack
+      (params ())
+      (returns Stack)
+      (body (make Stack))
+    )
+    ;; Function in same namespace as type
+    (fn push
+      (params (s Stack) (val Int32))
+      (returns Stack)
+      (body s)
+    )
+  )
+
+  (module
+    (name "algorithms-module")
+    (namespace "algorithms")
+    ;; Function in different namespace
+    (fn process
+      (params (s Stack))
+      (returns Stack)
+      (body s)
+    )
+  )
+
+  (entry main
+    (params ())
+    (returns Int32)
+    (body
+      (let s Stack (collections::new-stack))
+      ;; Qualified call - explicit namespace
+      (let s2 Stack (collections::push s 10))
+      ;; Qualified call - different namespace
+      (let s3 Stack (algorithms::process s2))
+      ;; Test that qualified calls work correctly
+      (let s4 Stack (collections::push s3 20))
+      42
+    )
+  )
+)
+

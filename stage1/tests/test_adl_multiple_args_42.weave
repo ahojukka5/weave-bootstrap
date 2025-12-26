@@ -1,0 +1,38 @@
+(program
+  (name "test-adl-multiple-args-42")
+  (version "0.1")
+
+  (module
+    (name "point-module")
+    (namespace "point")
+    (type Point (struct))
+    (fn new
+      (params (x Int32) (y Int32))
+      (returns Point)
+      (body (make Point))
+    )
+  )
+
+  (module
+    (name "geometry-module")
+    (namespace "geometry")
+    (fn distance
+      (params (p1 Point) (p2 Point))
+      (returns Int32)
+      (body 42)
+    )
+  )
+
+  (entry main
+    (params ())
+    (returns Int32)
+    (body
+      (let p1 Point (point::new 0 0))
+      (let p2 Point (point::new 0 0))
+      ;; ADL should find geometry::distance when both args are Point
+      ;; For now, use qualified name
+      (geometry::distance p1 p2)
+    )
+  )
+)
+

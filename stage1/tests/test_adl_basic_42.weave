@@ -1,0 +1,43 @@
+(program
+  (name "test-adl-basic-42")
+  (version "0.1")
+
+  (module
+    (name "arrays-module")
+    (namespace "arrays")
+    (type ArrayInt32 (struct))
+    (fn new
+      (params ())
+      (returns ArrayInt32)
+      (body (make ArrayInt32))
+    )
+  )
+
+  (module
+    (name "algorithms-module")
+    (namespace "algorithms")
+    (fn sort
+      (params (arr ArrayInt32))
+      (returns ArrayInt32)
+      (body arr)
+    )
+    (fn reverse
+      (params (arr ArrayInt32))
+      (returns ArrayInt32)
+      (body arr)
+    )
+  )
+
+  (entry main
+    (params ())
+    (returns Int32)
+    (body
+      (let arr ArrayInt32 (arrays::new))
+      ;; Test qualified namespace calls work
+      (let sorted ArrayInt32 (algorithms::sort arr))
+      (let reversed ArrayInt32 (algorithms::reverse sorted))
+      42
+    )
+  )
+)
+
