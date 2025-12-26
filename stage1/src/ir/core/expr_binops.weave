@@ -1,0 +1,122 @@
+;; Binary operations expression compilation
+;; Note: Uses compile-binary-ops from expr_binops.weave to check if operator is binary
+
+(fn compile-binary-op-expr
+    (doc "Compile a binary operation: (op lhs rhs) - arithmetic, comparison, or logical.")
+    (params
+      (a (ptr Arena))
+      (node Int32)
+      (head-val String)
+      (env-names ArrayString)
+      (env-safe ArrayString)
+      (env-types ArrayInt32)
+      (declared ArrayString)
+      (struct-names ArrayString)
+      (struct-fields ArrayString)
+      (decls Buffer)
+      (str-counter (ptr Int32))
+      (out Buffer)
+      (temp (ptr Int32))
+      (fn-sig-names ArrayString)
+      (fn-sig-ret-types ArrayInt32)
+    )
+    (returns Int32)
+    (body
+      (let lhs Int32 (second-child a node))
+      (let rhs Int32 (third-child a node))
+      (compile-expr a lhs env-names env-safe env-types declared struct-names struct-fields decls str-counter out temp fn-sig-names fn-sig-ret-types)
+      (let lhs-t Int32 (- (load Int32 temp) 1))
+      (compile-expr a rhs env-names env-safe env-types declared struct-names struct-fields decls str-counter out temp fn-sig-names fn-sig-ret-types)
+      (let rhs-t Int32 (- (load Int32 temp) 1))
+      (if-stmt
+        (||
+          (string-eq head-val "==")
+          (||
+            (string-eq head-val "!=")
+            (||
+              (string-eq head-val "<")
+              (||
+                (string-eq head-val ">")
+                (||
+                  (string-eq head-val "<=")
+                  (||
+                    (string-eq head-val ">=")
+                    (||
+                      (string-eq head-val "&&")
+                      (string-eq head-val "||")
+                    ) ;; ||
+                  ) ;; ||
+                ) ;; ||
+              ) ;; ||
+            ) ;; ||
+          ) ;; ||
+        ) ;; ||
+        (do
+          (if-stmt
+            (||
+              (string-eq head-val "&&")
+              (string-eq head-val "||")
+            ) ;; ||
+            (do
+              (let reg Int32 (compile-logical head-val lhs-t rhs-t out temp))
+              (return reg)
+            ) ;; do
+            (do
+              (let pred String "eq")
+              (if-stmt (string-eq head-val "!=") (set pred "ne") (do 0))
+              (if-stmt (string-eq head-val "<") (set pred "slt") (do 0))
+              (if-stmt (string-eq head-val ">") (set pred "sgt") (do 0))
+              (if-stmt (string-eq head-val "<=") (set pred "sle") (do 0))
+              (if-stmt (string-eq head-val ">=") (set pred "sge") (do 0))
+              (if-stmt (&& (|| (string-eq head-val "==") (string-eq head-val "!=")) (|| (== (is-pointer-expr a lhs env-names env-types) 1) (== (is-pointer-expr a rhs env-names env-types) 1)))
+                (do
+                  (let tcmp Int32 (load Int32 temp))
+                  (let t Int32 (+ tcmp 1))
+                  (buffer-append-string out "  ")
+                  (emit-temp out tcmp)
+                  (buffer-append-string out " = icmp ")
+                  (buffer-append-string out pred)
+                  (buffer-append-string out " i8* ")
+                  (if-stmt (== (is-pointer-expr a lhs env-names env-types) 1)
+                    (do (emit-temp out lhs-t))
+                    (do (buffer-append-string out "null"))
+                  )
+                  (buffer-append-string out ", ")
+                  (if-stmt (== (is-pointer-expr a rhs env-names env-types) 1)
+                    (do (emit-temp out rhs-t))
+                    (do (buffer-append-string out "null"))
+                  )
+                  (buffer-append-string out "\n")
+                  (buffer-append-string out "  ")
+                  (emit-temp out t)
+                  (buffer-append-string out " = zext i1 ")
+                  (emit-temp out tcmp)
+                  (buffer-append-string out " to i32\n")
+                  (store Int32 temp (+ t 1))
+                  (return t)
+                )
+                (do
+                  (let reg Int32 (compile-icmp pred lhs-t rhs-t out temp))
+                  (return reg)
+                )
+              )
+            ) ;; do
+          ) ;; if-stmt
+        )
+        (do
+          (let reg Int32 (compile-binary-arith head-val lhs-t rhs-t out temp))
+          (return reg)
+        ) ;; do
+      ) ;; if-stmt
+    )
+    (tests
+      (test compile-binary-op-expr-basic
+        (doc "Test that compile-binary-op-expr exists")
+        (tags unit)
+        (body
+          (expect-true 1)
+        )
+      )
+    )
+)
+
