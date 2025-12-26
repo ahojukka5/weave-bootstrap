@@ -1,0 +1,37 @@
+(program
+  (name "test-collect-included-module-42")
+  (version "0.1")
+
+  (module
+    (name "helper-module")
+    (fn helper-fn
+      (params ())
+      (returns String)
+      (body "hello")
+      (tests
+        (test helper-fn-basic
+          (doc "helper-fn returns hello")
+          (tags unit)
+          (body
+            (expect-true (string-eq (helper-fn) "hello"))
+          )
+        )
+      )
+    )
+  )
+
+  (module
+    (name "main-module")
+    (include "helper-module.weave")
+    (entry main
+      (params ())
+      (returns Int32)
+      (body
+        ;; Should be able to call helper-fn from included module
+        (let result String (helper-fn))
+        (if-stmt (string-eq result "hello") 42 1)
+      )
+    )
+  )
+)
+

@@ -1,0 +1,105 @@
+(program
+  (name "test-namespace-debug-ast-42")
+  (version "0.1")
+
+  (include "../src/string.weave")
+  (include "../src/buffers.weave")
+  (include "../src/arrays.weave")
+  (include "../src/arena.weave")
+  (include "../src/sexpr_parser.weave")
+  (include "../src/ir/util.weave")
+
+  (entry main
+    (params ())
+    (returns Int32)
+    (body
+      (do
+        ;; Parse a module with namespace block
+        (let a (ptr Arena) (arena-create 4096))
+        (let root Int32 (parser::parse-string a "(module (name \"test\") (namespace \"io\" (fn test-fn (params ()) (returns String) (body \"hello\"))))"))
+        
+        ;; Walk through module children and check structure
+        (let child Int32 (arena-first-child a root))
+        (let found-namespace Int32 0)
+        (let namespace-child-count Int32 0)
+        
+        (while (!= child (- 0 1))
+          (do
+            ;; Check if this child is a namespace block
+            (if-stmt (ir::is-list-with-head a child "namespace")
+              (do
+                (set found-namespace 1)
+                ;; Get namespace name (second child)
+                (let ns-name-node Int32 (ir::second-child a child))
+                (if-stmt (!= ns-name-node (- 0 1))
+                  (do
+                    (let ns-name String (arena-value a ns-name-node))
+                    ;; Count children of namespace block (after the name)
+                    (let ns-child Int32 (arena-next-sibling a ns-name-node))
+                    (while (!= ns-child (- 0 1))
+                      (do
+                        (set namespace-child-count (+ namespace-child-count 1))
+                        ;; Check if this is a function
+                        (if-stmt (ir::is-list-with-head a ns-child "fn")
+                          (do
+                            ;; Found a function in namespace - this is what we're looking for
+                            (let fn-name-node Int32 (ir::second-child a ns-child))
+                            (if-stmt (!= fn-name-node (- 0 1))
+                              (do
+                                (let fn-name String (arena-value a fn-name-node))
+                                ;; Function found - now test collection
+                                (let names ArrayString (array-string-create))
+                                (let types ArrayInt32 (array-int32-create))
+                                (ir::collect-fn-sigs-from-module a root names types "")
+                                
+                                ;; Should find the function
+                                (if-stmt (== (array-str-len names) 0)
+                                  (return 1) ;; Collection failed - no functions found
+                                  (do 0)
+                                )
+                                
+                                ;; Check if test-fn is in the collected names
+                                (let found-fn Int32 0)
+                                (let i Int32 0)
+                                (while (< i (array-str-len names))
+                                  (do
+                                    (let name String (array-str-get names i))
+                                    (if-stmt (|| (string-eq name "test-fn") (string-eq name "io::test-fn"))
+                                      (set found-fn 1)
+                                      (do 0)
+                                    )
+                                    (set i (+ i 1))
+                                  )
+                                )
+                                (if-stmt (!= found-fn 1)
+                                  (return 2) ;; Function not found in collected names
+                                  (return 42) ;; Success!
+                                )
+                              )
+                              (return 3) ;; Function name node not found
+                            )
+                          )
+                          (do 0)
+                        )
+                        (set ns-child (arena-next-sibling a ns-child))
+                      )
+                    )
+                  )
+                  (return 4) ;; Namespace name node not found
+                )
+              )
+              (do 0)
+            )
+            (set child (arena-next-sibling a child))
+          )
+        )
+        
+        (if-stmt (!= found-namespace 1)
+          (return 5) ;; Namespace block not found in module
+          (return 6) ;; Namespace found but function collection failed
+        )
+      )
+    )
+  )
+)
+
