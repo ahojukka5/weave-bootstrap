@@ -1,5 +1,5 @@
 (module
-  (name "stage1-buffers")
+  (name "buffers")
   (doc "Buffer implementation in Weave - replaces C runtime functions.")
   (include "libc.weave")
   (include "string.weave")

@@ -1,5 +1,5 @@
 (module
-  (name "stage1-arrays")
+  (name "arrays")
   (doc "Array implementation in Weave - replaces C runtime functions.")
   (include "libc.weave")
 

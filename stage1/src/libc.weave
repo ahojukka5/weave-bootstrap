@@ -1,5 +1,5 @@
 (module
-  (name "stage1-libc")
+  (name "libc")
   (doc "Thin libc wrappers exposed via ccall for use in other modules.")
 
   (fn c-strlen

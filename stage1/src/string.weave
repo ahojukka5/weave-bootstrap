@@ -1,5 +1,5 @@
 (module
-  (name "stage1-string")
+  (name "string")
   (doc "String utilities implemented using libc wrappers.")
   (include "libc.weave")
   (include "buffers.weave")

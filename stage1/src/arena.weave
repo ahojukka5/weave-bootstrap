@@ -1,5 +1,5 @@
 (module
-  (name "stage1-arena")
+  (name "arena")
   (doc "Grow-only arena storing the parsed S-expression tree.")
 
   (include "string.weave")
