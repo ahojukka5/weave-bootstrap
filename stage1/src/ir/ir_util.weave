@@ -206,6 +206,12 @@
     )
     (returns String)
     (body (do
+      ;; CRITICAL: Return "" for ptr-add to trigger GEP compilation
+      ;; Use string-eq which works for other special forms
+      (if-stmt (string-eq fn-name "ptr-add")
+        (return "")
+        (do 0)
+      )
       (let i Int32 0)
       (let len Int32 (array-str-len fn-sig-names))
       (while (< i len)
@@ -223,7 +229,7 @@
           (set i (+ i 1))
         )
       )
-      ;; Not found - fallback for known runtime helpers, else default to i32
+      ;; Fallback for known runtime helpers, else default to i32
       (if-stmt (string-eq fn-name "string-concat") (return "i8*") (do 0))
       (if-stmt (string-eq fn-name "int-to-string") (return "i8*") (do 0))
       (if-stmt (string-eq fn-name "string-length") (return "i32") (do 0))
