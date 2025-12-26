@@ -190,7 +190,7 @@
                 (do 0)
               )
               ;; Function call - look up return type
-              (return (lookup-fn-ret-type a head-val fn-sig-names fn-sig-ret-types))
+              (return (lookup-fn-ret-type a head-val fn-sig-names fn-sig-ret-types (array-string-create) (array-string-create) (array-string-create)))
             )
           )
         )

@@ -74,7 +74,7 @@
         )
         (do 0)
       )
-      (let ret-type String (lookup-fn-ret-type a head-val fn-sig-names fn-sig-ret-types))
+      (let ret-type String (lookup-fn-ret-type a head-val fn-sig-names fn-sig-ret-types arg-types (array-string-create) (array-string-create)))
       (let result-reg Int32 (load Int32 temp))
       (buffer-append-string out "  ")
       (emit-temp out result-reg)
@@ -136,7 +136,7 @@
           (set arg-node (arena-next-sibling a arg-node))
         )
       )
-      (let ret-ty-str String (lookup-fn-ret-type a fn-name fn-sig-names fn-sig-ret-types))
+      (let ret-ty-str String (lookup-fn-ret-type a fn-name fn-sig-names fn-sig-ret-types arg-types (array-string-create) (array-string-create)))
       (let t Int32 (load Int32 temp))
       (if-stmt (string-eq ret-ty-str "void")
         (do
