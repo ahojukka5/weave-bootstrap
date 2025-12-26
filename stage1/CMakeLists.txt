@@ -15,14 +15,25 @@ endif()
 # Build Stage1 using Stage0 compiler
 set(STAGE1_SRC ${CMAKE_CURRENT_SOURCE_DIR}/src/weavec1.weave)
 file(GLOB_RECURSE STAGE1_ALL_SRC ${CMAKE_CURRENT_SOURCE_DIR}/src/*.weave)
+set(STAGE1_LL ${CMAKE_BINARY_DIR}/stage1/weavec1.ll)
 set(STAGE1_OUT ${CMAKE_BINARY_DIR}/stage1/weavec1)
 file(MAKE_DIRECTORY ${CMAKE_BINARY_DIR}/stage1)
 
+# First compile to LLVM IR
+add_custom_command(
+  OUTPUT ${STAGE1_LL}
+  COMMAND $<TARGET_FILE:weavec0> -I${CMAKE_CURRENT_SOURCE_DIR}/src --emit-llvm -o ${STAGE1_LL} ${STAGE1_SRC}
+  DEPENDS weavec0 ${STAGE1_SRC} ${STAGE1_ALL_SRC}
+  COMMENT "Compiling stage1 compiler to LLVM IR via weavec0"
+  VERBATIM
+)
+
+# Then compile LLVM IR to executable
 add_custom_command(
   OUTPUT ${STAGE1_OUT}
-  COMMAND $<TARGET_FILE:weavec0> -I${CMAKE_CURRENT_SOURCE_DIR}/src -o ${STAGE1_OUT} ${STAGE1_SRC}
-  DEPENDS weavec0 ${STAGE1_SRC} ${STAGE1_ALL_SRC}
-  COMMENT "Building stage1 compiler (weavec1) via weavec0"
+  COMMAND ${CLANG_EXE} -Wno-null-character ${STAGE1_LL} -lm -o ${STAGE1_OUT}
+  DEPENDS ${STAGE1_LL}
+  COMMENT "Compiling stage1 LLVM IR to executable"
   VERBATIM
 )
 add_custom_target(weavec1_target ALL DEPENDS ${STAGE1_OUT})
