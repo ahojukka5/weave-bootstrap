@@ -1,0 +1,131 @@
+---
+description: Stage architecture and test organization for the Weave bootstrap compiler
+globs: stage*/**
+alwaysApply: true
+---
+
+# Stage Architecture
+
+## Overview
+
+The Weave bootstrap compiler uses a multi-stage architecture to achieve self-hosting. Understanding the purpose and organization of each stage is critical for development.
+
+## Stage 0: C Seed Compiler (`weavec0`)
+
+**Purpose**: Minimal bootstrap compiler written in C that can compile Weave source code to LLVM IR.
+
+- **Language**: C
+- **Source**: `stage0/src/*.c`, `stage0/include/*.h`
+- **Compiles**: Weave S-expressions → LLVM IR
+- **Tests**: `stage0/tests/` - Basic language features to validate the C compiler
+- **Status**: Stable bootstrap foundation
+
+**Key Point**: Stage 0 is the foundation. It must be minimal but sufficient to compile Stage 1.
+
+## Stage 1: Weave Compiler (`weavec1`)
+
+**Purpose**: Full-featured compiler written in Weave, compiled by `weavec0`.
+
+- **Language**: Weave
+- **Source**: `stage1/src/*.weave` - **This is where actual development happens**
+- **Compiled by**: `weavec0` (Stage 0)
+- **Tests**: `stage1/tests/` - **ALL comprehensive tests belong here**
+- **Status**: Main development target
+
+### Test Organization
+
+**Stage 1 contains ALL comprehensive tests**, including:
+- Basic language features
+- Scientific computing examples
+- Edge cases
+- Typecheck failures
+- Performance tests
+- Integration tests
+
+**Why**: Developers work on Stage 1 source code. Tests must be in Stage 1 to validate the compiler being developed.
+
+## Stage 2: Self-Hosting Verification (`weavec2`)
+
+**Purpose**: Proof of concept that `weavec1` can compile itself (self-hosting).
+
+- **Language**: Weave (same source as Stage 1)
+- **Source**: Same as Stage 1 (`stage1/src/*.weave` compiled by `weavec1`)
+- **Compiled by**: `weavec1` (Stage 1)
+- **Tests**: `stage2/tests/` - **Only minimal smoke tests**
+- **Status**: Proof of concept, not a development target
+
+### Test Organization
+
+**Stage 2 contains ONLY minimal smoke tests**, such as:
+- `test_smoke_exit_42.weave` - Basic compilation works
+- `test_fn_simple_42.weave` - Simple function compilation
+- `test_let_add_42.weave` - Basic variable operations
+
+**Why**: Stage 2 is just verification that self-hosting works. It's not where development happens, so comprehensive tests don't belong here.
+
+## Architectural Principles
+
+### 1. Development Happens in Stage 1
+
+- All compiler features are implemented in `stage1/src/*.weave`
+- All comprehensive tests are in `stage1/tests/`
+- Stage 1 is the primary development target
+
+### 2. Stage 2 is Proof of Concept
+
+- Stage 2 verifies that `weavec1` can compile itself
+- Stage 2 tests are minimal - just enough to prove self-hosting works
+- Stage 2 is NOT a development target
+
+### 3. Test Placement
+
+- **Comprehensive tests** → `stage1/tests/`
+- **Smoke tests for self-hosting** → `stage2/tests/`
+- **Basic compiler tests** → `stage0/tests/`
+
+### 4. Source Code Organization
+
+- Stage 1 and Stage 2 share the same source code (`stage1/src/*.weave`)
+- Stage 2 is built by compiling Stage 1 source with Stage 1 compiler
+- No separate Stage 2 source code exists
+
+## When Adding Tests
+
+### ✅ Add to Stage 1 if:
+- Testing a new language feature
+- Testing compiler correctness
+- Testing edge cases
+- Testing typecheck behavior
+- Testing scientific computing capabilities
+- Testing any comprehensive functionality
+
+### ✅ Add to Stage 2 if:
+- Verifying basic self-hosting works
+- Adding a minimal smoke test
+- Testing that `weavec1` can compile itself
+
+### ❌ Never:
+- Add comprehensive tests to Stage 2
+- Duplicate tests between stages unnecessarily
+- Use Stage 2 as a development target
+
+## CMakeLists.txt Organization
+
+- `stage1/CMakeLists.txt`: Discovers all `test_*.weave` files in `stage1/tests/`
+- `stage2/CMakeLists.txt`: Explicitly lists minimal smoke tests (3-5 tests max)
+
+## Why This Architecture Matters
+
+1. **Development Workflow**: Developers work on Stage 1, so tests must be there
+2. **Clarity**: Stage 2 is proof of concept, not a development target
+3. **Maintenance**: Easier to understand what tests what
+4. **CI/CD**: Stage 1 tests validate compiler correctness, Stage 2 just verifies self-hosting
+5. **Performance**: Comprehensive tests run against Stage 1 (faster iteration)
+
+## Summary
+
+- **Stage 0**: C bootstrap compiler (foundation)
+- **Stage 1**: Weave compiler (development target) + **ALL comprehensive tests**
+- **Stage 2**: Self-hosting proof of concept + **minimal smoke tests only**
+
+Remember: **If you're developing compiler features, you're working in Stage 1. If you're adding tests, they go in Stage 1 (unless it's a minimal smoke test for self-hosting verification).**
