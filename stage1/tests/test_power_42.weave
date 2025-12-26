@@ -1,0 +1,35 @@
+(program
+  (name "test-power-42")
+  (doc "Calculate integer exponentiation.")
+  (version "0.1")
+
+  (type ExitCode
+    (alias Int32)
+  )
+
+  (fn power
+    (doc "Calculate base^exp iteratively.")
+    (params (base Int32) (exp Int32))
+    (returns Int32)
+    (body
+      (do
+        (let result Int32 1)
+        (let i Int32 0)
+        (while (< i exp)
+          (do
+            (set result (* result base))
+            (set i (+ i 1))
+          )
+        )
+        (return result)
+      )
+    )
+  )
+
+  (entry main
+    (doc "2^5 + 10 = 32 + 10 = 42.")
+    (params ())
+    (returns ExitCode)
+    (body (+ (power 2 5) 10))
+  )
+)
