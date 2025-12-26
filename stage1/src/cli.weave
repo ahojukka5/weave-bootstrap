@@ -1,11 +1,12 @@
 (module
-  (name "stage1-cli")
+  (name "cli")
   (doc "CLI argument parsing implemented in Weave - replaces C runtime functions.")
   (include "libc.weave")
   (include "string.weave")
 
-  ;; Helper to access argv[i] using pointer arithmetic
-  (fn argv-get
+  (namespace "io"
+    ;; Helper to access argv[i] using pointer arithmetic
+    (fn argv-get
     (doc "Get argv[i] using pointer arithmetic.")
     (params (argv (ptr String)) (i Int32)) (returns String)
     (body
@@ -345,5 +346,6 @@
       )
     )
   )
+  ) ;; namespace "io"
 )
 
