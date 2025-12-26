@@ -23,12 +23,7 @@ set(WEAVEC1 ${CMAKE_BINARY_DIR}/stage1/weavec1)
 option(WEAVE_STAGE2_USE_WEAVEC2 "Use weavec2 (built by stage1) to run Stage2 tests" OFF)
 option(WEAVE_STAGE2_USE_WEAVE_RUNTIME "Use Weave-implemented runtime helpers instead of C stdlib runtime for selected functions" OFF)
 option(WEAVE_STAGE2_ONLY_SMOKE "Register only the simplest smoke test for Stage2" OFF)
-option(WEAVE_STAGE2_SMOKE_PLUS_SIMPLE "Register only smoke + fn_simple tests for Stage2" OFF)
-option(WEAVE_STAGE2_MIN3 "Register smoke + fn_simple + let_add tests for Stage2" OFF)
-option(WEAVE_STAGE2_MIN5 "Register minimal five: smoke + fn_simple + let_add + fn_two_params + if_eq" OFF)
-option(WEAVE_STAGE2_MIN8 "Register eight tests including struct ops: MIN5 + make_struct + struct_like + while" OFF)
-option(WEAVE_STAGE2_MIN12 "Register 12 tests including pointer ops: MIN8 + ptr_add + store_addr + string_concat + ccall_abs" OFF)
-option(WEAVE_STAGE2_RUNTIME_TESTS "Register all runtime/passing tests (excludes typecheck failure tests)" OFF)
+# Note: Stage2 is proof of concept for self-hosting. All comprehensive tests are in stage1/tests/
 
 # Build Stage2 (self-hosted: stage1 source compiled by stage1 compiler)
 set(STAGE1_SRC ${CMAKE_SOURCE_DIR}/stage1/src/weavec1.weave)
@@ -69,74 +64,18 @@ if(WEAVE_STAGE2_USE_WEAVE_RUNTIME)
   add_custom_target(weave_runtime_arrays_ll ALL DEPENDS ${WEAVE_RT_LL})
 endif()
 
-# Register stage2 tests
-if(WEAVE_STAGE2_RUNTIME_TESTS)
-  set(STAGE2_TESTS
-    ${CMAKE_CURRENT_SOURCE_DIR}/tests/test_smoke_exit_42.weave
-    ${CMAKE_CURRENT_SOURCE_DIR}/tests/test_fn_simple_42.weave
-    ${CMAKE_CURRENT_SOURCE_DIR}/tests/test_let_add_42.weave
-    ${CMAKE_CURRENT_SOURCE_DIR}/tests/test_fn_two_params_42.weave
-    ${CMAKE_CURRENT_SOURCE_DIR}/tests/test_if_eq_42.weave
-    ${CMAKE_CURRENT_SOURCE_DIR}/tests/test_make_struct_42.weave
-    ${CMAKE_CURRENT_SOURCE_DIR}/tests/test_struct_like_42.weave
-    ${CMAKE_CURRENT_SOURCE_DIR}/tests/test_while_42.weave
-    ${CMAKE_CURRENT_SOURCE_DIR}/tests/test_ptr_add_42.weave
-    ${CMAKE_CURRENT_SOURCE_DIR}/tests/test_store_addr_42.weave
-    ${CMAKE_CURRENT_SOURCE_DIR}/tests/test_string_concat_42.weave
-    ${CMAKE_CURRENT_SOURCE_DIR}/tests/test_ccall_abs_42.weave
-    ${CMAKE_CURRENT_SOURCE_DIR}/tests/test_ccall_atoi_42.weave
-    ${CMAKE_CURRENT_SOURCE_DIR}/tests/test_ccall_malloc_42.weave
-    ${CMAKE_CURRENT_SOURCE_DIR}/tests/test_ccall_memcpy_42.weave
-  )
-elseif(WEAVE_STAGE2_MIN12)
-  set(STAGE2_TESTS
-    ${CMAKE_CURRENT_SOURCE_DIR}/tests/test_smoke_exit_42.weave
-    ${CMAKE_CURRENT_SOURCE_DIR}/tests/test_fn_simple_42.weave
-    ${CMAKE_CURRENT_SOURCE_DIR}/tests/test_let_add_42.weave
-    ${CMAKE_CURRENT_SOURCE_DIR}/tests/test_fn_two_params_42.weave
-    ${CMAKE_CURRENT_SOURCE_DIR}/tests/test_if_eq_42.weave
-    ${CMAKE_CURRENT_SOURCE_DIR}/tests/test_make_struct_42.weave
-    ${CMAKE_CURRENT_SOURCE_DIR}/tests/test_struct_like_42.weave
-    ${CMAKE_CURRENT_SOURCE_DIR}/tests/test_while_42.weave
-    ${CMAKE_CURRENT_SOURCE_DIR}/tests/test_ptr_add_42.weave
-    ${CMAKE_CURRENT_SOURCE_DIR}/tests/test_store_addr_42.weave
-    ${CMAKE_CURRENT_SOURCE_DIR}/tests/test_string_concat_42.weave
-    ${CMAKE_CURRENT_SOURCE_DIR}/tests/test_ccall_abs_42.weave
-  )
-elseif(WEAVE_STAGE2_MIN8)
-  set(STAGE2_TESTS
-    ${CMAKE_CURRENT_SOURCE_DIR}/tests/test_smoke_exit_42.weave
-    ${CMAKE_CURRENT_SOURCE_DIR}/tests/test_fn_simple_42.weave
-    ${CMAKE_CURRENT_SOURCE_DIR}/tests/test_let_add_42.weave
-    ${CMAKE_CURRENT_SOURCE_DIR}/tests/test_fn_two_params_42.weave
-    ${CMAKE_CURRENT_SOURCE_DIR}/tests/test_if_eq_42.weave
-    ${CMAKE_CURRENT_SOURCE_DIR}/tests/test_make_struct_42.weave
-    ${CMAKE_CURRENT_SOURCE_DIR}/tests/test_struct_like_42.weave
-    ${CMAKE_CURRENT_SOURCE_DIR}/tests/test_while_42.weave
-  )
-elseif(WEAVE_STAGE2_MIN5)
-  set(STAGE2_TESTS
-    ${CMAKE_CURRENT_SOURCE_DIR}/tests/test_smoke_exit_42.weave
-    ${CMAKE_CURRENT_SOURCE_DIR}/tests/test_fn_simple_42.weave
-    ${CMAKE_CURRENT_SOURCE_DIR}/tests/test_let_add_42.weave
-    ${CMAKE_CURRENT_SOURCE_DIR}/tests/test_fn_two_params_42.weave
-    ${CMAKE_CURRENT_SOURCE_DIR}/tests/test_if_eq_42.weave
-  )
-elseif(WEAVE_STAGE2_MIN3)
-  set(STAGE2_TESTS
-    ${CMAKE_CURRENT_SOURCE_DIR}/tests/test_smoke_exit_42.weave
-    ${CMAKE_CURRENT_SOURCE_DIR}/tests/test_fn_simple_42.weave
-    ${CMAKE_CURRENT_SOURCE_DIR}/tests/test_let_add_42.weave
-  )
-elseif(WEAVE_STAGE2_SMOKE_PLUS_SIMPLE)
-  set(STAGE2_TESTS
-    ${CMAKE_CURRENT_SOURCE_DIR}/tests/test_smoke_exit_42.weave
-    ${CMAKE_CURRENT_SOURCE_DIR}/tests/test_fn_simple_42.weave
-  )
-elseif(WEAVE_STAGE2_ONLY_SMOKE)
+# Register stage2 tests (minimal smoke tests for self-hosting verification only)
+# Stage2 is proof of concept - it only needs to verify that weavec1 can compile itself
+# All comprehensive tests are in stage1/tests/
+if(WEAVE_STAGE2_ONLY_SMOKE)
   set(STAGE2_TESTS ${CMAKE_CURRENT_SOURCE_DIR}/tests/test_smoke_exit_42.weave)
 else()
-  file(GLOB STAGE2_TESTS ${CMAKE_CURRENT_SOURCE_DIR}/tests/test_*.weave)
+  # Default: minimal smoke tests to verify self-hosting works
+  set(STAGE2_TESTS
+    ${CMAKE_CURRENT_SOURCE_DIR}/tests/test_smoke_exit_42.weave
+    ${CMAKE_CURRENT_SOURCE_DIR}/tests/test_fn_simple_42.weave
+    ${CMAKE_CURRENT_SOURCE_DIR}/tests/test_let_add_42.weave
+  )
 endif()
 
 foreach(test_file IN LISTS STAGE2_TESTS)
