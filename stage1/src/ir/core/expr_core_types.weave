@@ -167,6 +167,18 @@
                 (return "i8*")
                 (do 0)
               )
+              ;; (ptr-add TYPE PTR IDX) returns pointer to TYPE
+              (if-stmt (string-eq head-val "ptr-add")
+                (do
+                  (let ty-node Int32 (second-child a node))
+                  (let ptr-type-str String (type-node-to-llvm-str a ty-node))
+                  (let buf Buffer (buffer-new))
+                  (buffer-append-string buf ptr-type-str)
+                  (buffer-append-string buf "*")
+                  (return (buffer-to-string buf))
+                )
+                (do 0)
+              )
               ;; Arithmetic ops return i32
               (if-stmt (|| (|| (|| (string-eq head-val "+") (string-eq head-val "-")) (string-eq head-val "*")) (string-eq head-val "/"))
                 (return "i32")
